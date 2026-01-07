@@ -1,10 +1,7 @@
 from abc import ABC, abstractmethod
 from mistralai import Mistral
 from pydantic import BaseModel
-from dotenv import load_dotenv
 import time
-
-load_dotenv()
 
 
 class LLMConfig(BaseModel):
