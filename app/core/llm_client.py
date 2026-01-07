@@ -1,5 +1,9 @@
 from pydantic import BaseModel, ValidationError
 from .settings import LLMConfig, MistralProvider, BaseLLMProvider
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 
 class LLMClient:
@@ -25,7 +29,11 @@ class LLMClient:
             )  # Recursivo, limita profundidad si quieres
 
 
-def get_lll_client(api_key: str):
-    config = LLMConfig(api_key=api_key)
+def get_llm_client():
+    API_KEY = os.getenv("MISTRAL_API_KEY")
+    if not API_KEY:
+        raise ValueError("API_KEY no configurada")
+
+    config = LLMConfig(api_key=API_KEY)
     provider = MistralProvider(config)
     return LLMClient(provider)
