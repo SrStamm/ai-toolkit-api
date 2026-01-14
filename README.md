@@ -7,16 +7,16 @@ API educativa y experimental construida en **FastAPI** para practicar integraci�
 1. Extracción estructurada robusta (ya en buen estado)
   - Prompts determinísticos + schemas Pydantic
   - Validación automática + retry si el output no valida
-  - Soporte para PDFs escaneados → AWS Textract (próximo)
+  - Soporte para PDFs escaneados
 
 2. RAG básico (sin LangChain ni LlamaIndex)
 
  - Chunking simple (por párrafo o tamaño fijo)
- - Embeddings locales (sentence-transformers) o Bedrock Titan
+ - Embeddings locales (sentence-transformers)
  - Vector store ligero: FAISS local o pgvector en PostgreSQL
  - Endpoint de consulta: /ask sobre documentos subidos previamente
 
-3. Guardrails y rechazo seguro (prioridad alta)
+3. Guardrails y rechazo seguro
 
  - Allowlist de intenciones permitidas
  - Clasificador de intención previo al LLM principal
@@ -76,3 +76,4 @@ pip install -r requirements.txt
 cp .env.example .env          # configura LLM keys
 uvicorn app.main:app --reload --port 8000
 ```
+
