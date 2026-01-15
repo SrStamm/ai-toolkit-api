@@ -4,6 +4,9 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
+    volumes:
+      - qdrant-data:/etc/qdrant-data
+
   api:
     build: .
     ports:
@@ -18,3 +21,6 @@ services:
         "8000",
         "--reload",
       ]
+
+volumes:
+  qdrant-data:
