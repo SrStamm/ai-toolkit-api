@@ -1,33 +1,39 @@
-# -- Etapa 1: Construcción (builder)
-FROM python:3.12-alpine AS builder
+# -- Etapa 1: Builder
+FROM python:3.12-slim AS builder
 
-# Se establece el directorio de trabajo
-WORKDIR /app
+WORKDIR /build
 
-# Se copia solo el archivo de requisitos primero
+# Instalamos dependencias de compilación
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# 1. Creamos el entorno virtual
+RUN python -m venv /opt/venv
+# 2. "Activamos" el entorno para el resto del builder poniendo el binario primero en el PATH
+ENV PATH="/opt/venv/bin:$PATH"
+
 COPY requirements.txt .
 
-# Instala las dependencias.
-RUN pip install --no-cache-dir -r requirements.txt
+# 3. Instalamos usando el índice de CPU para evitar librerías NVIDIA
+RUN pip install --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r requirements.txt
 
-# Copia el resto del código fuente.
-COPY . .
+# -- Etapa 2: Production
+FROM python:3.12-slim AS production
 
-# -- Etapa 2: Ejecución
-FROM python:3.12-alpine AS production
-
-# Establece el directorio de trabajo para la aplicación final.
 WORKDIR /backend
 
-# Copia los paquetes instalados y el código de la etapa 'builder'.
-# Copia el directorio completo donde pip instala los ejecutables
-COPY --from=builder /usr/local/bin/ /usr/local/bin/
-# Copia el directorio donde pip instala las librerías
-COPY --from=builder /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
-# Copia el código de aplicación
-COPY --from=builder /app /backend
+# 4. Copiamos ÚNICAMENTE el entorno virtual ya preparado
+COPY --from=builder /opt/venv /opt/venv
 
-ENV PORT=8000
-EXPOSE 8000
+# 5. Activamos el entorno en la imagen final
+ENV PATH="/opt/venv/bin:$PATH"
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Copiamos tu código
+COPY app/ ./app/
+
+# No hace falta activar el venv con 'source', al estar en el PATH, 
+# cualquier comando de python usará el del venv automáticamente.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
