@@ -65,9 +65,9 @@ class ExtractionService:
             return full_text
 
     async def extract_data_from_file(self, file):
-        type_file = file.filename[-4:]
+        type_file = file.filename.lower().split(".")[-1]
 
-        if type_file == ".csv":
+        if type_file == "csv":
             content = await self.extract_data_from_csv(file)
             print("content: ", content)
             full_prompt = EXTRACTION_FILE_PROMPT.format(text=content)
@@ -79,7 +79,7 @@ class ExtractionService:
             # Validate response
             return response
 
-        elif type_file in ".pdf":
+        elif type_file == "pdf":
             content = await self.extract_data_from_pdf(file)
             full_prompt = EXTRACTION_FILE_PDF_PROMPT.format(text=content)
 
