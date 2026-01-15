@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from app.features.rag.service import RAGService, get_rag_service
 
-router = APIRouter(prefix="/rag")
+router = APIRouter(prefix="/rag", tags=["RAG"])
 
 
 @router.post("/ingest")
