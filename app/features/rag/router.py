@@ -11,11 +11,11 @@ def ingest_document(
     topic: str = "unknown",
     serv: RAGService = Depends(get_rag_service),
 ):
-    text = serv.extract_html(url)
+    soup = serv.extract_html(url)
 
-    serv.ingest_document(text=text, source=url, domain=domain, topic=topic)
+    serv.ingest_document(soup=soup, source=url, domain=domain, topic=topic)
 
-    return {"status": "ingested", "chunks": len(serv.chunk_text(text)), "url": url}
+    return {"status": "ingested", "url": url}
 
 
 @router.post("/retrieve")

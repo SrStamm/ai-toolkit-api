@@ -29,9 +29,22 @@ class RAGService:
         if not main:
             raise ValueError("Not found main content")
 
-        text = main.get_text(separator="\n")
+        return main
 
-        return self._clean_text(text)
+    def chunk_html(self, soup):
+        chunks = []
+
+        for section in soup.find_all(["h2", "h3"]):
+            content = []
+            for sib in section.find_next_siblings():
+                if sib.name in ["h2", "h3"]:
+                    break
+                content.append(sib.get_text())
+
+            text = section.get_text() + "\n" + "\n".join(content)
+            chunks.append(text.strip())
+
+        return chunks
 
     def chunk_text(self, text: str, max_chars=300, overlap=100):
         chunks = []
@@ -45,15 +58,16 @@ class RAGService:
 
         return chunks
 
-    def ingest_document(self, text, source, domain, topic):
-        chunks = self.chunk_text(text)
+    def ingest_document(self, soup, source, domain, topic):
+        chunks = self.chunk_html(soup)
 
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
             payload = {
                 "text": chunk,
                 "source": source,
                 "domain": domain,
                 "topic": topic,
+                "chunk_index": i,
             }
 
             self.rag_client.insert_vector(chunk, payload)
