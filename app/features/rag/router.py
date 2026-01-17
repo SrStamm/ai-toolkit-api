@@ -26,3 +26,11 @@ def retrieve_search(
     query_result = serv.query(text=text)
 
     return {"status": "query", "Points": query_result}
+
+
+@router.post("/ask")
+def ask(
+    text: str,
+    serv: RAGService = Depends(get_rag_service),
+):
+    return serv.ask(text)

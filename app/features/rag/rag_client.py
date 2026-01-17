@@ -1,4 +1,3 @@
-from re import search
 from uuid import uuid4
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams

@@ -4,6 +4,27 @@ import requests
 from bs4 import BeautifulSoup
 from app.features.rag.rag_client import RAGClient, get_rag_client
 
+PROMPT_TEMPLATE = """
+You are an expert assistant.
+
+Answer the user's question using the information provided in the context below.
+You may rephrase, summarize, or explain the content in your own words,
+but do not add information that is not supported by the context.
+
+If the context does not contain enough information to answer the question,
+say clearly that you do not have enough information.
+
+Be clear, concise, and accurate.
+
+Context:
+---------
+{context}
+---------
+
+Question:
+{question}
+"""
+
 
 class RAGService:
     def __init__(self, llm_client: LLMClient, rag_client: RAGClient):
@@ -75,6 +96,18 @@ class RAGService:
     def query(self, text):
         chunks = self.rag_client.query(text)
         return chunks
+
+    def ask(self, user_question: str):
+        query_result = self.query(user_question)
+
+        context = "\n\n".join(
+            f"[{i + 1}]\n{chunk.payload['text']}"
+            for i, chunk in enumerate(query_result)
+        )
+
+        prompt = PROMPT_TEMPLATE.format(context=context, question=user_question)
+
+        return self.llm_client.generate_content(prompt)
 
 
 def get_rag_service(
