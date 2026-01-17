@@ -55,6 +55,9 @@ class RAGService:
     def chunk_html(self, soup):
         chunks = []
 
+        intro = soup.get_text().split("\n")[0:5]
+        chunks.append("\n".join(intro))
+
         for section in soup.find_all(["h2", "h3"]):
             content = []
             for sib in section.find_next_siblings():
@@ -93,12 +96,12 @@ class RAGService:
 
             self.rag_client.insert_vector(chunk, payload)
 
-    def query(self, text):
-        chunks = self.rag_client.query(text)
+    def query(self, text, domain: str, topic: str):
+        chunks = self.rag_client.query(text, domain, topic)
         return chunks
 
-    def ask(self, user_question: str):
-        query_result = self.query(user_question)
+    def ask(self, user_question: str, domain: str, topic: str):
+        query_result = self.query(user_question, domain, topic)
 
         context = "\n\n".join(
             f"[{i + 1}]\n{chunk.payload['text']}"
@@ -107,7 +110,9 @@ class RAGService:
 
         prompt = PROMPT_TEMPLATE.format(context=context, question=user_question)
 
-        return self.llm_client.generate_content(prompt)
+        response = self.llm_client.generate_content(prompt)
+
+        return {"response": response, "context": query_result}
 
 
 def get_rag_service(

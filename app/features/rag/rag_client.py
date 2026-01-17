@@ -1,6 +1,13 @@
 from uuid import uuid4
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    MatchValue,
+    PointStruct,
+    VectorParams,
+    Filter,
+)
 from sentence_transformers import SentenceTransformer
 
 qdrant = QdrantClient(host="qdrant", port=6333)
@@ -40,7 +47,7 @@ class RAGClient:
         )
         return embedding.tolist()
 
-    def query(self, text: str):
+    def query(self, text: str, domain: str, topic: str):
         embedding = self.embed_model.encode(f"query: {text}", normalize_embeddings=True)
         embed_list = embedding.tolist()
 
@@ -49,6 +56,12 @@ class RAGClient:
             query=embed_list,
             with_payload=True,
             limit=3,
+            query_filter=Filter(
+                must=[
+                    FieldCondition(key="domain", match=MatchValue(value=domain)),
+                    FieldCondition(key="topic", match=MatchValue(value=topic)),
+                ]
+            ),
         ).points
 
         return search_result

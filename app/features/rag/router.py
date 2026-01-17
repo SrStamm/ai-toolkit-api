@@ -21,9 +21,11 @@ def ingest_document(
 @router.post("/retrieve")
 def retrieve_search(
     text: str,
+    domain: str = "general",
+    topic: str = "unknown",
     serv: RAGService = Depends(get_rag_service),
 ):
-    query_result = serv.query(text=text)
+    query_result = serv.query(text=text, domain=domain, topic=topic)
 
     return {"status": "query", "Points": query_result}
 
@@ -31,6 +33,8 @@ def retrieve_search(
 @router.post("/ask")
 def ask(
     text: str,
+    domain: str = "general",
+    topic: str = "unknown",
     serv: RAGService = Depends(get_rag_service),
 ):
-    return serv.ask(text)
+    return serv.ask(text, domain, topic)
