@@ -34,6 +34,4 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copiamos tu código
 COPY app/ ./app/
 
-# No hace falta activar el venv con 'source', al estar en el PATH, 
-# cualquier comando de python usará el del venv automáticamente.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

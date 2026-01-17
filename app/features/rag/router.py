@@ -16,3 +16,13 @@ def ingest_document(
     serv.ingest_document(text=text, source=url, domain=domain, topic=topic)
 
     return {"status": "ingested", "chunks": len(serv.chunk_text(text)), "url": url}
+
+
+@router.post("/retrieve")
+def retrieve_search(
+    text: str,
+    serv: RAGService = Depends(get_rag_service),
+):
+    query_result = serv.query(text=text)
+
+    return {"status": "query", "Points": query_result}

@@ -58,6 +58,10 @@ class RAGService:
 
             self.rag_client.insert_vector(chunk, payload)
 
+    def query(self, text):
+        chunks = self.rag_client.query(text)
+        return chunks
+
 
 def get_rag_service(
     llm_client: LLMClient = Depends(get_llm_client),

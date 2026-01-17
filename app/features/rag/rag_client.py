@@ -1,3 +1,4 @@
+from re import search
 from uuid import uuid4
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
@@ -42,7 +43,16 @@ class RAGClient:
 
     def query(self, text: str):
         embedding = self.embed_model.encode(f"query: {text}", normalize_embeddings=True)
-        return embedding.tolist()
+        embed_list = embedding.tolist()
+
+        search_result = self.client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=embed_list,
+            with_payload=True,
+            limit=3,
+        ).points
+
+        return search_result
 
     def insert_vector(
         self,
