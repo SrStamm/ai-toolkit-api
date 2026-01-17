@@ -1,3 +1,4 @@
+from typing import List
 from uuid import uuid4
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -66,16 +67,15 @@ class RAGClient:
 
         return search_result
 
-    def insert_vector(
-        self,
-        chunk,
-        payload,
-    ):
+    def create_point(self, chunk, payload) -> PointStruct:
         vector = self.embed(chunk)
 
-        point = PointStruct(id=str(uuid4()), vector=vector, payload=payload)
+        return PointStruct(id=str(uuid4()), vector=vector, payload=payload)
 
-        self.client.upsert(collection_name=COLLECTION_NAME, points=[point])
+    def insert_vector(self, points: List[PointStruct], batch_size: int = 64):
+        for i in range(0, len(points), batch_size):
+            batch = points[i : i + batch_size]
+            self.client.upsert(collection_name=COLLECTION_NAME, points=batch)
 
 
 def get_rag_client() -> RAGClient:
