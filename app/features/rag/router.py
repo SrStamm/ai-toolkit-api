@@ -21,12 +21,10 @@ def ingest_document(
 
 @router.post("/retrieve")
 def retrieve_search(
-    text: str,
-    domain: str = "general",
-    topic: str = "unknown",
+    query: QueryRequest,
     serv: RAGService = Depends(get_rag_service),
 ):
-    query_result = serv.query(text=text, domain=domain, topic=topic)
+    query_result = serv.query(text=query.text, domain=query.domain, topic=query.topic)
 
     return {"status": "query", "Points": query_result}
 

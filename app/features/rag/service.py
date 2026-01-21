@@ -99,8 +99,8 @@ class RAGService:
             payload = {
                 "text": chunk,
                 "source": source,
-                "domain": domain,
-                "topic": topic,
+                "domain": domain.lower(),
+                "topic": topic.lower(),
                 "chunk_index": i,
             }
 
@@ -110,11 +110,17 @@ class RAGService:
         self.rag_client.insert_vector(points)
 
     def query(self, text, domain: str, topic: str):
-        chunks = self.rag_client.query(text, domain, topic)
+        chunks = self.rag_client.query(text, domain.lower(), topic.lower())
         return chunks
 
     def ask(self, user_question: str, domain: str, topic: str):
         query_result = self.query(user_question, domain, topic)
+
+        if not query_result:
+            print("NO RAG results")
+            print(f"domain: {domain}")
+            print(f"topix: {topic}")
+            print(f"question: {user_question}")
 
         context = "\n\n".join(
             f"[{i + 1}]\n{chunk.payload['text']}"
@@ -130,7 +136,20 @@ class RAGService:
         except json.JSONDecodeError:
             parsed = {"answer": raw}
 
-        return {"response": parsed["answer"], "context": query_result}
+        seen = set()
+        citations = []
+        for q in query_result[:2]:
+            src = q.payload["source"]
+            if src in seen:
+                continue
+            seen.add(src)
+
+            citations.append({"source": src, "chunk_index": q.payload["chunk_index"]})
+
+        print(query_result)
+        print(parsed)
+
+        return {"response": parsed["answer"], "citations": citations}
 
 
 def get_rag_service(
