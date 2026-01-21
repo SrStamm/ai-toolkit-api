@@ -1,4 +1,5 @@
 from fastapi import Depends
+from pydantic import HttpUrl
 from app.core.llm_client import LLMClient, get_llm_client
 import requests
 import json
@@ -14,9 +15,9 @@ but do not add information that is not supported by the context.
 
 Return ONLY valid JSON, without markdown or explanation.
 Format:
-{
+{{
   "answer": string
-}
+}}
 
 
 If the context does not contain enough information to answer the question,
@@ -46,7 +47,7 @@ class RAGService:
         ]
         return "\n".join(lines)
 
-    def extract_html(self, url: str):
+    def extract_html(self, url: HttpUrl):
         html = requests.get(url).text
         soup = BeautifulSoup(html, "html.parser")
 
