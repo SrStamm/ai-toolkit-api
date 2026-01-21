@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, UploadFile
 from app.features.extraction.service import ExtractionService, get_extraction_service
 
-router = APIRouter(prefix="/extraction")
+router = APIRouter(prefix="/extraction", tags=["Extraction"])
 
 
 @router.get("/person")

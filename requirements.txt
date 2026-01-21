@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+python-dotenv
+requests
+beautifulsoup4
+pdfplumber
+chardet
+pandas
+qdrant-client
+mistralai
+sentence-transformers
+python-multipart
