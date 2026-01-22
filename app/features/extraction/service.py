@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, UploadFile
+from fastapi import Depends, UploadFile
 from app.core.llm_client import LLMClient, get_llm_client
 from app.features.extraction.semantic.invoice_extractor import InvoiceExtractor
 from app.features.extraction.semantic.person_extractor import PersonExtractor

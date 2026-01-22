@@ -6,11 +6,11 @@ router = APIRouter(prefix="/rag", tags=["RAG"])
 
 
 @router.post("/ingest")
-def ingest_document(
+async def ingest_document(
     ingest: IngestRequest,
     serv: RAGService = Depends(get_rag_service),
 ):
-    soup = serv.extract_html(ingest.url)
+    soup = await serv.extract_from_url(ingest.url)
 
     serv.ingest_document(
         soup=soup, source=ingest.url, domain=ingest.domain, topic=ingest.topic
