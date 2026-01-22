@@ -1,91 +1,30 @@
-from io import BytesIO, StringIO
-import chardet
-import pdfplumber
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, UploadFile
 from app.core.llm_client import LLMClient, get_llm_client
-from .prompts import (
-    EXTRACTION_FILE_PDF_PROMPT,
-    EXTRACTION_FILE_PROMPT,
-    EXTRACTION_PROMPT,
-)
-from .schema import InvoiceList, InvoiceSchema, PersonSchema
-import pandas as pd
+from app.features.extraction.semantic.invoice_extractor import InvoiceExtractor
+from app.features.extraction.semantic.person_extractor import PersonExtractor
+from app.features.extraction.source.csv_source import CSVSource
+from app.features.extraction.source.pdf_source import PDFSource
 
 
 class ExtractionService:
-    def __init__(self, llm_client: LLMClient) -> None:
-        self.llm_client = llm_client
+    def __init__(self, llm: LLMClient) -> None:
+        self.invoice_extractor = InvoiceExtractor(llm)
+        self.person_extractor = PersonExtractor(llm)
+        self.llm = llm
 
-    def extract_person_info(self, raw_text: str):
-        full_prompt = EXTRACTION_PROMPT.format(text=raw_text)
-        return self.llm_client.generate_structured_output(
-            full_prompt, output_schema=PersonSchema
-        )
+    def extract_data_for_person(self, text: str):
+        return self.person_extractor.extract_person_info(text)
 
-    async def extract_data_from_csv(self, file) -> str:
-        # Read file
-        file_content = await file.read()
-
-        # Detect encoding automatically
-        detector = chardet.universaldetector.UniversalDetector()
-        detector.reset()
-        detector.feed(file_content)
-        detector.close()
-        detected = detector.result
-        encoding = detected["encoding"] or "iso-8859-1"
-
-        # Decode file
-        try:
-            text = file_content.decode(encoding)
-        except UnicodeDecodeError:
-            text = file_content.decode("utf-8", errors="replace")
-
-        # Convert file to dataframe
-        try:
-            df = pd.read_csv(StringIO(text), sep=";", on_bad_lines="skip")
-        except Exception as e:
-            raise HTTPException(
-                status_code=400, detail=f"Error procesando CSV: {str(e)}"
-            )
-
-        if df.empty:
-            raise ValueError("El CSV está vacío o no se pudo parsear")
-
-        return df.head(5).to_string(index=False)
-
-    async def extract_data_from_pdf(self, file):
-        # Read file
-        file_content = await file.read()
-
-        # Open file
-        with pdfplumber.open(BytesIO(file_content)) as pdf:
-            full_text = "\n".join(
-                page.extract_text() for page in pdf.pages if page.extract_text()
-            )
-            return full_text
-
-    async def extract_data_from_file(self, file):
-        type_file = file.filename.lower().split(".")[-1]
+    async def extract_data_from_file(self, file: UploadFile):
+        type_file = file.filename.split(".")[-1]
 
         if type_file == "csv":
-            content = await self.extract_data_from_csv(file)
-            print("content: ", content)
-            full_prompt = EXTRACTION_FILE_PROMPT.format(text=content)
-
-            response = self.llm_client.generate_structured_output(
-                full_prompt, output_schema=InvoiceList
-            )
-
-            # Validate response
-            return response
+            content = await CSVSource().extract_data_from_csv(file)
+            return self.invoice_extractor.from_csv_text(content)
 
         elif type_file == "pdf":
-            content = await self.extract_data_from_pdf(file)
-            full_prompt = EXTRACTION_FILE_PDF_PROMPT.format(text=content)
-
-            return self.llm_client.generate_structured_output(
-                full_prompt, output_schema=InvoiceSchema
-            )
+            text = await PDFSource().extract_data_from_pdf(file)
+            return self.invoice_extractor.from_pdf_text(text)
 
         else:
             return {"error": "Tipo de archivo no soportado"}
