@@ -5,21 +5,32 @@ from app.features.rag.service import RAGService, get_rag_service
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
 
-@router.post("/ingest")
-def ingest_document(
+@router.post(
+    "/ingest",
+    description="""
+    It ingests documentation from a URL (it can be an HTML or a README) and adds it to a vector database.
+    The variables of 'domain' and 'topic' allows to better separate the topics and gives better context to later.
+    """,
+)
+async def ingest_document(
     ingest: IngestRequest,
     serv: RAGService = Depends(get_rag_service),
 ):
-    soup = serv.extract_html(ingest.url)
-
-    serv.ingest_document(
-        soup=soup, source=ingest.url, domain=ingest.domain, topic=ingest.topic
+    await serv.ingest_document(
+        url=ingest.url, source=ingest.url, domain=ingest.domain, topic=ingest.topic
     )
 
     return {"status": "ingested", "url": ingest.url}
 
 
-@router.post("/retrieve")
+@router.post(
+    "/retrieve",
+    description="""
+    You can try to get context directly from the vector database.
+    It is filtered by 'domain' and 'topic' in the database to return data.
+    It is necessary to complete correctly.
+    """,
+)
 def retrieve_search(
     query: QueryRequest,
     serv: RAGService = Depends(get_rag_service),
@@ -29,7 +40,12 @@ def retrieve_search(
     return {"status": "query", "Points": query_result}
 
 
-@router.post("/ask")
+@router.post(
+    "/ask",
+    description="""
+    Ask to LLM about documentation previously charged and get a response with context
+    """,
+)
 def ask(
     query: QueryRequest,
     serv: RAGService = Depends(get_rag_service),

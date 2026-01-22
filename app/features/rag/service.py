@@ -1,9 +1,9 @@
+import re
 from fastapi import Depends
-from pydantic import HttpUrl
 from app.core.llm_client import LLMClient, get_llm_client
-import requests
 import json
-from bs4 import BeautifulSoup
+from app.features.extraction.source.html_source import HTMLSource
+from app.features.extraction.source.readme_source import READMESource
 from app.features.rag.rag_client import RAGClient, get_rag_client
 
 PROMPT_TEMPLATE = """
@@ -47,24 +47,16 @@ class RAGService:
         ]
         return "\n".join(lines)
 
-    def extract_html(self, url: HttpUrl):
-        html = requests.get(url).text
-        soup = BeautifulSoup(html, "html.parser")
-
-        for tag in soup(["script", "style", "nav", "footer", "header"]):
-            tag.decompose()
-
-        main = soup.find("main") or soup.find("article")
-
-        if not main:
-            raise ValueError("Not found main content")
-
-        return main
+    async def extract_from_url(self, url: str):
+        html = await HTMLSource(
+            only_main=True, allowed_tags=["h1", "h2", "p", "li"]
+        ).extract(url)
+        return self._clean_text(html)
 
     def chunk_html(self, soup):
         chunks = []
 
-        intro = soup.get_text().split("\n")[0:5]
+        intro = soup.split("\n")[0:5]
         chunks.append("\n".join(intro))
 
         for section in soup.find_all(["h2", "h3"]):
@@ -91,8 +83,21 @@ class RAGService:
 
         return chunks
 
-    def ingest_document(self, soup, source, domain, topic):
-        chunks = self.chunk_html(soup)
+    def chunk_by_markdown(self, text: str):
+        separated = text.split("##")
+
+        if not separated[0].strip():
+            separated.pop(0)
+
+        return ["## " + s.strip().lstrip("#") for s in separated]
+
+    async def ingest_document(self, url, source, domain, topic):
+        if "raw.githubusercontent.com" in url:
+            text = await READMESource().extract(url)
+            chunks = self.chunk_by_markdown(text)
+        else:
+            text = await self.extract_from_url(url)
+            chunks = self.chunk_text(text)
 
         points = []
         for i, chunk in enumerate(chunks):
@@ -145,9 +150,6 @@ class RAGService:
             seen.add(src)
 
             citations.append({"source": src, "chunk_index": q.payload["chunk_index"]})
-
-        print(query_result)
-        print(parsed)
 
         return {"response": parsed["answer"], "citations": citations}
 

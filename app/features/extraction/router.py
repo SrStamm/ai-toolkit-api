@@ -8,21 +8,7 @@ router = APIRouter(prefix="/extraction", tags=["Extraction"])
 def extract_person_info(
     raw_text: str, serv: ExtractionService = Depends(get_extraction_service)
 ):
-    return serv.extract_person_info(raw_text)
-
-
-@router.post("/extract-csv")
-async def extract_csv_info(
-    file: UploadFile, serv: ExtractionService = Depends(get_extraction_service)
-):
-    return await serv.extract_data_from_csv(file)
-
-
-@router.post("/extract-pdf")
-async def extract_pdf_info(
-    file: UploadFile, serv: ExtractionService = Depends(get_extraction_service)
-):
-    return await serv.extract_data_from_pdf(file)
+    return serv.extract_data_for_person(raw_text)
 
 
 @router.post("/extract-invoice")

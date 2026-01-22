@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 
 class IngestRequest(BaseModel):
-    url: HttpUrl
+    url: str
     domain: str = "general"
     topic: str = "unknown"
 
