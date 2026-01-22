@@ -10,10 +10,8 @@ async def ingest_document(
     ingest: IngestRequest,
     serv: RAGService = Depends(get_rag_service),
 ):
-    soup = await serv.extract_from_url(ingest.url)
-
-    serv.ingest_document(
-        soup=soup, source=ingest.url, domain=ingest.domain, topic=ingest.topic
+    await serv.ingest_document(
+        url=ingest.url, source=ingest.url, domain=ingest.domain, topic=ingest.topic
     )
 
     return {"status": "ingested", "url": ingest.url}

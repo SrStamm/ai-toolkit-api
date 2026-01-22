@@ -1,7 +1,9 @@
+import re
 from fastapi import Depends
 from app.core.llm_client import LLMClient, get_llm_client
 import json
 from app.features.extraction.source.html_source import HTMLSource
+from app.features.extraction.source.readme_source import READMESource
 from app.features.rag.rag_client import RAGClient, get_rag_client
 
 PROMPT_TEMPLATE = """
@@ -81,8 +83,21 @@ class RAGService:
 
         return chunks
 
-    def ingest_document(self, soup, source, domain, topic):
-        chunks = self.chunk_text(soup)
+    def chunk_by_markdown(self, text: str):
+        separated = text.split("##")
+
+        if not separated[0].strip():
+            separated.pop(0)
+
+        return ["## " + s.strip().lstrip("#") for s in separated]
+
+    async def ingest_document(self, url, source, domain, topic):
+        if "raw.githubusercontent.com" in url:
+            text = await READMESource().extract(url)
+            chunks = self.chunk_by_markdown(text)
+        else:
+            html = await self.extract_from_url(url)
+            chunks = self.chunk_html(html)
 
         points = []
         for i, chunk in enumerate(chunks):
