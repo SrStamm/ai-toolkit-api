@@ -96,8 +96,8 @@ class RAGService:
             text = await READMESource().extract(url)
             chunks = self.chunk_by_markdown(text)
         else:
-            html = await self.extract_from_url(url)
-            chunks = self.chunk_html(html)
+            text = await self.extract_from_url(url)
+            chunks = self.chunk_text(text)
 
         points = []
         for i, chunk in enumerate(chunks):
