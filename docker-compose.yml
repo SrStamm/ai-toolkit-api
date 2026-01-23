@@ -6,12 +6,13 @@ services:
       - "6333:6333"
       - "6334:6334"
     volumes:
-      - ./qdrant_data:/qdrant/storage
+      - qdrant_data:/qdrant/storage
 
   api:
     build: .
     volumes:
       - hf_cache:/root/.cache
+      - .:/backend
     env_file:
       - .env
     ports:
@@ -28,5 +29,5 @@ services:
       ]
 
 volumes:
-  qdrant-data:
+  qdrant_data:
   hf_cache:
