@@ -26,3 +26,9 @@ class VectorStoreInterface(ABC):
     def rerank(self, query: str, search_result: list) -> List[Any]:
         """Sort order results"""
         pass
+
+
+class EmbeddingInterface(ABC):
+    @abstractmethod
+    def embed(self, text: str, query: bool = False) -> List[Any]:
+        pass
