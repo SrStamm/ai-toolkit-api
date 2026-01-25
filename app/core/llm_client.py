@@ -1,4 +1,7 @@
 from pydantic import BaseModel, ValidationError
+
+from app.core.custom_logging import time_response
+
 from .settings import LLMConfig, MistralProvider, BaseLLMProvider
 from dotenv import load_dotenv
 import os
@@ -10,9 +13,11 @@ class LLMClient:
     def __init__(self, provider: BaseLLMProvider):
         self.provider = provider
 
+    @time_response
     def generate_content(self, prompt: str) -> str:
         return self.provider.chat(prompt)
 
+    @time_response
     def generate_structured_output(
         self, prompt: str, output_schema: type[BaseModel]
     ) -> BaseModel:

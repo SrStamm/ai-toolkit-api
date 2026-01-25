@@ -1,3 +1,5 @@
+import inspect
+import time
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -12,6 +14,7 @@ from structlog.processors import (
     TimeStamper,
 )
 from structlog.dev import ConsoleRenderer
+from functools import wraps
 import sys
 
 from structlog.stdlib import LoggerFactory
@@ -60,7 +63,9 @@ def register_exceptions_handlers(app):
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
     ):
-        logger.error("validation_error", detail=exc.errors(), path=request.url)
+        logger.error(
+            "validation_error", detail=str(exc.errors()), path=str(request.url)
+        )
         return JSONResponse(
             status_code=422,
             content={"detail": exc.errors()},
@@ -73,3 +78,37 @@ def register_exceptions_handlers(app):
             status_code=500,
             content={"detail": "Internal Server Error"},
         )
+
+
+def time_response(func):
+    if inspect.iscoroutinefunction(func):
+
+        @wraps(func)
+        async def wrapper_async(*args, **kwargs):
+            start_time = time.perf_counter()
+
+            resultado = await func(*args, **kwargs)
+
+            duration = time.perf_counter() - start_time
+
+            logger.info(func.__name__, duration=f"{duration:.3f}s")
+
+            return resultado
+
+        return wrapper_async
+
+    else:
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            start_time = time.perf_counter()
+
+            resultado = func(*args, **kwargs)
+
+            duration = time.perf_counter() - start_time
+
+            logger.info(func.__name__, duration=f"{duration:.3f}s")
+
+            return resultado
+
+        return wrapper

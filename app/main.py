@@ -37,7 +37,7 @@ async def structured_log_middleware(request: Request, call_next):
 
     # Create and set request_id
     request_id = str(uuid.uuid4())
-    request_id_var.set(request_id)
+    token = request_id_var.set(request_id)
 
     start_time = time()
 
@@ -68,7 +68,9 @@ async def structured_log_middleware(request: Request, call_next):
         log = structlog.get_logger()
         log.error(
             "request_failed",
-            exc_info=str(exc),
-            status_code=500,
+            exc_mesg=str(exc),
         )
-        raise
+        raise exc
+
+    finally:
+        request_id_var.reset(token)
