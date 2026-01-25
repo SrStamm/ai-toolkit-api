@@ -1,20 +1,28 @@
 from fastapi import Depends
 import json
 import structlog
+from app.features.rag.providers.local_ai import EmbeddignService, get_embeddign_service
+from .interfaces import FilterContext, VectorStoreInterface
+from .providers import qdrant_client
 from .prompt import PROMPT_TEMPLATE
 from app.core.llm_client import LLMClient, get_llm_client
 from app.features.extraction.source.html_source import HTMLSource
 from app.features.extraction.source.readme_source import READMESource
-from .rag_client import RAGClient, get_rag_client
 
 
 log = structlog.get_logger()
 
 
 class RAGService:
-    def __init__(self, llm_client: LLMClient, rag_client: RAGClient):
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        vector_store: VectorStoreInterface,
+        embed_service: EmbeddignService,
+    ):
         self.llm_client = llm_client
-        self.rag_client = rag_client
+        self.vector_store = vector_store
+        self.embed_service = embed_service
 
     def _clean_text(self, text: str) -> str:
         lines = [line.strip() for line in text.splitlines()]
@@ -85,14 +93,21 @@ class RAGService:
                 "chunk_index": i,
             }
 
-            point = self.rag_client.create_point(chunk, payload)
+            vector = self.embed_service.embed(chunk)
+            point = self.vector_store.create_point(vector, payload)
             points.append(point)
 
-        self.rag_client.insert_vector(points)
+        self.vector_store.insert_vector(points)
 
     def query(self, text, domain: str, topic: str):
-        chunks = self.rag_client.query(text, domain.lower(), topic.lower())
-        return chunks
+        # Get vector for text
+        vector_query = self.embed_service.embed(text, True)
+
+        # Create filter context
+        context = FilterContext(domain.lower(), topic.lower())
+
+        # Search in DB using vector
+        return self.vector_store.query(vector_query, limit=10, filter_context=context)
 
     def ask(self, user_question: str, domain: str, topic: str):
         query_result = self.query(user_question, domain, topic)
@@ -112,7 +127,7 @@ class RAGService:
 
         print(f"query_result: {log_info}")
 
-        rerank_result = self.rag_client.rerank(user_question, query_result)
+        rerank_result = self.vector_store.rerank(user_question, query_result)
 
         log_info = [
             {"index": hit.payload["chunk_index"], "score": round(float(hit.score), 4)}
@@ -150,6 +165,7 @@ class RAGService:
 
 def get_rag_service(
     llm_client: LLMClient = Depends(get_llm_client),
-    rag_client: RAGClient = Depends(get_rag_client),
+    vector_store: VectorStoreInterface = Depends(qdrant_client.get_qdrant_store),
+    embed_service: EmbeddignService = Depends(get_embeddign_service),
 ):
-    return RAGService(llm_client, rag_client)
+    return RAGService(llm_client, vector_store, embed_service)

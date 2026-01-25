@@ -10,17 +10,18 @@ from qdrant_client.models import (
     VectorParams,
     Filter,
 )
-from sentence_transformers import SentenceTransformer, CrossEncoder
+from sentence_transformers import CrossEncoder
+from ..interfaces import VectorStoreInterface
+
 
 qdrant = QdrantClient(host="qdrant", port=6333)
 
 COLLECTION_NAME = "documents"
 
 
-class RAGClient:
+class QdrantStore(VectorStoreInterface):
     def __init__(self, client: QdrantClient) -> None:
         self.client = client
-        self.embed_model = SentenceTransformer("intfloat/multilingual-e5-small")
         self.rerank_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
     def create_collection(self):
@@ -44,34 +45,29 @@ class RAGClient:
             print(f"Error al crear la colección: {e}")
             raise
 
-    def embed(self, text: str):
-        embedding = self.embed_model.encode(
-            f"passage: {text}", normalize_embeddings=True
-        )
-        return embedding.tolist()
-
-    def query(self, text: str, domain: str, topic: str) -> List[ScoredPoint]:
-        embedding = self.embed_model.encode(f"query: {text}", normalize_embeddings=True)
-        embed_list = embedding.tolist()
-
+    def query(
+        self, query_vector: list[float], limit: int, filter_context
+    ) -> List[ScoredPoint]:
         search_result = self.client.query_points(
             collection_name=COLLECTION_NAME,
-            query=embed_list,
+            query=query_vector,
             with_payload=True,
-            limit=10,
+            limit=limit,
             query_filter=Filter(
                 must=[
-                    FieldCondition(key="domain", match=MatchValue(value=domain)),
-                    FieldCondition(key="topic", match=MatchValue(value=topic)),
+                    FieldCondition(
+                        key="domain", match=MatchValue(value=filter_context.domain)
+                    ),
+                    FieldCondition(
+                        key="topic", match=MatchValue(value=filter_context.topic)
+                    ),
                 ]
             ),
         ).points
 
         return search_result
 
-    def create_point(self, chunk, payload) -> PointStruct:
-        vector = self.embed(chunk)
-
+    def create_point(self, vector, payload) -> PointStruct:
         return PointStruct(id=str(uuid4()), vector=vector, payload=payload)
 
     def insert_vector(self, points: List[PointStruct], batch_size: int = 64):
@@ -96,5 +92,5 @@ class RAGClient:
         return search_result[:3]
 
 
-def get_rag_client() -> RAGClient:
-    return RAGClient(qdrant)
+def get_qdrant_store() -> QdrantStore:
+    return QdrantStore(qdrant)

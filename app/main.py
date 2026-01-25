@@ -1,12 +1,12 @@
+import uuid
+import structlog
+from time import time
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-import uuid
-from time import time
-import structlog
 from fastapi import FastAPI, Request
 from app.core.custom_logging import register_exceptions_handlers
 from app.features.extraction.router import router as extraction_router
-from app.features.rag.rag_client import get_rag_client, RAGClient
+from app.features.rag.providers.qdrant_client import get_qdrant_store, QdrantStore
 from app.features.rag.router import router as rag_router
 from app.core.custom_logging import logger
 
@@ -15,7 +15,7 @@ from app.core.custom_logging import logger
 async def lifespan(app: FastAPI):
     print("Iniciando APP")
     print("Verificando colección")
-    rag_client: RAGClient = get_rag_client()
+    rag_client: QdrantStore = get_qdrant_store()
     rag_client.create_collection()
     yield
 
