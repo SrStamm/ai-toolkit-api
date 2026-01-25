@@ -11,6 +11,8 @@ from qdrant_client.models import (
     Filter,
 )
 from sentence_transformers import CrossEncoder
+
+from app.core.custom_logging import time_response
 from ..interfaces import VectorStoreInterface
 
 
@@ -24,6 +26,7 @@ class QdrantStore(VectorStoreInterface):
         self.client = client
         self.rerank_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
+    @time_response
     def create_collection(self):
         print(f"Verifying if exist collection {COLLECTION_NAME} exist")
 
@@ -45,6 +48,7 @@ class QdrantStore(VectorStoreInterface):
             print(f"Error al crear la colección: {e}")
             raise
 
+    @time_response
     def query(
         self, query_vector: list[float], limit: int, filter_context
     ) -> List[ScoredPoint]:
@@ -67,14 +71,17 @@ class QdrantStore(VectorStoreInterface):
 
         return search_result
 
+    @time_response
     def create_point(self, vector, payload) -> PointStruct:
         return PointStruct(id=str(uuid4()), vector=vector, payload=payload)
 
+    @time_response
     def insert_vector(self, points: List[PointStruct], batch_size: int = 64):
         for i in range(0, len(points), batch_size):
             batch = points[i : i + batch_size]
             self.client.upsert(collection_name=COLLECTION_NAME, points=batch)
 
+    @time_response
     def rerank(self, query: str, search_result: list) -> List[ScoredPoint]:
         # create pairs (question, text of chunk)
         pairs = [[query, hit.payload["text"]] for hit in search_result]
@@ -92,5 +99,8 @@ class QdrantStore(VectorStoreInterface):
         return search_result[:3]
 
 
+qdrant_client = QdrantStore(qdrant)
+
+
 def get_qdrant_store() -> QdrantStore:
-    return QdrantStore(qdrant)
+    return qdrant_client
