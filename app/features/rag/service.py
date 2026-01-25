@@ -100,12 +100,14 @@ class RAGService:
         self.vector_store.insert_vector(points)
 
     def query(self, text, domain: str, topic: str):
+        # Get vector for text
         vector_query = self.embed_service.embed(text, True)
 
+        # Create filter context
         context = FilterContext(domain.lower(), topic.lower())
 
-        chunks = self.vector_store.query(vector_query, limit=10, filter_context=context)
-        return chunks
+        # Search in DB using vector
+        return self.vector_store.query(vector_query, limit=10, filter_context=context)
 
     def ask(self, user_question: str, domain: str, topic: str):
         query_result = self.query(user_question, domain, topic)
