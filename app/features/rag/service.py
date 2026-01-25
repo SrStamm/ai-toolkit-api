@@ -1,39 +1,12 @@
 from fastapi import Depends
 import json
-
 import structlog
+from .prompt import PROMPT_TEMPLATE
 from app.core.llm_client import LLMClient, get_llm_client
 from app.features.extraction.source.html_source import HTMLSource
 from app.features.extraction.source.readme_source import READMESource
-from app.features.rag.rag_client import RAGClient, get_rag_client
+from .rag_client import RAGClient, get_rag_client
 
-PROMPT_TEMPLATE = """
-You are an expert assistant.
-
-Answer the user's question using the information provided in the context below.
-You may rephrase, summarize, or explain the content in your own words,
-but do not add information that is not supported by the context.
-
-Return ONLY valid JSON, without markdown or explanation.
-Format:
-{{
-  "answer": string
-}}
-
-
-If the context does not contain enough information to answer the question,
-say clearly that you do not have enough information.
-
-Be clear, concise, and accurate.
-
-Context:
----------
-{context}
----------
-
-Question:
-{question}
-"""
 
 log = structlog.get_logger()
 

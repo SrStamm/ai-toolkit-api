@@ -50,7 +50,7 @@ class RAGClient:
         )
         return embedding.tolist()
 
-    def query(self, text: str, domain: str, topic: str):
+    def query(self, text: str, domain: str, topic: str) -> List[ScoredPoint]:
         embedding = self.embed_model.encode(f"query: {text}", normalize_embeddings=True)
         embed_list = embedding.tolist()
 
