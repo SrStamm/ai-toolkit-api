@@ -1,13 +1,12 @@
 from fastapi import Depends
 import json
 import structlog
-from app.features.rag.providers.local_ai import EmbeddignService, get_embeddign_service
+from app.features.extraction.factory import SourceFactory
+from .providers.local_ai import EmbeddignService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
 from .providers import qdrant_client
 from .prompt import PROMPT_TEMPLATE
 from app.core.llm_client import LLMClient, get_llm_client
-from app.features.extraction.source.html_source import HTMLSource
-from app.features.extraction.source.readme_source import READMESource
 
 
 log = structlog.get_logger()
@@ -24,64 +23,18 @@ class RAGService:
         self.vector_store = vector_store
         self.embed_service = embed_service
 
-    def _clean_text(self, text: str) -> str:
-        lines = [line.strip() for line in text.splitlines()]
-        lines = [
-            line for line in lines if len(line) > 30 and any(c.isalnum() for c in line)
-        ]
-        return "\n".join(lines)
-
-    async def extract_from_url(self, url: str):
-        html = await HTMLSource(
-            only_main=True, allowed_tags=["h1", "h2", "p", "li"]
-        ).extract(url)
-        return self._clean_text(html)
-
-    def chunk_html(self, soup):
-        chunks = []
-
-        intro = soup.split("\n")[0:5]
-        chunks.append("\n".join(intro))
-
-        for section in soup.find_all(["h2", "h3"]):
-            content = []
-            for sib in section.find_next_siblings():
-                if sib.name in ["h2", "h3"]:
-                    break
-                content.append(sib.get_text())
-
-            text = section.get_text() + "\n" + "\n".join(content)
-            chunks.append(text.strip())
-
-        return chunks
-
-    def chunk_text(self, text: str, max_chars=300, overlap=100):
-        chunks = []
-        start = 0
-
-        while start < len(text):
-            end = start + max_chars
-            chunk = text[start:end]
-            chunks.append(chunk)
-            start = end - overlap
-
-        return chunks
-
-    def chunk_by_markdown(self, text: str):
-        separated = text.split("##")
-
-        if not separated[0].strip():
-            separated.pop(0)
-
-        return ["## " + s.strip().lstrip("#") for s in separated]
-
     async def ingest_document(self, url, source, domain, topic):
-        if "raw.githubusercontent.com" in url:
-            text = await READMESource().extract(url)
-            chunks = self.chunk_by_markdown(text)
-        else:
-            text = await self.extract_from_url(url)
-            chunks = self.chunk_text(text)
+        # 1. Get tools since factory
+        extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
+
+        # 2. Extract crude content
+        raw_data = await extractor.extract(url)
+
+        # 3. Clean content
+        content = cleaner.clean(raw_data)
+
+        # 4. Chunks content
+        chunks = cleaner.chunk(content)
 
         points = []
         for i, chunk in enumerate(chunks):
