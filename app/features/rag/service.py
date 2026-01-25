@@ -1,7 +1,8 @@
-import re
 from fastapi import Depends
-from app.core.llm_client import LLMClient, get_llm_client
 import json
+
+import structlog
+from app.core.llm_client import LLMClient, get_llm_client
 from app.features.extraction.source.html_source import HTMLSource
 from app.features.extraction.source.readme_source import READMESource
 from app.features.rag.rag_client import RAGClient, get_rag_client
@@ -33,6 +34,8 @@ Context:
 Question:
 {question}
 """
+
+log = structlog.get_logger()
 
 
 class RAGService:
@@ -122,14 +125,32 @@ class RAGService:
         query_result = self.query(user_question, domain, topic)
 
         if not query_result:
-            print("NO RAG results")
-            print(f"domain: {domain}")
-            print(f"topix: {topic}")
-            print(f"question: {user_question}")
+            log.info(
+                "NO RAG results",
+                domain=domain,
+                topic=topic,
+                user_question=user_question,
+            )
+
+        log_info = [
+            {"index": hit.payload["chunk_index"], "score": round(float(hit.score), 4)}
+            for hit in query_result
+        ]
+
+        print(f"query_result: {log_info}")
+
+        rerank_result = self.rag_client.rerank(user_question, query_result)
+
+        log_info = [
+            {"index": hit.payload["chunk_index"], "score": round(float(hit.score), 4)}
+            for hit in rerank_result
+        ]
+
+        print(f"rerank_result: {log_info}")
 
         context = "\n\n".join(
             f"[{i + 1}]\n{chunk.payload['text']}"
-            for i, chunk in enumerate(query_result)
+            for i, chunk in enumerate(rerank_result)
         )
 
         prompt = PROMPT_TEMPLATE.format(context=context, question=user_question)
