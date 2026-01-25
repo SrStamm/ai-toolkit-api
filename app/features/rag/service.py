@@ -1,8 +1,9 @@
 from fastapi import Depends
 import json
 import structlog
+from app.features.rag.providers.local_ai import EmbeddignService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
-from .rag_client import get_rag_client
+from .providers import qdrant_client
 from .prompt import PROMPT_TEMPLATE
 from app.core.llm_client import LLMClient, get_llm_client
 from app.features.extraction.source.html_source import HTMLSource
@@ -13,9 +14,15 @@ log = structlog.get_logger()
 
 
 class RAGService:
-    def __init__(self, llm_client: LLMClient, vector_store: VectorStoreInterface):
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        vector_store: VectorStoreInterface,
+        embed_service: EmbeddignService,
+    ):
         self.llm_client = llm_client
         self.vector_store = vector_store
+        self.embed_service = embed_service
 
     def _clean_text(self, text: str) -> str:
         lines = [line.strip() for line in text.splitlines()]
@@ -86,13 +93,14 @@ class RAGService:
                 "chunk_index": i,
             }
 
-            point = self.vector_store.create_point(chunk, payload)
+            vector = self.embed_service.embed(chunk)
+            point = self.vector_store.create_point(vector, payload)
             points.append(point)
 
         self.vector_store.insert_vector(points)
 
     def query(self, text, domain: str, topic: str):
-        vector_query = self.vector_store.embed(text, True)
+        vector_query = self.embed_service.embed(text, True)
 
         context = FilterContext(domain.lower(), topic.lower())
 
@@ -155,6 +163,7 @@ class RAGService:
 
 def get_rag_service(
     llm_client: LLMClient = Depends(get_llm_client),
-    vector_store: VectorStoreInterface = Depends(get_rag_client),
+    vector_store: VectorStoreInterface = Depends(qdrant_client.get_qdrant_store),
+    embed_service: EmbeddignService = Depends(get_embeddign_service),
 ):
-    return RAGService(llm_client, vector_store)
+    return RAGService(llm_client, vector_store, embed_service)
