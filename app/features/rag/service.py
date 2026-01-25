@@ -23,44 +23,6 @@ class RAGService:
         self.vector_store = vector_store
         self.embed_service = embed_service
 
-    def chunk_html(self, soup):
-        chunks = []
-
-        intro = soup.split("\n")[0:5]
-        chunks.append("\n".join(intro))
-
-        for section in soup.find_all(["h2", "h3"]):
-            content = []
-            for sib in section.find_next_siblings():
-                if sib.name in ["h2", "h3"]:
-                    break
-                content.append(sib.get_text())
-
-            text = section.get_text() + "\n" + "\n".join(content)
-            chunks.append(text.strip())
-
-        return chunks
-
-    def chunk_text(self, text: str, max_chars=300, overlap=100):
-        chunks = []
-        start = 0
-
-        while start < len(text):
-            end = start + max_chars
-            chunk = text[start:end]
-            chunks.append(chunk)
-            start = end - overlap
-
-        return chunks
-
-    def chunk_by_markdown(self, text: str):
-        separated = text.split("##")
-
-        if not separated[0].strip():
-            separated.pop(0)
-
-        return ["## " + s.strip().lstrip("#") for s in separated]
-
     async def ingest_document(self, url, source, domain, topic):
         # 1. Get tools since factory
         extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
@@ -72,10 +34,7 @@ class RAGService:
         content = cleaner.clean(raw_data)
 
         # 4. Chunks content
-        if "raw.githubusercontent.com" in url or url.endswith(".md"):
-            chunks = self.chunk_by_markdown(content)
-        else:
-            chunks = self.chunk_text(content)
+        chunks = cleaner.chunk(content)
 
         points = []
         for i, chunk in enumerate(chunks):
