@@ -18,6 +18,10 @@ class VectorStoreInterface(ABC):
         pass
 
     @abstractmethod
+    def create_point(self, vector, payload) -> Any:
+        pass
+
+    @abstractmethod
     def insert_vector(self, points: List[Any]) -> None:
         """Insert or update vectors"""
         pass

@@ -1,7 +1,9 @@
 from fastapi import Depends
 import json
 import structlog
+from app.features.extraction.exceptions import EmptySourceContentError, SourceException
 from app.features.extraction.factory import SourceFactory
+from .exceptions import ChunkingError
 from .providers.local_ai import EmbeddignService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
 from .providers import qdrant_client
@@ -28,13 +30,25 @@ class RAGService:
         extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
 
         # 2. Extract crude content
-        raw_data = await extractor.extract(url)
+        try:
+            raw_data = await extractor.extract(url)
+        except SourceException as e:
+            log.warning(
+                "Source extraction failed", error=str(e), url=url, source=source
+            )
+            raise
 
         # 3. Clean content
         content = cleaner.clean(raw_data)
 
+        if not content.strip():
+            raise EmptySourceContentError(url)
+
         # 4. Chunks content
         chunks = cleaner.chunk(content)
+
+        if not chunks:
+            raise ChunkingError("No chunks generated")
 
         points = []
         for i, chunk in enumerate(chunks):
@@ -83,7 +97,10 @@ class RAGService:
         rerank_result = self.vector_store.rerank(user_question, query_result)
 
         log_info = [
-            {"index": hit.payload["chunk_index"], "score": round(float(hit.score), 4)}
+            {
+                "index": hit.payload["chunk_index"],
+                "score": round(float(hit.rerank_score), 4),
+            }
             for hit in rerank_result
         ]
 
