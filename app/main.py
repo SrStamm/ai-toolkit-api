@@ -4,6 +4,7 @@ from time import time
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from app.core.custom_logging import register_exceptions_handlers
 from app.features.extraction.router import router as extraction_router
 from app.features.rag.providers.qdrant_client import get_qdrant_store, QdrantStore
@@ -21,6 +22,25 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+origins = [
+    "http://localhost",
+    "http://localhost:8000",
+    "http://localhost:8080",
+    "*",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(extraction_router)
 app.include_router(rag_router)
