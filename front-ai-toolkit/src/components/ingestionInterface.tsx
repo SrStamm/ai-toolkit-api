@@ -7,16 +7,25 @@ import { ingestURLFetch } from "@/services/ragServices";
 
 function IngestionInterface() {
   const [URL, setURL] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const onURLChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setURL(e.target.value);
   };
-  const handleIngest = async () => {
-    const body: Ingestrequest = {
-      url: URL,
-    };
 
-    await ingestURLFetch(body);
+  const handleIngest = async () => {
+    try {
+      setLoading(true);
+
+      const body: Ingestrequest = {
+        url: URL,
+      };
+
+      await ingestURLFetch(body);
+    } finally {
+      setLoading(false);
+      setURL("");
+    }
   };
 
   return (
@@ -26,8 +35,12 @@ function IngestionInterface() {
           <CardTitle>Ingesta de Datos</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Textarea placeholder="Pega la URL aquí..." onChange={onURLChange} />
-          <Button className="w-full" onClick={handleIngest}>
+          <Textarea
+            placeholder="Pega la URL aquí..."
+            value={URL}
+            onChange={onURLChange}
+          />
+          <Button className="w-full" onClick={handleIngest} disabled={loading}>
             Ingerir Documento
           </Button>
         </CardContent>
