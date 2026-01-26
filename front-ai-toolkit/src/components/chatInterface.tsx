@@ -4,6 +4,8 @@ import { Card } from "./ui/card";
 import { Input } from "./ui/input";
 import { askFetch } from "@/services/ragServices";
 import type { Citation, QueryRequest, QueryResponse } from "@/types/rag";
+import { toast } from "sonner";
+import CustomizedToast from "./toast";
 
 interface Message {
   role: "user" | "ai";
@@ -43,6 +45,9 @@ function ChatInterface() {
       };
 
       setMessages((prev) => [...prev, ai_message]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      CustomizedToast({ type: "error", msg: msg });
     } finally {
       setIsLoading(false);
       setQuery("");
