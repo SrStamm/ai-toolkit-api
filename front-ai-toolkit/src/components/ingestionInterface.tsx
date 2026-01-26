@@ -1,8 +1,28 @@
+import React, { useState } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Textarea } from "./ui/textarea";
+import type { Ingestrequest } from "@/types/rag";
+import Fetch from "@/utils/api";
 
 function IngestionInterface() {
+  const [URL, setURL] = useState("");
+
+  const onURLChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setURL(e.target.value);
+  };
+  const handleIngest = async () => {
+    const body: Ingestrequest = {
+      url: URL,
+    };
+
+    await Fetch({
+      path: "/rag/ingest",
+      method: "POST",
+      body: body,
+    });
+  };
+
   return (
     <div className="p-4 w-full max-w-sm">
       <Card>
@@ -10,8 +30,10 @@ function IngestionInterface() {
           <CardTitle>Ingesta de Datos</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Textarea placeholder="Pega la URL aquí..." />
-          <Button className="w-full">Ingerir Documento</Button>
+          <Textarea placeholder="Pega la URL aquí..." onChange={onURLChange} />
+          <Button className="w-full" onClick={handleIngest}>
+            Ingerir Documento
+          </Button>
         </CardContent>
       </Card>
     </div>
