@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import Depends
 import json
 import structlog
@@ -66,12 +67,17 @@ class RAGService:
 
         self.vector_store.insert_vector(points)
 
-    def query(self, text, domain: str, topic: str):
+    def query(self, text, domain: Optional[str], topic: Optional[str]):
         # Get vector for text
         vector_query = self.embed_service.embed(text, True)
 
         # Create filter context
-        context = FilterContext(domain.lower(), topic.lower())
+        context = FilterContext()
+
+        if domain:
+            context.domain = domain.lower()
+        if topic:
+            context.topic = topic.lower()
 
         # Search in DB using vector
         return self.vector_store.query(vector_query, limit=10, filter_context=context)
@@ -99,7 +105,7 @@ class RAGService:
         log_info = [
             {
                 "index": hit.payload["chunk_index"],
-                "score": round(float(hit.rerank_score), 4),
+                "score": round(float(hit.score), 4),
             }
             for hit in rerank_result
         ]

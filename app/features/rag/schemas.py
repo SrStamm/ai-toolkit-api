@@ -9,8 +9,8 @@ class IngestRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     text: str = Field(min_length=5)
-    domain: str = "general"
-    topic: str = "unknown"
+    domain: str | None = None
+    topic: str | None = None
 
 
 class Citation(BaseModel):

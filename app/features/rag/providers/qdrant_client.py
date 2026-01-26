@@ -53,21 +53,29 @@ class QdrantStore(VectorStoreInterface):
     def query(
         self, query_vector: list[float], limit: int, filter_context
     ) -> List[ScoredPoint]:
+        conditions = []
+        if filter_context.domain:
+            conditions.append(
+                FieldCondition(
+                    key="domain", match=MatchValue(value=filter_context.domain)
+                )
+            )
+
+        if filter_context.topic:
+            conditions.append(
+                FieldCondition(
+                    key="topic", match=MatchValue(value=filter_context.topic)
+                )
+            )
+
+        query_filter = Filter(must=conditions) if conditions else None
+
         search_result = self.client.query_points(
             collection_name=COLLECTION_NAME,
             query=query_vector,
             with_payload=True,
             limit=limit,
-            query_filter=Filter(
-                must=[
-                    FieldCondition(
-                        key="domain", match=MatchValue(value=filter_context.domain)
-                    ),
-                    FieldCondition(
-                        key="topic", match=MatchValue(value=filter_context.topic)
-                    ),
-                ]
-            ),
+            query_filter=query_filter,
         ).points
 
         return search_result
@@ -92,7 +100,7 @@ class QdrantStore(VectorStoreInterface):
 
         # match the score with your result
         for i, hit in enumerate(search_result):
-            hit.payload["rerank_score"] = scores[i]
+            hit.payload["score"] = scores[i]
 
         # sort from highest to lowest according to the new score
         search_result.sort(key=lambda x: x.score, reverse=True)
