@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Textarea } from "./ui/textarea";
 import type { Ingestrequest } from "@/types/rag";
 import { ingestURLFetch } from "@/services/ragServices";
+import CustomizedToast from "./toast";
 
 function IngestionInterface() {
   const [URL, setURL] = useState("");
@@ -22,6 +23,8 @@ function IngestionInterface() {
       };
 
       await ingestURLFetch(body);
+
+      CustomizedToast({ type: "info", msg: "Document consumed successfully" });
     } finally {
       setLoading(false);
       setURL("");
