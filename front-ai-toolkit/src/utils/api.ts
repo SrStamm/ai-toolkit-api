@@ -21,23 +21,6 @@ const Fetch = async ({ path, method, body }: FetchProps) => {
     const response = await fetch(url + path, fetchOptions);
 
     // Verificar el content-type
-    const contentType = response.headers.get("content-type");
-
-    // Si no es JSON, leer como texto primero
-    if (!contentType || !contentType.includes("application/json")) {
-      const text = await response.text();
-      console.error(
-        "❌ Respuesta no es JSON. Recibido:",
-        text.substring(0, 500),
-      );
-
-      // Si es un error 404, 500, etc., lanzar error
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${text.substring(0, 100)}`);
-      }
-
-      return response;
-    }
 
     if (!response.ok) {
       const errorText = await response.text();
