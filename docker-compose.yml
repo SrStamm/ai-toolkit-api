@@ -9,7 +9,7 @@ services:
       - qdrant_data:/qdrant/storage
 
   api:
-    build: .
+    build: ./app
     volumes:
       - hf_cache:/root/.cache
       - .:/backend
