@@ -105,7 +105,7 @@ class RAGService:
 
         seen = set()
         citations = []
-        for q in query_result[:2]:
+        for q in query_result:
             src = q.payload["source"]
             if src in seen:
                 continue
@@ -113,7 +113,7 @@ class RAGService:
 
             citations.append({"source": src, "chunk_index": q.payload["chunk_index"]})
 
-        return {"response": parsed["answer"], "citations": citations}
+        return {"answer": parsed["answer"], "citations": citations}
 
 
 def get_rag_service(
