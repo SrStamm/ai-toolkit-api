@@ -5,8 +5,8 @@ from typing import Any, List
 
 @dataclass
 class FilterContext:
-    domain: str
-    topic: str
+    domain: str | None = None
+    topic: str | None = None
 
 
 class VectorStoreInterface(ABC):
