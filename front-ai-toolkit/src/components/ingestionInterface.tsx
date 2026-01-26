@@ -3,7 +3,7 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Textarea } from "./ui/textarea";
 import type { Ingestrequest } from "@/types/rag";
-import Fetch from "@/utils/api";
+import { ingestURLFetch } from "@/services/ragServices";
 
 function IngestionInterface() {
   const [URL, setURL] = useState("");
@@ -16,11 +16,7 @@ function IngestionInterface() {
       url: URL,
     };
 
-    await Fetch({
-      path: "/rag/ingest",
-      method: "POST",
-      body: body,
-    });
+    await ingestURLFetch(body);
   };
 
   return (
