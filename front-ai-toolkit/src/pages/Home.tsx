@@ -3,7 +3,7 @@ import IngestionInterface from "@/components/ingestionInterface";
 
 function Home() {
   return (
-    <main className="flex-col md:flex-row min-h-screen bg-background">
+    <main className="flex flex-row md:flex-row min-h-screen bg-background">
       <section className="md:w-1/3 border-r">
         <IngestionInterface />
       </section>
