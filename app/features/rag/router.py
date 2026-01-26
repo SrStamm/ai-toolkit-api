@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from app.features.rag.schemas import IngestRequest, QueryRequest
+from app.features.rag.schemas import IngestRequest, QueryRequest, QueryResponse
 from app.features.rag.service import RAGService, get_rag_service
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
@@ -49,5 +49,5 @@ def retrieve_search(
 def ask(
     query: QueryRequest,
     serv: RAGService = Depends(get_rag_service),
-):
+) -> QueryResponse:
     return serv.ask(query.text, query.domain, query.topic)
