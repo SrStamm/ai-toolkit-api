@@ -1,5 +1,6 @@
 from typing import List
 from uuid import uuid4
+from sentence_transformers import CrossEncoder
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -10,15 +11,16 @@ from qdrant_client.models import (
     VectorParams,
     Filter,
 )
-from sentence_transformers import CrossEncoder
-
 from app.core.custom_logging import time_response
+from app.features.rag.exceptions import VectorStoreError
 from ..interfaces import VectorStoreInterface
+import structlog
 
 
 qdrant = QdrantClient(host="qdrant", port=6333)
 
 COLLECTION_NAME = "documents"
+log = structlog.getLogger()
 
 
 class QdrantStore(VectorStoreInterface):
@@ -28,12 +30,12 @@ class QdrantStore(VectorStoreInterface):
 
     @time_response
     def create_collection(self):
-        print(f"Verifying if exist collection {COLLECTION_NAME} exist")
+        log.info("Verifying if Qdrant collection exists", collection=COLLECTION_NAME)
 
         exists = self.client.collection_exists(COLLECTION_NAME)
 
         if exists:
-            print("Colection exist")
+            log.info("Qdrant collection exists", collection=COLLECTION_NAME)
             return
 
         try:
@@ -42,11 +44,10 @@ class QdrantStore(VectorStoreInterface):
                 vectors_config=VectorParams(size=384, distance=Distance.COSINE),
             )
 
-            print("Colection created with success")
+            log.info("Qdrant collection created", collection=COLLECTION_NAME)
 
         except Exception as e:
-            print(f"Error al crear la colección: {e}")
-            raise
+            raise VectorStoreError("Failed to create collection") from e
 
     @time_response
     def query(
@@ -91,7 +92,7 @@ class QdrantStore(VectorStoreInterface):
 
         # match the score with your result
         for i, hit in enumerate(search_result):
-            hit.score = scores[i]
+            hit.payload["rerank_score"] = scores[i]
 
         # sort from highest to lowest according to the new score
         search_result.sort(key=lambda x: x.score, reverse=True)

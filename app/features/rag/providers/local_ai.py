@@ -1,6 +1,7 @@
 from typing import List
 from sentence_transformers import SentenceTransformer
 from app.core.custom_logging import time_response
+from app.features.rag.exceptions import EmbeddingError
 from app.features.rag.interfaces import EmbeddingInterface
 
 
@@ -10,16 +11,19 @@ class EmbeddignService(EmbeddingInterface):
 
     @time_response
     def embed(self, text: str, query: bool = False) -> List[float]:
-        if query:
-            embedding = self.embed_model.encode(
-                f"query: {text}", normalize_embeddings=True
-            )
-        else:
-            embedding = self.embed_model.encode(
-                f"passage: {text}", normalize_embeddings=True
-            )
+        try:
+            if query:
+                embedding = self.embed_model.encode(
+                    f"query: {text}", normalize_embeddings=True
+                )
+            else:
+                embedding = self.embed_model.encode(
+                    f"passage: {text}", normalize_embeddings=True
+                )
 
-        return embedding.tolist()
+            return embedding.tolist()
+        except Exception as e:
+            raise EmbeddingError(str(e)) from e
 
 
 embedding = EmbeddignService()
