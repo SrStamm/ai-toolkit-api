@@ -56,7 +56,7 @@ function ChatInterface() {
         {messages.map((msg, index) => (
           <div
             key={index}
-            className="{`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}"
+            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <Card
               className={`p-3 max-w-[80%] ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
