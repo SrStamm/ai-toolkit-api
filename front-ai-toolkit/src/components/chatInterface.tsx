@@ -4,8 +4,8 @@ import { Card } from "./ui/card";
 import { Input } from "./ui/input";
 import { askFetch } from "@/services/ragServices";
 import type { Citation, QueryRequest, QueryResponse } from "@/types/rag";
-import { toast } from "sonner";
 import CustomizedToast from "./toast";
+import Markdown from "react-markdown";
 
 interface Message {
   role: "user" | "ai";
@@ -35,6 +35,8 @@ function ChatInterface() {
       };
 
       setMessages((prev) => [...prev, user_message]);
+
+      setQuery("");
 
       const response: QueryResponse = await askFetch(body);
 
@@ -66,7 +68,25 @@ function ChatInterface() {
             <Card
               className={`p-3 max-w-[80%] ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
             >
-              <p className="text-sm">{msg.content}</p>
+              <Markdown
+                components={{
+                  p: ({ children }) => (
+                    <p className="mb-2 last:mb-0 text-left ">{children}</p>
+                  ),
+                  code: ({ children }) => (
+                    <code className="px-1.5 py-0.5 rounded-sm text-white text-sm">
+                      {children}
+                    </code>
+                  ),
+                  pre: ({ children }) => (
+                    <pre className="bg-slate-900 p-4 rounded-md overflow-x-auto text-left">
+                      {children}
+                    </pre>
+                  ),
+                }}
+              >
+                {msg.content}
+              </Markdown>
               {msg.citations &&
                 msg.citations.length > 0 &&
                 msg.citations.map((c) => (
