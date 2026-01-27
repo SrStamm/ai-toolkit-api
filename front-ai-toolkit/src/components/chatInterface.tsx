@@ -73,11 +73,29 @@ function ChatInterface() {
                   p: ({ children }) => (
                     <p className="mb-2 last:mb-0 text-left ">{children}</p>
                   ),
-                  code: ({ children }) => (
-                    <code className="px-1.5 py-0.5 rounded-sm text-white text-sm">
-                      {children}
-                    </code>
-                  ),
+                  code: ({ children, className, ...props }) => {
+                    const isBlock = className?.includes("language");
+
+                    let textColor = "";
+
+                    if (isBlock) {
+                      textColor = "text-slate-300";
+                    } else {
+                      textColor =
+                        msg.role === "user"
+                          ? "text-white"
+                          : "text-black font-bold";
+                    }
+
+                    return (
+                      <code
+                        className={`${textColor} px-1.5 py-0.5 rounded-sm text-sm`}
+                        {...props}
+                      >
+                        {children}
+                      </code>
+                    );
+                  },
                   pre: ({ children }) => (
                     <pre className="bg-slate-900 p-4 rounded-md overflow-x-auto text-left">
                       {children}
