@@ -7,27 +7,32 @@ import { ingestURLFetch } from "@/services/ragServices";
 import CustomizedToast from "./toast";
 
 function IngestionInterface() {
-  const [URL, setURL] = useState("");
+  const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onURLChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setURL(e.target.value);
+    setUrl(e.target.value);
   };
 
   const handleIngest = async () => {
     try {
       setLoading(true);
 
+      new URL(url);
+
       const body: Ingestrequest = {
-        url: URL,
+        url: url,
       };
 
       await ingestURLFetch(body);
 
       CustomizedToast({ type: "info", msg: "Document consumed successfully" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      CustomizedToast({ type: "error", msg: msg });
     } finally {
       setLoading(false);
-      setURL("");
+      setUrl("");
     }
   };
 
@@ -40,7 +45,7 @@ function IngestionInterface() {
         <CardContent className="space-y-4">
           <Textarea
             placeholder="Pega la URL aquí..."
-            value={URL}
+            value={url}
             onChange={onURLChange}
           />
           <Button className="w-full" onClick={handleIngest} disabled={loading}>
