@@ -1,7 +1,8 @@
+from .llm_providers.mistral_provider import MistralProvider
 from .models import LLMResponse
-from pydantic import BaseModel, ValidationError
 from .custom_logging import time_response
-from .settings import LLMConfig, MistralProvider, BaseLLMProvider
+from .settings import LLMConfig, BaseLLMProvider
+from pydantic import BaseModel, ValidationError
 from dotenv import load_dotenv
 import os
 
@@ -34,6 +35,7 @@ class LLMClient:
                 model=response.model,
                 provider=response.provider,
             )
+
         except ValidationError:
             error_prompt = f"{structured_prompt}\nPrevious output invalid. Corrige: {response.content}"
             return self.generate_structured_output(error_prompt, output_schema)
@@ -41,6 +43,7 @@ class LLMClient:
 
 def get_llm_client():
     API_KEY = os.getenv("MISTRAL_API_KEY")
+
     if not API_KEY:
         raise ValueError("API_KEY no configurada")
 
