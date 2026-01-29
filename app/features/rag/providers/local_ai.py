@@ -1,8 +1,8 @@
 from typing import List
 from sentence_transformers import SentenceTransformer
-from app.core.custom_logging import time_response
-from app.features.rag.exceptions import EmbeddingError
-from app.features.rag.interfaces import EmbeddingInterface
+from ....core.custom_logging import time_response
+from ..exceptions import EmbeddingError
+from ..interfaces import EmbeddingInterface
 
 
 class EmbeddignService(EmbeddingInterface):
@@ -22,6 +22,17 @@ class EmbeddignService(EmbeddingInterface):
                 )
 
             return embedding.tolist()
+        except Exception as e:
+            raise EmbeddingError(str(e)) from e
+
+    @time_response
+    def batch_embed(self, list: list[str], query: bool = False) -> List[List[float]]:
+        try:
+            batchs = [f"query: {x}" if query else f"passage: {x}" for x in list]
+
+            embeddings = self.embed_model.encode(batchs, batch_size=len(batchs))
+
+            return embeddings.tolist()
         except Exception as e:
             raise EmbeddingError(str(e)) from e
 

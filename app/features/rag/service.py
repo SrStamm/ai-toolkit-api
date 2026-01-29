@@ -49,17 +49,22 @@ class RAGService:
         if not chunks:
             raise ChunkingError("No chunks generated")
 
+        # 5. Create a list of vectors
+        vectors = self.embed_service.batch_embed(chunks)
+
         points = []
-        for i, chunk in enumerate(chunks):
+        for chunk, vector in zip(chunks, vectors):
+            count = 0
+
             payload = {
                 "text": chunk,
                 "source": source,
                 "domain": domain.lower(),
                 "topic": topic.lower(),
-                "chunk_index": i,
+                "chunk_index": count,
             }
 
-            vector = self.embed_service.embed(chunk)
+            count += 1
             point = self.vector_store.create_point(vector, payload)
             points.append(point)
 
