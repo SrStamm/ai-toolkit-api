@@ -2,6 +2,8 @@ from typing import Optional
 from fastapi import Depends
 import json
 import structlog
+
+from features.rag.schemas import Metadata, QueryResponse
 from .exceptions import ChunkingError
 from .providers.local_ai import EmbeddignService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
@@ -139,14 +141,14 @@ class RAGService:
             total_cost=f"${response.cost.total_cost:.6f}",
         )
 
-        return {
-            "answer": parsed["answer"],
-            "citations": citations,
-            "metadata": {
-                "tokens": response.usage.total_tokens,
-                "cost": response.cost.total_cost,
-            },
-        }
+        return QueryResponse(
+            answer=parsed["answer"],
+            citations=citations,
+            metadata=Metadata(
+                tokens=response.usage.total_tokens,
+                cost=response.cost.total_cost,
+            ),
+        )
 
 
 def get_rag_service(
