@@ -80,7 +80,12 @@ class RAGService:
         # Search in DB using vector
         return self.vector_store.query(vector_query, limit=10, filter_context=context)
 
-    def ask(self, user_question: str, domain: str, topic: str):
+    def ask(
+        self,
+        user_question: str,
+        domain: Optional[str] = None,
+        topic: Optional[str] = None,
+    ):
         query_result = self.query(user_question, domain, topic)
 
         if not query_result:

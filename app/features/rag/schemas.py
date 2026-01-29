@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -9,8 +10,8 @@ class IngestRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     text: str = Field(min_length=5)
-    domain: str | None = None
-    topic: str | None = None
+    domain: Optional[str] = None
+    topic: Optional[str] = None
 
 
 class Citation(BaseModel):
