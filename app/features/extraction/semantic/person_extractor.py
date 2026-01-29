@@ -1,6 +1,6 @@
-from app.core.llm_client import LLMClient
-from app.features.extraction.prompts import EXTRACTION_PROMPT
-from app.features.extraction.schema import PersonSchema
+from ....core.llm_client import LLMClient
+from ..prompts import EXTRACTION_PROMPT
+from ..schema import PersonSchema
 
 
 class PersonExtractor:

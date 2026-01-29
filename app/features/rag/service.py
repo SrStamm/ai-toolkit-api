@@ -2,14 +2,16 @@ from typing import Optional
 from fastapi import Depends
 import json
 import structlog
-from app.features.extraction.exceptions import EmptySourceContentError, SourceException
-from app.features.extraction.factory import SourceFactory
+
+from features.rag.schemas import Metadata, QueryResponse
 from .exceptions import ChunkingError
 from .providers.local_ai import EmbeddignService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
 from .providers import qdrant_client
 from .prompt import PROMPT_TEMPLATE
-from app.core.llm_client import LLMClient, get_llm_client
+from ...core.llm_client import LLMClient, get_llm_client
+from ..extraction.exceptions import EmptySourceContentError, SourceException
+from ..extraction.factory import SourceFactory
 
 
 class RAGService:
@@ -49,20 +51,25 @@ class RAGService:
         if not chunks:
             raise ChunkingError("No chunks generated")
 
-        points = []
-        for i, chunk in enumerate(chunks):
-            payload = {
-                "text": chunk,
-                "source": source,
-                "domain": domain.lower(),
-                "topic": topic.lower(),
-                "chunk_index": i,
-            }
+        # 5. Create a list of vectors
+        vectors = self.embed_service.batch_embed(chunks)
 
-            vector = self.embed_service.embed(chunk)
-            point = self.vector_store.create_point(vector, payload)
-            points.append(point)
+        # 6. Create a list of points
+        points = [
+            self.vector_store.create_point(
+                vector,
+                {
+                    "text": chunk,
+                    "source": source,
+                    "domain": domain.lower(),
+                    "topic": topic.lower(),
+                    "chunk_index": i,
+                },
+            )
+            for i, (chunk, vector) in enumerate(zip(chunks, vectors))
+        ]
 
+        # 7. Insert points on vector database
         self.vector_store.insert_vector(points)
 
     def query(self, text, domain: Optional[str], topic: Optional[str]):
@@ -134,14 +141,14 @@ class RAGService:
             total_cost=f"${response.cost.total_cost:.6f}",
         )
 
-        return {
-            "answer": parsed["answer"],
-            "citations": citations,
-            "metadata": {
-                "tokens": response.usage.total_tokens,
-                "cost": response.cost.total_cost,
-            },
-        }
+        return QueryResponse(
+            answer=parsed["answer"],
+            citations=citations,
+            metadata=Metadata(
+                tokens=response.usage.total_tokens,
+                cost=response.cost.total_cost,
+            ),
+        )
 
 
 def get_rag_service(

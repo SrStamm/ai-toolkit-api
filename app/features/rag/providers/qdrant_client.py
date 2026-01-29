@@ -11,8 +11,8 @@ from qdrant_client.models import (
     VectorParams,
     Filter,
 )
-from app.core.custom_logging import time_response
-from app.features.rag.exceptions import VectorStoreError
+from ....core.custom_logging import time_response
+from ..exceptions import VectorStoreError
 from ..interfaces import VectorStoreInterface
 import structlog
 
