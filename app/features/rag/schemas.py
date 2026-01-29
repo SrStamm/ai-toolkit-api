@@ -18,6 +18,12 @@ class Citation(BaseModel):
     chunk_index: int
 
 
+class Metadata(BaseModel):
+    tokens: int
+    cost: float
+
+
 class QueryResponse(BaseModel):
     answer: str
     citations: list[Citation]
+    metadata: Metadata
