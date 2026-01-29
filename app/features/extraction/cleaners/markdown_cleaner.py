@@ -1,4 +1,4 @@
-from app.features.extraction.interface import CleanerInterface
+from ..interface import CleanerInterface
 
 
 class MarkdownCleaner(CleanerInterface):

@@ -2,14 +2,14 @@ from typing import Optional
 from fastapi import Depends
 import json
 import structlog
-from app.features.extraction.exceptions import EmptySourceContentError, SourceException
-from app.features.extraction.factory import SourceFactory
 from .exceptions import ChunkingError
 from .providers.local_ai import EmbeddignService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
 from .providers import qdrant_client
 from .prompt import PROMPT_TEMPLATE
-from app.core.llm_client import LLMClient, get_llm_client
+from ...core.llm_client import LLMClient, get_llm_client
+from ..extraction.exceptions import EmptySourceContentError, SourceException
+from ..extraction.factory import SourceFactory
 
 
 class RAGService:

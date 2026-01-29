@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from app.features.extraction.interface import CleanerInterface
+from ..interface import CleanerInterface
 
 
 class HTMLCleaner(CleanerInterface):
