@@ -12,9 +12,6 @@ from .prompt import PROMPT_TEMPLATE
 from app.core.llm_client import LLMClient, get_llm_client
 
 
-log = structlog.get_logger()
-
-
 class RAGService:
     def __init__(
         self,
@@ -25,6 +22,7 @@ class RAGService:
         self.llm_client = llm_client
         self.vector_store = vector_store
         self.embed_service = embed_service
+        self.logger = structlog.get_logger()
 
     async def ingest_document(self, url, source, domain, topic):
         # 1. Get tools since factory
@@ -34,7 +32,7 @@ class RAGService:
         try:
             raw_data = await extractor.extract(url)
         except SourceException as e:
-            log.warning(
+            self.logger.warning(
                 "Source extraction failed", error=str(e), url=url, source=source
             )
             raise
@@ -86,31 +84,14 @@ class RAGService:
         query_result = self.query(user_question, domain, topic)
 
         if not query_result:
-            log.info(
+            self.logger.info(
                 "NO RAG results",
                 domain=domain,
                 topic=topic,
                 user_question=user_question,
             )
 
-        log_info = [
-            {"index": hit.payload["chunk_index"], "score": round(float(hit.score), 4)}
-            for hit in query_result
-        ]
-
-        print(f"query_result: {log_info}")
-
         rerank_result = self.vector_store.rerank(user_question, query_result)
-
-        log_info = [
-            {
-                "index": hit.payload["chunk_index"],
-                "score": round(float(hit.score), 4),
-            }
-            for hit in rerank_result
-        ]
-
-        print(f"rerank_result: {log_info}")
 
         context = "\n\n".join(
             f"[{i + 1}]\n{chunk.payload['text']}"
@@ -119,12 +100,12 @@ class RAGService:
 
         prompt = PROMPT_TEMPLATE.format(context=context, question=user_question)
 
-        raw = self.llm_client.generate_content(prompt)
+        response = self.llm_client.generate_content(prompt)
 
         try:
-            parsed = json.loads(raw)
+            parsed = json.loads(response.content)
         except json.JSONDecodeError:
-            parsed = {"answer": raw}
+            parsed = {"answer": response.content}
 
         seen = set()
         citations = []
@@ -136,7 +117,26 @@ class RAGService:
 
             citations.append({"source": src, "chunk_index": q.payload["chunk_index"]})
 
-        return {"answer": parsed["answer"], "citations": citations}
+        self.logger.info(
+            "LLM_CALL",
+            provider=response.provider,
+            model=response.model,
+            prompt_tokens=response.usage.prompt_tokens,
+            completion_tokens=response.usage.completion_tokens,
+            total_tokens=response.usage.total_tokens,
+            input_cost=f"${response.cost.input_cost:.6f}",
+            output_cost=f"${response.cost.output_cost:.6f}",
+            total_cost=f"${response.cost.total_cost:.6f}",
+        )
+
+        return {
+            "answer": parsed["answer"],
+            "citations": citations,
+            "metadata": {
+                "tokens": response.usage.total_tokens,
+                "cost": response.cost.total_cost,
+            },
+        }
 
 
 def get_rag_service(
