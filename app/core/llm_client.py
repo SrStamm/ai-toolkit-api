@@ -1,7 +1,6 @@
+from .models import LLMResponse
 from pydantic import BaseModel, ValidationError
-
-from app.core.custom_logging import time_response
-
+from .custom_logging import time_response
 from .settings import LLMConfig, MistralProvider, BaseLLMProvider
 from dotenv import load_dotenv
 import os
@@ -14,24 +13,30 @@ class LLMClient:
         self.provider = provider
 
     @time_response
-    def generate_content(self, prompt: str) -> str:
+    def generate_content(self, prompt: str) -> LLMResponse[str]:
         return self.provider.chat(prompt)
 
     @time_response
     def generate_structured_output(
         self, prompt: str, output_schema: type[BaseModel]
-    ) -> BaseModel:
-        """Para Feature 1: Extrae estructurado con validation y retry."""
+    ) -> LLMResponse[BaseModel]:
         structured_prompt = f"{prompt}\n Output como JSON válido, únicamente devuelve el objeto JSON, conforme a este schema: {output_schema.model_json_schema()}"
-        response_text = self.provider.chat(structured_prompt)
+
+        response = self.provider.chat(structured_prompt)
+
         try:
-            return output_schema.model_validate_json(response_text)
+            parsed_content = output_schema.model_validate_json(response)
+
+            return LLMResponse(
+                content=parsed_content,
+                usage=response.usage,
+                cost=response.cost,
+                model=response.model,
+                provider=response.provider,
+            )
         except ValidationError:
-            # Retry con corrección: Agrega al prompt el error
-            error_prompt = f"{structured_prompt}\nPrevious output invalid. Corrige: {response_text}"
-            return self.generate_structured_output(
-                error_prompt, output_schema
-            )  # Recursivo, limita profundidad si quieres
+            error_prompt = f"{structured_prompt}\nPrevious output invalid. Corrige: {response.content}"
+            return self.generate_structured_output(error_prompt, output_schema)
 
 
 def get_llm_client():
