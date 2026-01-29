@@ -56,7 +56,8 @@ async def structured_log_middleware(request: Request, call_next):
     structlog.contextvars.clear_contextvars()
 
     # Create and set request_id
-    request_id = str(uuid.uuid4())
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+
     token = request_id_var.set(request_id)
 
     start_time = time()
@@ -81,6 +82,8 @@ async def structured_log_middleware(request: Request, call_next):
         logger.info(
             f"method={request.method} path={request.url.path} user={user} duration={duration:.3f}s status={response.status_code}"
         )
+
+        response.headers["X-Request-ID"] = request_id
 
         return response
 
