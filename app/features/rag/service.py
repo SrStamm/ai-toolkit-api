@@ -52,22 +52,22 @@ class RAGService:
         # 5. Create a list of vectors
         vectors = self.embed_service.batch_embed(chunks)
 
-        points = []
-        for chunk, vector in zip(chunks, vectors):
-            count = 0
+        # 6. Create a list of points
+        points = [
+            self.vector_store.create_point(
+                vector,
+                {
+                    "text": chunk,
+                    "source": source,
+                    "domain": domain.lower(),
+                    "topic": topic.lower(),
+                    "chunk_index": i,
+                },
+            )
+            for i, (chunk, vector) in enumerate(zip(chunks, vectors))
+        ]
 
-            payload = {
-                "text": chunk,
-                "source": source,
-                "domain": domain.lower(),
-                "topic": topic.lower(),
-                "chunk_index": count,
-            }
-
-            count += 1
-            point = self.vector_store.create_point(vector, payload)
-            points.append(point)
-
+        # 7. Insert points on vector database
         self.vector_store.insert_vector(points)
 
     def query(self, text, domain: Optional[str], topic: Optional[str]):
