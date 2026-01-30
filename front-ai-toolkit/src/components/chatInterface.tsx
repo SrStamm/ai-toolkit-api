@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
-import { askFetch } from "@/services/ragServices";
+import { askStreamFetch } from "@/services/ragServices";
 import type { Citation, QueryRequest, QueryResponse } from "@/types/rag";
 import CustomizedToast from "./toast";
 import Markdown from "react-markdown";
@@ -22,41 +22,6 @@ function ChatInterface() {
     setQuery(e.target.value);
   };
 
-  const handleQuery = async () => {
-    setIsLoading(true);
-
-    try {
-      const body: QueryRequest = {
-        text: query,
-      };
-
-      const user_message: Message = {
-        role: "user",
-        content: query,
-      };
-
-      setMessages((prev) => [...prev, user_message]);
-
-      setQuery("");
-
-      const response: QueryResponse = await askFetch(body);
-
-      const ai_message: Message = {
-        role: "ai",
-        content: response.answer,
-        citations: response.citations,
-      };
-
-      setMessages((prev) => [...prev, ai_message]);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      CustomizedToast({ type: "error", msg: msg });
-    } finally {
-      setIsLoading(false);
-      setQuery("");
-    }
-  };
-
   const handleQueryStream = async () => {
     setIsLoading(true);
 
@@ -74,18 +39,15 @@ function ChatInterface() {
     };
 
     setMessages((prev) => [...prev, aiMessage]);
+
+    const body: QueryRequest = {
+      text: query,
+    };
+
     setQuery("");
 
     try {
-      const response = await fetch("http://localhost:8000/rag/ask-stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: query,
-          domain: null,
-          topic: null,
-        }),
-      });
+      const response = await askStreamFetch(body);
 
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
@@ -121,14 +83,9 @@ function ChatInterface() {
                 break;
 
               case "metadata":
-                // Mostrar tokens/costo al usuario (opcional)
-                console.log(
-                  `Tokens: ${data.tokens}, Cost: $${data.cost.toFixed(6)}`,
-                );
-                // O agregar un badge en la UI:
-                // <span className="text-xs text-gray-500">
-                //   {data.tokens} tokens · ${data.cost.toFixed(4)}
-                // </span>
+                <span className="text-xs text-gray-500">
+                  {data.tokens} tokens · ${data.cost.toFixed(4)}
+                </span>;
                 break;
 
               case "error":
@@ -136,7 +93,7 @@ function ChatInterface() {
                 break;
 
               case "done":
-                console.log("Stream completed");
+                CustomizedToast({ type: "info", msg: "Stream completed" });
                 break;
             }
           }
