@@ -1,3 +1,4 @@
+from typing import AsyncIterator, Optional
 from .llm_providers.mistral_provider import MistralProvider
 from .models import LLMResponse
 from .custom_logging import time_response
@@ -39,6 +40,12 @@ class LLMClient:
         except ValidationError:
             error_prompt = f"{structured_prompt}\nPrevious output invalid. Corrige: {response.content}"
             return self.generate_structured_output(error_prompt, output_schema)
+
+    async def generate_content_stream(
+        self, prompt: str
+    ) -> AsyncIterator[tuple[str, Optional[LLMResponse]]]:
+        async for chunk, final_response in self.provider.chat_stream(prompt):
+            yield (chunk, final_response)
 
 
 def get_llm_client():
