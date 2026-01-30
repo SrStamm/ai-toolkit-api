@@ -24,6 +24,7 @@ function ChatInterface() {
 
   const handleQuery = async () => {
     setIsLoading(true);
+
     try {
       const body: QueryRequest = {
         text: query,
@@ -53,6 +54,99 @@ function ChatInterface() {
     } finally {
       setIsLoading(false);
       setQuery("");
+    }
+  };
+
+  const handleQueryStream = async () => {
+    setIsLoading(true);
+
+    const userMessage: Message = {
+      role: "user",
+      content: query,
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+
+    const aiMessage: Message = {
+      role: "ai",
+      content: "",
+      citations: [],
+    };
+
+    setMessages((prev) => [...prev, aiMessage]);
+    setQuery("");
+
+    try {
+      const response = await fetch("http://localhost:8000/rag/ask-stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: query,
+          domain: null,
+          topic: null,
+        }),
+      });
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n\n").filter((line) => line.trim());
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = JSON.parse(line.slice(6));
+
+            switch (data.type) {
+              case "content":
+                aiMessage.content += data.content;
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1] = { ...aiMessage };
+                  return newMessages;
+                });
+                break;
+
+              case "citations":
+                aiMessage.citations = data.citations;
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1] = { ...aiMessage };
+                  return newMessages;
+                });
+                break;
+
+              case "metadata":
+                // Mostrar tokens/costo al usuario (opcional)
+                console.log(
+                  `Tokens: ${data.tokens}, Cost: $${data.cost.toFixed(6)}`,
+                );
+                // O agregar un badge en la UI:
+                // <span className="text-xs text-gray-500">
+                //   {data.tokens} tokens · ${data.cost.toFixed(4)}
+                // </span>
+                break;
+
+              case "error":
+                CustomizedToast({ type: "error", msg: data.content });
+                break;
+
+              case "done":
+                console.log("Stream completed");
+                break;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      CustomizedToast({ type: "error", msg: msg });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -124,7 +218,7 @@ function ChatInterface() {
           value={query}
           onChange={onChangeQuery}
         />
-        <Button onClick={handleQuery} disabled={isLoading}>
+        <Button onClick={handleQueryStream} disabled={isLoading}>
           Enviar
         </Button>
       </div>
