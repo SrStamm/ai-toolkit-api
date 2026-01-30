@@ -1,3 +1,4 @@
+from typing import AsyncIterator, Optional
 from ..models import LLMResponse, TokenUsage
 from ..pricing import ModelPricing
 from ..settings import BaseLLMProvider, LLMConfig
@@ -22,7 +23,7 @@ class MistralProvider(BaseLLMProvider):
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are a data extractor. Output ONLY pure JSON.",
+                            "content": "You are a helpful assistant.",
                         },
                         {"role": "user", "content": prompt},
                     ],
@@ -59,3 +60,69 @@ class MistralProvider(BaseLLMProvider):
                 time.sleep(2**attempt)
 
         raise ValueError("Failed to generate content after retries.")
+
+    async def chat_stream(
+        self, prompt: str
+    ) -> AsyncIterator[tuple[str, Optional[LLMResponse]]]:
+        accumulated_content = ""
+
+        response = self.client.chat.stream(
+            model=self.config.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=self.config.temperature,
+        )
+
+        # Stream chunks
+        for event in response:
+            if hasattr(event, "data") and event.data:
+                chunk_data = event.data
+
+                if (
+                    hasattr(chunk_data, "choices")
+                    and chunk_data.choices
+                    and len(chunk_data.choices) > 0
+                ):
+                    delta = chunk_data.choices[0].delta
+
+                    if hasattr(delta, "content") and delta.content:
+                        content = delta.content
+                        accumulated_content += content
+                        yield (content, None)
+
+        estimated_prompt_tokens = len(prompt) // 4
+        estimated_completion_tokens = len(accumulated_content) // 4
+
+        usage = TokenUsage(
+            prompt_tokens=estimated_prompt_tokens,
+            completion_tokens=estimated_completion_tokens,
+            total_tokens=estimated_prompt_tokens + estimated_completion_tokens,
+        )
+
+        cost = ModelPricing.calculate_cost(
+            self.config.model, usage.prompt_tokens, usage.completion_tokens
+        )
+
+        final_response = LLMResponse(
+            content=accumulated_content,
+            usage=usage,
+            cost=cost,
+            model=self.config.model,
+            provider="mistral",
+        )
+
+        logger.info(
+            "stream_completed",
+            model=self.config.model,
+            tokens=usage.total_tokens,
+            cost_usd=f"${cost.total_cost:.6f}",
+            estimation="simple",
+        )
+
+        # Yield final con metadata completa
+        yield ("", final_response)
