@@ -3,7 +3,7 @@ from fastapi import Depends
 import json
 import structlog
 
-from features.rag.schemas import Metadata, QueryResponse
+from .schemas import Metadata, QueryResponse
 from .exceptions import ChunkingError
 from .providers.local_ai import EmbeddignService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
