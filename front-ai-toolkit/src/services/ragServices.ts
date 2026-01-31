@@ -1,6 +1,8 @@
 import type { Ingestrequest, QueryRequest } from "@/types/rag";
 import Fetch from "@/utils/api";
 
+const url = import.meta.env.VITE_URL;
+
 export const ingestURLFetch = async (body: Ingestrequest) => {
   return await Fetch({ path: "/rag/ingest", method: "POST", body: body });
 };
@@ -10,7 +12,7 @@ export const askFetch = async (body: QueryRequest) => {
 };
 
 export const askStreamFetch = async (body: QueryRequest): Promise<Response> => {
-  const response = await fetch("http://localhost:8000/rag/ask-stream", {
+  const response = await fetch(url + "/rag/ask-stream", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
