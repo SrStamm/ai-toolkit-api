@@ -5,10 +5,21 @@ import { Textarea } from "./ui/textarea";
 import type { Ingestrequest } from "@/types/rag";
 import { ingestURLFetch } from "@/services/ragServices";
 import CustomizedToast from "./toast";
+import { Input } from "./ui/input";
 
 function IngestionInterface() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [domain, setDomain] = useState("");
+  const [topic, setTopic] = useState("");
+
+  const onChangeDomain = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDomain(e.target.value);
+  };
+
+  const onChangeTopic = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTopic(e.target.value);
+  };
 
   const onURLChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setUrl(e.target.value);
@@ -22,6 +33,8 @@ function IngestionInterface() {
 
       const body: Ingestrequest = {
         url: url,
+        domain: typeof domain === "string" ? domain : undefined,
+        topic: typeof topic === "string" ? topic : undefined,
       };
 
       await ingestURLFetch(body);
@@ -51,6 +64,18 @@ function IngestionInterface() {
           <Button className="w-full" onClick={handleIngest} disabled={loading}>
             Ingerir Documento
           </Button>
+
+          <Input
+            placeholder="Dominio..."
+            value={domain}
+            onChange={onChangeDomain}
+          />
+
+          <Input
+            placeholder="Topico..."
+            value={topic}
+            onChange={onChangeTopic}
+          />
         </CardContent>
       </Card>
     </div>
