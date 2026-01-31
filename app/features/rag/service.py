@@ -6,10 +6,10 @@ import structlog
 
 from .schemas import Metadata, QueryResponse
 from .exceptions import ChunkingError
-from .providers.local_ai import EmbeddignService, get_embeddign_service
+from .providers.local_ai import EmbeddingService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
 from .providers import qdrant_client
-from .prompt import PROMPT_TEMPLATE
+from .prompt import PROMPT_TEMPLATE, PROMPT_TEMPLATE_CHAT
 from ...core.llm_client import LLMClient, get_llm_client
 from ..extraction.exceptions import EmptySourceContentError, SourceException
 from ..extraction.factory import SourceFactory
@@ -20,7 +20,7 @@ class RAGService:
         self,
         llm_client: LLMClient,
         vector_store: VectorStoreInterface,
-        embed_service: EmbeddignService,
+        embed_service: EmbeddingService,
     ):
         self.llm_client = llm_client
         self.vector_store = vector_store
@@ -111,7 +111,7 @@ class RAGService:
             for i, chunk in enumerate(rerank_result)
         )
 
-        prompt = PROMPT_TEMPLATE.format(context=context, question=user_question)
+        prompt = PROMPT_TEMPLATE_CHAT.format(context=context, question=user_question)
 
         response = self.llm_client.generate_content(prompt)
 
@@ -230,6 +230,6 @@ class RAGService:
 def get_rag_service(
     llm_client: LLMClient = Depends(get_llm_client),
     vector_store: VectorStoreInterface = Depends(qdrant_client.get_qdrant_store),
-    embed_service: EmbeddignService = Depends(get_embeddign_service),
+    embed_service: EmbeddingService = Depends(get_embeddign_service),
 ):
     return RAGService(llm_client, vector_store, embed_service)
