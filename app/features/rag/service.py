@@ -1,9 +1,10 @@
+import asyncio
 from typing import Optional
 from fastapi import Depends
 import json
 import structlog
 
-from features.rag.schemas import Metadata, QueryResponse
+from .schemas import Metadata, QueryResponse
 from .exceptions import ChunkingError
 from .providers.local_ai import EmbeddignService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
@@ -149,6 +150,81 @@ class RAGService:
                 cost=response.cost.total_cost,
             ),
         )
+
+    async def chat_stream(
+        self,
+        user_question: str,
+        domain: Optional[str] = None,
+        topic: Optional[str] = None,
+    ):
+        query_result = self.query(user_question, domain, topic)
+
+        if not query_result:
+            yield f"data: {json.dumps({'type': 'error', 'content': 'No results found'})}\n\n"
+            return
+
+        rerank_result = self.vector_store.rerank(user_question, query_result)
+
+        context = "\n\n".join(
+            f"[{i + 1}]\n{chunk.payload['text']}"
+            for i, chunk in enumerate(rerank_result)
+        )
+
+        prompt = PROMPT_TEMPLATE.format(context=context, question=user_question)
+
+        # LLM Stream response
+        final_response = None
+        async for chunk, response_data in self.llm_client.generate_content_stream(
+            prompt
+        ):
+            if response_data:
+                final_response = response_data
+            else:
+                yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
+                await asyncio.sleep(0)
+
+        # Costs logs
+        if final_response:
+            self.logger.info(
+                "LLM_CALL_STREAM",
+                provider=final_response.provider,
+                model=final_response.model,
+                prompt_tokens=final_response.usage.prompt_tokens,
+                completion_tokens=final_response.usage.completion_tokens,
+                total_tokens=final_response.usage.total_tokens,
+                input_cost=f"${final_response.cost.input_cost:.6f}",
+                output_cost=f"${final_response.cost.output_cost:.6f}",
+                total_cost=f"${final_response.cost.total_cost:.6f}",
+            )
+
+        # Send citations
+        seen = set()
+        citations = []
+        for q in query_result:
+            src = q.payload["source"]
+            if src not in seen:
+                seen.add(src)
+                citations.append(
+                    {"source": src, "chunk_index": q.payload["chunk_index"]}
+                )
+
+        yield f"data: {json.dumps({'type': 'citations', 'citations': citations})}\n\n"
+
+        # Send final metadata
+        if final_response:
+            yield f"data: {
+                json.dumps(
+                    {
+                        'type': 'metadata',
+                        'tokens': final_response.usage.total_tokens,
+                        'cost': final_response.cost.total_cost,
+                        'model': final_response.model,
+                        'estimated': True,
+                    }
+                )
+            }\n\n"
+
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
 def get_rag_service(

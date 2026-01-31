@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from .schemas import IngestRequest, QueryRequest, QueryResponse
 from .service import RAGService, get_rag_service
 
@@ -52,3 +53,17 @@ def ask(
 ) -> QueryResponse:
     return serv.ask(query.text, query.domain, query.topic)
 
+
+@router.post("/ask-stream")
+async def ask_stream(
+    query: QueryRequest,
+    serv: RAGService = Depends(get_rag_service),
+):
+    return StreamingResponse(
+        serv.chat_stream(query.text, query.domain, query.topic),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
