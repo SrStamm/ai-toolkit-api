@@ -5,7 +5,7 @@ from ..exceptions import EmbeddingError
 from ..interfaces import EmbeddingInterface
 
 
-class EmbeddignService(EmbeddingInterface):
+class EmbeddingService(EmbeddingInterface):
     def __init__(self):
         self.embed_model = SentenceTransformer("intfloat/multilingual-e5-small")
 
@@ -37,8 +37,8 @@ class EmbeddignService(EmbeddingInterface):
             raise EmbeddingError(str(e)) from e
 
 
-embedding = EmbeddignService()
+embedding = EmbeddingService()
 
 
-def get_embeddign_service() -> EmbeddignService:
+def get_embeddign_service() -> EmbeddingService:
     return embedding
