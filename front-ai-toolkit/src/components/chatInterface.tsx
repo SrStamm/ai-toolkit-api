@@ -3,7 +3,7 @@ import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
 import { askStreamFetch } from "@/services/ragServices";
-import type { Citation, QueryRequest, QueryResponse } from "@/types/rag";
+import type { Citation, QueryRequest } from "@/types/rag";
 import CustomizedToast from "./toast";
 import Markdown from "react-markdown";
 
@@ -15,11 +15,21 @@ interface Message {
 
 function ChatInterface() {
   const [query, setQuery] = useState("");
+  const [domain, setDomain] = useState("");
+  const [topic, setTopic] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
 
   const onChangeQuery = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
+  };
+
+  const onChangeDomain = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDomain(e.target.value);
+  };
+
+  const onChangeTopic = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTopic(e.target.value);
   };
 
   const handleQueryStream = async () => {
@@ -42,6 +52,8 @@ function ChatInterface() {
 
     const body: QueryRequest = {
       text: query,
+      domain: typeof domain === "string" ? domain : undefined,
+      topic: typeof topic === "string" ? topic : undefined,
     };
 
     setQuery("");
@@ -159,7 +171,10 @@ function ChatInterface() {
               {msg.citations &&
                 msg.citations.length > 0 &&
                 msg.citations.map((c) => (
-                  <div className="mt-2 pt-2 border-t text-xs text-blue-500">
+                  <div
+                    key={c.chunk_index}
+                    className="mt-2 pt-2 border-t text-xs text-blue-500"
+                  >
                     {c.source}
                   </div>
                 ))}
@@ -170,11 +185,28 @@ function ChatInterface() {
 
       {/* Input de Pregunta */}
       <div className="flex gap-2">
-        <Input
-          placeholder="Haz una pregunta sobre los documentos..."
-          value={query}
-          onChange={onChangeQuery}
-        />
+        <div className="flex-col flex-1 space-y-2">
+          <Input
+            placeholder="Haz una pregunta sobre los documentos..."
+            value={query}
+            onChange={onChangeQuery}
+          />
+
+          <div className="flex gap-2 space-x-1">
+            <Input
+              placeholder="Dominio..."
+              value={domain}
+              onChange={onChangeDomain}
+            />
+
+            <Input
+              placeholder="Topico..."
+              value={topic}
+              onChange={onChangeTopic}
+            />
+          </div>
+        </div>
+
         <Button onClick={handleQueryStream} disabled={isLoading}>
           Enviar
         </Button>
