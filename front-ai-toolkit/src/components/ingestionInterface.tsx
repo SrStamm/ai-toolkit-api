@@ -1,11 +1,14 @@
 import React, { useState } from "react";
+
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Progress } from "./ui/progress.tsx";
 import { Textarea } from "./ui/textarea";
-import type { Ingestrequest } from "@/types/rag";
-import { ingestURLFetch, ingestURLStream } from "@/services/ragServices";
-import CustomizedToast from "./toast";
 import { Input } from "./ui/input";
+import CustomizedToast from "./toast";
+
+import type { Ingestrequest } from "@/types/rag";
+import { ingestURLStream } from "@/services/ragServices";
 
 function IngestionInterface() {
   const [url, setUrl] = useState("");
@@ -27,29 +30,31 @@ function IngestionInterface() {
     setUrl(e.target.value);
   };
 
-  const handleIngest = async () => {
-    try {
-      setLoading(true);
+  // --- Function to ingest without stream ---
 
-      new URL(url);
+  // const handleIngest = async () => {
+  //   try {
+  //     setLoading(true);
 
-      const body: Ingestrequest = {
-        url: url,
-        domain: typeof domain === "string" ? domain : undefined,
-        topic: typeof topic === "string" ? topic : undefined,
-      };
+  //     new URL(url);
 
-      await ingestURLFetch(body);
+  //     const body: Ingestrequest = {
+  //       url: url,
+  //       domain: typeof domain === "string" ? domain : undefined,
+  //       topic: typeof topic === "string" ? topic : undefined,
+  //     };
 
-      CustomizedToast({ type: "info", msg: "Document consumed successfully" });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      CustomizedToast({ type: "error", msg: msg });
-    } finally {
-      setLoading(false);
-      setUrl("");
-    }
-  };
+  //     await ingestURLFetch(body);
+
+  //     CustomizedToast({ type: "info", msg: "Document consumed successfully" });
+  //   } catch (err) {
+  //     const msg = err instanceof Error ? err.message : "Unknown error";
+  //     CustomizedToast({ type: "error", msg: msg });
+  //   } finally {
+  //     setLoading(false);
+  //     setUrl("");
+  //   }
+  // };
 
   const handleIngestStream = async () => {
     try {
@@ -145,6 +150,20 @@ function IngestionInterface() {
             value={topic}
             onChange={onChangeTopic}
           />
+
+          {loading ? (
+            <div className="space-y-2 w-full mt-4">
+              <Progress className="h-2 w-full" value={Number(progress)} />
+              <p className="text-sm text-muted-foreground animate-pulse">
+                {`${Number(progress)}%`}
+              </p>
+              <p className="text-sm text-muted-foreground animate-pulse">
+                {statusMessage || "Iniciando ingesta"}
+              </p>
+            </div>
+          ) : (
+            ""
+          )}
         </CardContent>
       </Card>
     </div>
