@@ -1,10 +1,14 @@
+import asyncio
 import json
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
+import structlog
 from .schemas import IngestRequest, QueryRequest, QueryResponse
 from .service import RAGService, get_rag_service
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
+
+logger = structlog.getLogger()
 
 
 @router.post(
@@ -47,6 +51,9 @@ async def ingest_document_stream(
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except asyncio.CancelledError:
+            logger.info("Ingestion cancelled by user")
+            raise
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
