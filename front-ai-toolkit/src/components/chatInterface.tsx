@@ -112,10 +112,9 @@ function ChatInterface() {
                 break;
 
               case "done":
-                CustomizedToast({ type: "info", msg: "Stream completed" });
                 break;
             }
-          } catch (e) {
+          } catch {
             console.error("Error parseando JSON incompleto:", trimmedLine);
           }
         }
