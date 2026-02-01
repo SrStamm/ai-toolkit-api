@@ -1,17 +1,22 @@
 import React, { useState } from "react";
+
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Progress } from "./ui/progress.tsx";
 import { Textarea } from "./ui/textarea";
-import type { Ingestrequest } from "@/types/rag";
-import { ingestURLFetch } from "@/services/ragServices";
-import CustomizedToast from "./toast";
 import { Input } from "./ui/input";
+import CustomizedToast from "./toast";
+
+import type { Ingestrequest } from "@/types/rag";
+import { ingestURLStream } from "@/services/ragServices";
 
 function IngestionInterface() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [domain, setDomain] = useState("");
   const [topic, setTopic] = useState("");
+  const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState("");
 
   const onChangeDomain = (e: React.ChangeEvent<HTMLInputElement>) => {
     setDomain(e.target.value);
@@ -25,7 +30,33 @@ function IngestionInterface() {
     setUrl(e.target.value);
   };
 
-  const handleIngest = async () => {
+  // --- Function to ingest without stream ---
+
+  // const handleIngest = async () => {
+  //   try {
+  //     setLoading(true);
+
+  //     new URL(url);
+
+  //     const body: Ingestrequest = {
+  //       url: url,
+  //       domain: typeof domain === "string" ? domain : undefined,
+  //       topic: typeof topic === "string" ? topic : undefined,
+  //     };
+
+  //     await ingestURLFetch(body);
+
+  //     CustomizedToast({ type: "info", msg: "Document consumed successfully" });
+  //   } catch (err) {
+  //     const msg = err instanceof Error ? err.message : "Unknown error";
+  //     CustomizedToast({ type: "error", msg: msg });
+  //   } finally {
+  //     setLoading(false);
+  //     setUrl("");
+  //   }
+  // };
+
+  const handleIngestStream = async () => {
     try {
       setLoading(true);
 
@@ -37,12 +68,51 @@ function IngestionInterface() {
         topic: typeof topic === "string" ? topic : undefined,
       };
 
-      await ingestURLFetch(body);
+      try {
+        const response = await ingestURLStream(body);
 
-      CustomizedToast({ type: "info", msg: "Document consumed successfully" });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      CustomizedToast({ type: "error", msg: msg });
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            break;
+          }
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n\n").filter((line) => line.trim());
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.error) {
+                CustomizedToast({ type: "error", msg: data.error });
+                break;
+              }
+
+              setProgress(data.progress);
+              setStatusMessage(data.step);
+
+              console.log(data.progress);
+              console.log(data.step);
+
+              if (data.progress === 100) {
+                CustomizedToast({
+                  type: "success",
+                  msg: `Processed ${data.chunks_processed} chunks`,
+                });
+                break;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        CustomizedToast({ type: "error", msg: String(error) });
+        return;
+      }
     } finally {
       setLoading(false);
       setUrl("");
@@ -61,7 +131,11 @@ function IngestionInterface() {
             value={url}
             onChange={onURLChange}
           />
-          <Button className="w-full" onClick={handleIngest} disabled={loading}>
+          <Button
+            className="w-full"
+            onClick={handleIngestStream}
+            disabled={loading}
+          >
             Ingerir Documento
           </Button>
 
@@ -76,6 +150,20 @@ function IngestionInterface() {
             value={topic}
             onChange={onChangeTopic}
           />
+
+          {loading ? (
+            <div className="space-y-2 w-full mt-4">
+              <Progress className="h-2 w-full" value={Number(progress)} />
+              <p className="text-sm text-muted-foreground animate-pulse">
+                {`${Number(progress)}%`}
+              </p>
+              <p className="text-sm text-muted-foreground animate-pulse">
+                {statusMessage || "Iniciando ingesta"}
+              </p>
+            </div>
+          ) : (
+            ""
+          )}
         </CardContent>
       </Card>
     </div>

@@ -80,7 +80,6 @@ class QdrantStore(VectorStoreInterface):
 
         return search_result
 
-    @time_response
     def create_point(self, vector, payload) -> PointStruct:
         return PointStruct(id=str(uuid4()), vector=vector, payload=payload)
 

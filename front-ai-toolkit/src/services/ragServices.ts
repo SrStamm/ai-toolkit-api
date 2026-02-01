@@ -7,6 +7,22 @@ export const ingestURLFetch = async (body: Ingestrequest) => {
   return await Fetch({ path: "/rag/ingest", method: "POST", body: body });
 };
 
+export const ingestURLStream = async (body: Ingestrequest) => {
+  const response = await fetch(url + "/rag/ingest-stream", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  return response;
+};
+
 export const askFetch = async (body: QueryRequest) => {
   return await Fetch({ path: "/rag/ask", method: "POST", body: body });
 };
@@ -24,5 +40,5 @@ export const askStreamFetch = async (body: QueryRequest): Promise<Response> => {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
 
-  return response; // Devolver el Response raw para acceder al stream
+  return response;
 };

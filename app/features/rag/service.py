@@ -73,6 +73,65 @@ class RAGService:
         # 7. Insert points on vector database
         self.vector_store.insert_vector(points)
 
+    async def ingest_document_stream(self, url, source, domain, topic):
+        """Generator which broadcast progress events"""
+
+        # 1. Extracting
+        yield {"progress": 10, "step": "Extracting content from URL"}
+        extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
+
+        try:
+            raw_data = await extractor.extract(url)
+        except SourceException as e:
+            self.logger.warning(
+                "Source extraction failed", error=str(e), url=url, source=source
+            )
+            raise
+
+        # 2. Cleaning
+        yield {"progress": 30, "step": "Cleaning and processing content"}
+        content = cleaner.clean(raw_data)
+
+        if not content.strip():
+            raise EmptySourceContentError(url)
+
+        chunks = cleaner.chunk(content)
+
+        if not chunks:
+            raise ChunkingError("No chunks generated")
+
+        # 3. Embedding
+        yield {
+            "progress": 50,
+            "step": f"Generating embeddings for {len(chunks)} chunks",
+        }
+
+        # Run a function in a separate thread
+        vectors = await asyncio.to_thread(self.embed_service.batch_embed, chunks)
+
+        # 4. Creating points
+        yield {"progress": 80, "step": "Creating vector points"}
+        points = [
+            self.vector_store.create_point(
+                vector,
+                {
+                    "text": chunk,
+                    "source": source,
+                    "domain": domain.lower(),
+                    "topic": topic.lower(),
+                    "chunk_index": i,
+                },
+            )
+            for i, (chunk, vector) in enumerate(zip(chunks, vectors))
+        ]
+
+        # 5. Inserting
+        yield {"progress": 90, "step": "Storing in vector database"}
+        self.vector_store.insert_vector(points)
+
+        # 6. Done
+        yield {"progress": 100, "step": "Completed", "chunks_processed": len(chunks)}
+
     def query(self, text, domain: Optional[str], topic: Optional[str]):
         # Get vector for text
         vector_query = self.embed_service.embed(text, True)
