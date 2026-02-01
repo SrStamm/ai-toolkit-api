@@ -64,15 +64,22 @@ function ChatInterface() {
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
 
+      let buffer = "";
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n\n").filter((line) => line.trim());
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
+        buffer = parts.pop() || "";
+
+        for (const line of parts) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine || !trimmedLine.startsWith("data: ")) continue;
+
+          try {
             const data = JSON.parse(line.slice(6));
 
             switch (data.type) {
@@ -108,6 +115,8 @@ function ChatInterface() {
                 CustomizedToast({ type: "info", msg: "Stream completed" });
                 break;
             }
+          } catch (e) {
+            console.error("Error parseando JSON incompleto:", trimmedLine);
           }
         }
       }
