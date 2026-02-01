@@ -1,4 +1,5 @@
 from typing import List
+import numpy as np
 from sentence_transformers import SentenceTransformer
 from ....core.custom_logging import time_response
 from ..exceptions import EmbeddingError
@@ -26,13 +27,37 @@ class EmbeddingService(EmbeddingInterface):
             raise EmbeddingError(str(e)) from e
 
     @time_response
-    def batch_embed(self, list: list[str], query: bool = False) -> List[List[float]]:
+    def batch_embed(
+        self, list: list[str], query: bool = False, batch_size: int = 50
+    ) -> List[List[float]]:
         try:
-            batchs = [f"query: {x}" if query else f"passage: {x}" for x in list]
+            all_batches = []
 
-            embeddings = self.embed_model.encode(batchs, batch_size=len(batchs))
+            for start in range(0, len(list), batch_size):
+                end = min(start + batch_size, len(list))
 
-            return embeddings.tolist()
+                # Slice batchs
+                batchs = list[start:end]
+
+                # Format batchs
+                batch_formated = [
+                    f"query: {x}" if query else f"passage: {x}" for x in batchs
+                ]
+
+                # encode batchs
+                batch_result = self.embed_model.encode(
+                    batch_formated, batch_size=len(batch_formated)
+                )
+
+                # extend list
+                all_batches.append(batch_result)
+
+            if len(all_batches) == 1:
+                final = all_batches[0]
+            else:
+                final = np.concatenate(all_batches)
+
+            return final.tolist()
         except Exception as e:
             raise EmbeddingError(str(e)) from e
 
