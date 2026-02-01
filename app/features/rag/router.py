@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from .schemas import IngestRequest, QueryRequest, QueryResponse
@@ -22,6 +23,32 @@ async def ingest_document(
     )
 
     return {"status": "ingested", "url": ingest.url}
+
+
+@router.post(
+    "/ingest-stream",
+    description="""
+    It ingests documentation from a URL (it can be an HTML or a README) and adds it to a vector database.
+    The variables of 'domain' and 'topic' allows to better separate the topics and gives better context to later.
+    """,
+)
+async def ingest_document_stream(
+    ingest: IngestRequest,
+    serv: RAGService = Depends(get_rag_service),
+):
+    async def generate():
+        try:
+            async for event in serv.ingest_document_stream(
+                url=ingest.url,
+                source=ingest.url,
+                domain=ingest.domain,
+                topic=ingest.topic,
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @router.post(
