@@ -28,16 +28,16 @@ class EmbeddingService(EmbeddingInterface):
 
     @time_response
     def batch_embed(
-        self, list: list[str], query: bool = False, batch_size: int = 50
+        self, chunk_list: list[str], query: bool = False, batch_size: int = 50
     ) -> List[List[float]]:
-        if len(list) == 0:
+        if len(chunk_list) == 0:
             raise EmbeddingError("Chunk list is empty")
 
         try:
             all_batches = []
 
-            for start in range(0, len(list), batch_size):
-                end = min(start + batch_size, len(list))
+            for start in range(0, len(chunk_list), batch_size):
+                end = min(start + batch_size, len(chunk_list))
 
                 # Slice batchs
                 batchs = list[start:end]
