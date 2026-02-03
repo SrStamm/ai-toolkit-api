@@ -1,60 +1,118 @@
 # ai-toolkit
 
-## **Herramientas de IA para backend**
+**Herramientas de IA para backend (FastAPI)**
 
-`ai-toolkit` es una API educativa y experimental construida en **FastAPI** para explorar **cómo integrar Large Language Models (LLMs) en sistemas backend reales**, con foco en:
+`ai-toolkit` es una **API educativa y experimental** construida en **FastAPI** para explorar **patrones reales de integración de Large Language Models (LLMs) en sistemas backend**, priorizando:
 
-- control estricto del output del modelo
-- validación automática y manejo de errores
-- arquitectura clara y mantenible
-- mínima dependencia de frameworks "mágicos"
+* control estricto del output del modelo
+* validación automática y manejo explícito de errores
+* arquitectura clara, desacoplada y mantenible
+* mínima dependencia de frameworks de orquestación "mágicos"
 
-El objetivo del proyecto **no es crear un producto final**, sino comprender y demostrar **patrones backend aplicables a sistemas que integran IA**.
+> 🎯 **Objetivo**: no es un producto final, sino un *laboratorio backend* para entender y demostrar cómo diseñar servicios con IA de forma segura, testeable y extensible.
 
 ---
 
-## Estado actual (enero 2026)
+## Estado actual (febrero 2026)
 
-El proyecto ya cuenta con funcionalidades implementadas y utilizables:
+La aplicación **ya funciona como una API RAG completa para consumo de documentación**, permitiendo **ingerir fuentes externas y realizar preguntas actualizadas sobre ese contexto**, con foco en control, métricas y arquitectura backend.
 
-- ✅ Extracción estructurada con LLMs usando **schemas Pydantic**
-- ✅ Validación automática del output del modelo
-- ✅ RAG básico implementado manualmente (sin LangChain ni LlamaIndex):
-  - Chunking explícito de documentos
-  - Embeddings locales con `sentence-transformers`
-  - Vector store con **Qdrant**
-  - Metadata por chunk (`source`, `domain`, `topic`)
-  - Filtros semánticos por dominio y temática
-  - Respuestas con **citaciones por chunk**
+### RAG (núcleo del proyecto)
+
+* ✅ Ingesta de documentación vía URL
+* ✅ Limpieza y normalización por tipo de fuente
+* ✅ Chunking **específico por tipo de documento**:
+
+  * HTML: separación por `<h2>` / `<h3>`
+  * README / Markdown: secciones semánticas
+  * PDF y texto plano: tamaño fijo
+* ✅ Strategy Pattern para chunking
+* ✅ Embeddings locales con `sentence-transformers`
+
+  * creación por **batches**
+  * manejo de errores (timeouts, respuestas vacías, retry simple)
+* ✅ Vector store **abstraído** (implementación actual: Qdrant)
+* ✅ Batch insert de chunks
+* ✅ Metadata por chunk (`source`, `domain`, `topic`, `chunk_index`)
+* ✅ Query con embedding de consulta
+* ✅ Filtros dinámicos por dominio y temática
+* ✅ **Re-ranking simple con Cross-Encoder**
+* ✅ Construcción explícita del contexto enviado al LLM
+* ✅ Respuestas con **citaciones por chunk**
+* ✅ Streaming de respuesta
+
+### Observabilidad y control
+
+* ✅ Logs estructurados
+* ✅ Medición de tiempo de respuesta del LLM (decorador)
+* ✅ Tracking de tokens consumidos
+* ✅ Estimación de costo por request
+
+### Frontend (demo funcional)
+
+* ✅ Ingesta de URLs
+* ✅ Chat con streaming
+* ✅ Citations visibles
+* ✅ Estados de carga y errores
+* ✅ Inputs opcionales de dominio y temática
+* ✅ Panel simple de estado
+
+---
+
+## Filosofía de diseño
+
+Este proyecto prioriza:
+
+* **Transparencia del flujo** (cada paso del pipeline es explícito)
+* **Control del riesgo** (validación, retries, errores manejados)
+* **Separación de responsabilidades**
+* **Intercambiabilidad de componentes** (LLMs, vector store, embeddings)
+
+No se abstrae complejidad: se **expone** para poder aprenderla.
 
 ---
 
 ## Arquitectura general
 
-El proyecto está organizado siguiendo principios backend clásicos:
+```
+HTTP (FastAPI)
+   ↓
+Routers (API layer)
+   ↓
+Services (lógica de negocio)
+   ↓
+Clients / Providers
+   ├─ LLM providers
+   ├─ Embedding providers
+   └─ Vector store clients
+```
 
-- **FastAPI** como capa HTTP
-- **Routers** → definición de endpoints
-- **Service layer** → lógica de negocio (RAG, extracción, validación)
-- **Clients** desacoplados para dependencias externas:
-  - LLM provider
-  - Vector database
+### Capas principales
 
-- **Embeddings locales**, sin dependencia de APIs externas
-- **Vector store intercambiable** (actualmente Qdrant)
+* **Routers**: definición de endpoints y validación de input
+* **Service layer**: orquestación explícita del flujo (RAG, extracción)
+* **Core**:
 
-El diseño prioriza **transparencia del flujo y control explícito** por sobre abstracciones automáticas.
+  * cliente de LLM
+  * pricing / conteo de tokens
+  * logging estructurado
+  * settings
+* **Providers / Clients**:
+
+  * LLM (ej: Mistral)
+  * Vector DB (Qdrant)
+  * Embeddings locales
 
 ---
 
 ## Extracción estructurada
 
-Extracción de información estructurada a partir de documentos semi-estructurados (CSV, PDFs, texto plano), utilizando:
+Extracción de información estructurada desde documentos semi-estructurados usando:
 
-- Prompts determinísticos
-- Schemas Pydantic como contrato
-- Validación automática del output
-- Manejo de errores y retry si el output no valida
+* Prompts determinísticos
+* Schemas Pydantic como contrato de salida
+* Validación automática
+* Manejo explícito de errores y retries
 
 ### Ejemplo
 
@@ -80,22 +138,7 @@ Extracción desde un CSV típico del SII (Chile):
 
 ---
 
-## RAG (Retrieval-Augmented Generation)
-
-Implementación manual de un RAG básico para comprender el flujo completo de extremo a extremo:
-
-- Ingesta de documentos (HTML, README, texto plano)
-- Chunking por secciones (`<h2>`, `<h3>`) o tamaño fijo
-- Generación de embeddings local
-- Almacenamiento vectorial con metadata
-- Búsqueda semántica con filtros
-- Construcción explícita del contexto enviado al LLM
-
-No se utilizan frameworks externos de orquestación para mantener **control total del pipeline**.
-
----
-
-## Ejemplo de uso
+## RAG – Ejemplo de uso
 
 ### Ingestar documentación
 
@@ -111,7 +154,7 @@ POST /rag/ingest
 }
 ```
 
-### Consultar documentos
+### Consultar documentación
 
 ```http
 POST /rag/ask
@@ -141,41 +184,37 @@ Respuesta:
 
 ---
 
-## Roadmap (aprendizaje progresivo – 2026)
+## Roadmap técnico (aprendizaje – 2026)
 
-Las siguientes etapas están pensadas como **experimentos técnicos independientes**, no como features de producto.
+Las siguientes etapas son **mejoras técnicas incrementales**, manteniendo el proyecto como una **API RAG de documentación**.
 
-### 1. Extracción estructurada avanzada
+### Importancia alta
 
-- Soporte para PDFs escaneados (OCR)
-- Retry automático con prompts alternativos
-- Mejor manejo de errores semánticos
+* Factory para selección de LLM provider
+* Robustecer retry logic
 
-### 2. RAG básico (extensiones)
+  * circuit breaker simple
+  * fallback a modelo local si el proveedor externo falla
 
-- Chunking específico por tipo de documento
-- Re-ranking simple de resultados
-- Vector store alternativo (FAISS / pgvector)
+### Importancia media
 
-### 3. Guardrails y rechazo seguro
+* Cost tracking acumulado
 
-- Allowlist de intenciones permitidas
-- Clasificador de intención previo al LLM
-- Bloqueo de prompts peligrosos / jailbreak
-- Respuestas fallback seguras
+  * por sesión
+  * por usuario
+* Endpoint de métricas
 
-### 4. Moderación temprana
+  * requests
+  * latencia
+  * tokens
+  * errores
+* Re-ingesta incremental de documentos
 
-- Clasificador liviano (regex + reglas o LLM pequeño)
-- Decisión temprana: procesar / pedir contexto / rechazar
+### Importancia baja / experimental
 
-### Posibles extensiones
-
-- Agentes básicos (ReAct-style)
-- Extracción de texto desde imágenes (Textract + LLM)
-- Autenticación simple y multiusuario
-- Background tasks para archivos grandes (Celery o Lambda + SQS)
-- Métricas: latencia, tokens consumidos, costo estimado
+* Endpoint `/rag/reset`
+* Modelo local vía Ollama
+* Evaluación automática con RAGAS
 
 ---
 
@@ -184,71 +223,59 @@ Las siguientes etapas están pensadas como **experimentos técnicos independient
 ```bash
 git clone https://github.com/SrStamm/ai-toolkit.git
 cd ai-toolkit
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env          # configurar API keys del LLM
-uvicorn app.main:app --reload --port 8000
+docker-compose up --build
 ```
 
 ---
 
 ## Qué demuestra este proyecto
 
-- Diseño de APIs backend orientadas a IA
-- Integración controlada de LLMs en servidores
-- Validación de outputs no determinísticos
-- Implementación manual de RAG sin frameworks externos
-- Separación clara de responsabilidades
-- Consideración de seguridad y guardrails desde el diseño
+* Diseño de APIs backend orientadas a IA
+* Integración controlada de LLMs en servidores
+* Validación de outputs no determinísticos
+* Implementación manual de RAG
+* Arquitectura desacoplada y mantenible
+* Seguridad y guardrails pensados desde el diseño
 
 ---
 
-## Estrcuctura del proyecto
+## Estructura del proyecto
 
 ```bash
 ai-toolkit/
-|-- app/
-  |- core/
-    |- custom_logging.py
-    |- llm_client.py
-    |- models.py
-    |- pricing.py
-    |- settting.py
-    |- llm_providers/
-      |- mistral_provider.py
-  |- feature/
-    |- extraction/
-      |- exceptions.py
-      |- factory.py
-      |- interface.py
-      |- prompts.py
-      |- router.py
-      |- schema.py
-      |- service.py
-      |- cleaners/
-        |- html_cleaner.py
-        |- markdown_cleaner.py
-      |- semantic/
-        |- invoice_extractor.py
-        |- person_extractor.py
-      |- source/
-        |- csv_source.py
-        |- html_source.py
-        |- pdf_source.py
-        |- readme_source.py
-      |- tests/
-    |- rag/
-      |- exceptions.py
-      |- interfaces.py
-      |- prompt.py
-      |- router.py
-      |- schemas.py
-      |- service.py
-      |- providers/
-        |- local_ai.py # Embedding
-        |- qdrant_client.py # Qdrant client
-  |- tests/
-  |- mian.py
-|-- front-ai-toolkit/
+├─ app/
+│  ├─ core/
+│  │  ├─ custom_logging.py
+│  │  ├─ llm_client.py
+│  │  ├─ models.py
+│  │  ├─ pricing.py
+│  │  ├─ settings.py
+│  │  └─ llm_providers/
+│  │     └─ mistral_provider.py
+│  ├─ feature/
+│  │  ├─ extraction/
+│  │  │  ├─ exceptions.py
+│  │  │  ├─ factory.py
+│  │  │  ├─ interface.py
+│  │  │  ├─ prompts.py
+│  │  │  ├─ router.py
+│  │  │  ├─ schema.py
+│  │  │  ├─ service.py
+│  │  │  ├─ cleaners/
+│  │  │  ├─ semantic/
+│  │  │  ├─ source/
+│  │  │  └─ tests/
+│  │  └─ rag/
+│  │     ├─ exceptions.py
+│  │     ├─ interfaces.py
+│  │     ├─ prompt.py
+│  │     ├─ router.py
+│  │     ├─ schemas.py
+│  │     ├─ service.py
+│  │     └─ providers/
+│  │        ├─ local_ai.py
+│  │        └─ qdrant_client.py
+│  ├─ tests/
+│  └─ main.py
+└─ front-ai-toolkit/
 ```
