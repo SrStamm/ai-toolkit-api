@@ -1,9 +1,12 @@
 from typing import List
 import numpy as np
 from sentence_transformers import SentenceTransformer
+import structlog
 from ....core.custom_logging import time_response
 from ..exceptions import EmbeddingError
 from ..interfaces import EmbeddingInterface
+
+logger = structlog.get_logger()
 
 
 class EmbeddingService(EmbeddingInterface):
@@ -36,11 +39,13 @@ class EmbeddingService(EmbeddingInterface):
         try:
             all_batches = []
 
-            for start in range(0, len(chunk_list), batch_size):
+            for batch_enum, start in enumerate(range(0, len(chunk_list), batch_size)):
                 end = min(start + batch_size, len(chunk_list))
 
+                logger.debug(f"Proccessing batch {batch_enum + 1}: {start} to {end}")
+
                 # Slice batchs
-                batchs = list[start:end]
+                batchs = chunk_list[start:end]
 
                 # Format batchs
                 batch_formated = [
@@ -48,9 +53,12 @@ class EmbeddingService(EmbeddingInterface):
                 ]
 
                 # encode batchs
-                batch_result = self.embed_model.encode(
-                    batch_formated, batch_size=len(batch_formated)
-                )
+                try:
+                    batch_result = self.embed_model.encode(
+                        batch_formated, batch_size=len(batch_formated)
+                    )
+                except (RuntimeError, ValueError, MemoryError) as e:
+                    raise EmbeddingError(f"Encoding failed: {str(e)}")
 
                 # extend list
                 all_batches.append(batch_result)
