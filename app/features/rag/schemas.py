@@ -28,3 +28,7 @@ class QueryResponse(BaseModel):
     answer: str
     citations: list[Citation]
     metadata: Metadata
+
+
+class LLMAnswer(BaseModel):
+    answer: str

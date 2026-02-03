@@ -3,16 +3,17 @@ from typing import Optional
 from fastapi import Depends
 import json
 import structlog
+from pydantic import ValidationError
 
-from .schemas import Metadata, QueryResponse
+from .schemas import LLMAnswer, Metadata, QueryResponse
 from .exceptions import ChunkingError, EmbeddingError
 from .providers.local_ai import EmbeddingService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
 from .providers import qdrant_client
 from .prompt import PROMPT_TEMPLATE, PROMPT_TEMPLATE_CHAT
-from ...core.llm_client import LLMClient, get_llm_client
 from ..extraction.exceptions import EmptySourceContentError, SourceException
 from ..extraction.factory import SourceFactory
+from ...core.llm_client import LLMClient, get_llm_client
 
 
 class RAGService:
@@ -197,9 +198,10 @@ class RAGService:
         response = self.llm_client.generate_content(prompt)
 
         try:
-            parsed = json.loads(response.content)
-        except json.JSONDecodeError:
-            parsed = {"answer": response.content}
+            parsed = LLMAnswer.model_validate_json(response.content)
+            answer = parsed.answer
+        except ValidationError:
+            answer = response.content
 
         seen = set()
         citations = []
@@ -224,7 +226,7 @@ class RAGService:
         )
 
         return QueryResponse(
-            answer=parsed["answer"],
+            answer=answer,
             citations=citations,
             metadata=Metadata(
                 tokens=response.usage.total_tokens,
