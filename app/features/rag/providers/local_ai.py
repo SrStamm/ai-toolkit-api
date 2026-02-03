@@ -68,6 +68,9 @@ class EmbeddingService(EmbeddingInterface):
             else:
                 final = np.concatenate(all_batches)
 
+            if any(np.isnan(v).any() or np.isinf(v).any() for v in final):
+                raise EmbeddingError("One or more vectors contain NaN or Inf values")
+
             return final.tolist()
         except Exception as e:
             raise EmbeddingError(str(e)) from e

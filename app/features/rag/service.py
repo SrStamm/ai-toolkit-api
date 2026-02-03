@@ -3,7 +3,6 @@ from typing import Optional
 from fastapi import Depends
 import json
 import structlog
-import numpy as np
 
 from .schemas import Metadata, QueryResponse
 from .exceptions import ChunkingError, EmbeddingError
@@ -60,9 +59,6 @@ class RAGService:
             raise EmbeddingError(
                 f"Vector count mismatch: expected {len(chunks)}, got {len(vectors)}"
             )
-
-        if any(np.isnan(v).any() or np.isinf(v).any() for v in vectors):
-            raise EmbeddingError("One or more vectors contain NaN or Inf values")
 
         # 6. Create a list of points
         points = [
@@ -125,15 +121,15 @@ class RAGService:
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
-            raise EmbeddingError("Embedding timed out after 5 minutes")
+            timeout_minutes = timeout / 60
+            raise EmbeddingError(
+                f"Embedding timed out after {timeout_minutes:.1f} minutes"
+            )
 
         if len(vectors) != len(chunks):
             raise EmbeddingError(
                 f"Vector count mismatch: expected {len(chunks)}, got {len(vectors)}"
             )
-
-        if any(np.isnan(v).any() or np.isinf(v).any() for v in vectors):
-            raise EmbeddingError("One or more vectors contain NaN or Inf values")
 
         # 4. Creating points
         yield {"progress": 80, "step": "Creating vector points"}
