@@ -30,6 +30,9 @@ class EmbeddingService(EmbeddingInterface):
     def batch_embed(
         self, list: list[str], query: bool = False, batch_size: int = 50
     ) -> List[List[float]]:
+        if len(list) == 0:
+            raise EmbeddingError("Chunk list is empty")
+
         try:
             all_batches = []
 
