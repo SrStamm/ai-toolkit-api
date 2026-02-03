@@ -3,6 +3,9 @@ import json
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 import structlog
+
+from features.extraction.exceptions import EmptySourceContentError
+from features.rag.exceptions import ChunkingError, EmbeddingError
 from .schemas import IngestRequest, QueryRequest, QueryResponse
 from .service import RAGService, get_rag_service
 
@@ -49,11 +52,30 @@ async def ingest_document_stream(
                 topic=ingest.topic,
             ):
                 yield f"data: {json.dumps(event)}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-        except asyncio.CancelledError:
-            logger.info("Ingestion cancelled by user")
-            raise
+        except EmptySourceContentError:
+            yield {
+                "type": "error",
+                "message": "Document is empty after cleaning",
+                "recoverable": False,
+            }
+        except ChunkingError:
+            yield {
+                "type": "error",
+                "message": "Failed to split document",
+                "recoverable": False,
+            }
+        except EmbeddingError as e:
+            yield {
+                "type": "error",
+                "message": f"Embedding failed: {str(e)}",
+                "recoverable": True,
+            }
+        except asyncio.TimeoutError:
+            yield {
+                "type": "error",
+                "message": "Processing timed out, try a smaller document",
+                "recoverable": False,
+            }
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
