@@ -3,9 +3,10 @@ from typing import Optional
 from fastapi import Depends
 import json
 import structlog
+import numpy as np
 
 from .schemas import Metadata, QueryResponse
-from .exceptions import ChunkingError
+from .exceptions import ChunkingError, EmbeddingError
 from .providers.local_ai import EmbeddingService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
 from .providers import qdrant_client
@@ -54,6 +55,14 @@ class RAGService:
 
         # 5. Create a list of vectors
         vectors = self.embed_service.batch_embed(chunks)
+
+        if len(vectors) != len(chunks):
+            raise EmbeddingError(
+                f"Vector count mismatch: expected {len(chunks)}, got {len(vectors)}"
+            )
+
+        if any(np.isnan(v).any() or np.isinf(v).any() for v in vectors):
+            raise EmbeddingError("One or more vectors contain NaN or Inf values")
 
         # 6. Create a list of points
         points = [
@@ -107,7 +116,24 @@ class RAGService:
         }
 
         # Run a function in a separate thread
-        vectors = await asyncio.to_thread(self.embed_service.batch_embed, chunks)
+        estimated_time = len(chunks) * 0.5
+        timeout = max(60, estimated_time * 2)
+
+        try:
+            vectors = await asyncio.wait_for(
+                asyncio.to_thread(self.embed_service.batch_embed, chunks),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            raise EmbeddingError("Embedding timed out after 5 minutes")
+
+        if len(vectors) != len(chunks):
+            raise EmbeddingError(
+                f"Vector count mismatch: expected {len(chunks)}, got {len(vectors)}"
+            )
+
+        if any(np.isnan(v).any() or np.isinf(v).any() for v in vectors):
+            raise EmbeddingError("One or more vectors contain NaN or Inf values")
 
         # 4. Creating points
         yield {"progress": 80, "step": "Creating vector points"}
