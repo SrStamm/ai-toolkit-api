@@ -1,8 +1,8 @@
 # LLM Local
 
 
-from core.models import LLMResponse
-from core.settings import BaseLLMProvider
+from ..models import LLMResponse
+from ..settings import BaseLLMProvider
 
 
 class OllamaProvider(BaseLLMProvider):
