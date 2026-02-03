@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 import structlog
 
-from features.extraction.exceptions import EmptySourceContentError
-from features.rag.exceptions import ChunkingError, EmbeddingError, error_event
+from ...features.extraction.exceptions import EmptySourceContentError
+from ...features.rag.exceptions import ChunkingError, EmbeddingError, error_event
 from .schemas import IngestRequest, QueryRequest, QueryResponse
 from .service import RAGService, get_rag_service
 
