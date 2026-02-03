@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 import structlog
 
 from features.extraction.exceptions import EmptySourceContentError
-from features.rag.exceptions import ChunkingError, EmbeddingError
+from features.rag.exceptions import ChunkingError, EmbeddingError, error_event
 from .schemas import IngestRequest, QueryRequest, QueryResponse
 from .service import RAGService, get_rag_service
 
@@ -53,29 +53,21 @@ async def ingest_document_stream(
             ):
                 yield f"data: {json.dumps(event)}\n\n"
         except EmptySourceContentError:
-            yield {
-                "type": "error",
-                "message": "Document is empty after cleaning",
-                "recoverable": False,
-            }
+            yield error_event(
+                message="Document is empty after cleaning", recoverable=False
+            )
+
         except ChunkingError:
-            yield {
-                "type": "error",
-                "message": "Failed to split document",
-                "recoverable": False,
-            }
+            yield error_event(message="Failed to split document", recoverable=False)
+
         except EmbeddingError as e:
-            yield {
-                "type": "error",
-                "message": f"Embedding failed: {str(e)}",
-                "recoverable": True,
-            }
+            yield error_event(message=f"Embedding failed: {str(e)}", recoverable=True)
+
         except asyncio.TimeoutError:
-            yield {
-                "type": "error",
-                "message": "Processing timed out, try a smaller document",
-                "recoverable": False,
-            }
+            yield error_event(
+                message="Processing timed out, try a smaller document",
+                recoverable=False,
+            )
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
