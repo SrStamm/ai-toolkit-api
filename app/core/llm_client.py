@@ -1,22 +1,23 @@
+# Provider for LLM
+
 from typing import AsyncIterator, Optional
-from .llm_providers.mistral_provider import MistralProvider
+
+from .llm_router import LLMRouter, get_llm_router
 from .models import LLMResponse
 from .custom_logging import time_response
-from .settings import LLMConfig, BaseLLMProvider
 from pydantic import BaseModel, ValidationError
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
 
 class LLMClient:
-    def __init__(self, provider: BaseLLMProvider):
-        self.provider = provider
+    def __init__(self, router: LLMRouter):
+        self.router = router
 
     @time_response
     def generate_content(self, prompt: str) -> LLMResponse[str]:
-        return self.provider.chat(prompt)
+        return self.router.chat(prompt)
 
     @time_response
     def generate_structured_output(
@@ -24,7 +25,7 @@ class LLMClient:
     ) -> LLMResponse[BaseModel]:
         structured_prompt = f"{prompt}\n Output como JSON válido, únicamente devuelve el objeto JSON, conforme a este schema: {output_schema.model_json_schema()}"
 
-        response = self.provider.chat(structured_prompt)
+        response = self.router.chat(structured_prompt)
 
         try:
             parsed_content = output_schema.model_validate_json(response)
@@ -44,16 +45,10 @@ class LLMClient:
     async def generate_content_stream(
         self, prompt: str
     ) -> AsyncIterator[tuple[str, Optional[LLMResponse]]]:
-        async for chunk, final_response in self.provider.chat_stream(prompt):
+        async for chunk, final_response in self.router.chat_stream(prompt):
             yield (chunk, final_response)
 
 
 def get_llm_client():
-    API_KEY = os.getenv("MISTRAL_API_KEY")
-
-    if not API_KEY:
-        raise ValueError("API_KEY no configurada")
-
-    config = LLMConfig(api_key=API_KEY)
-    provider = MistralProvider(config)
-    return LLMClient(provider)
+    router: LLMRouter = get_llm_router()
+    return LLMClient(router)
