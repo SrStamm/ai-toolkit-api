@@ -38,5 +38,5 @@ class EmbeddingInterface(ABC):
         pass
 
     @abstractmethod
-    def batch_embed(self, list: list[str], query: bool = False) -> List[Any]:
+    def batch_embed(self, chunk_list: list[str], query: bool = False) -> List[Any]:
         pass

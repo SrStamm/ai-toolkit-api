@@ -5,7 +5,7 @@ import json
 import structlog
 
 from .schemas import Metadata, QueryResponse
-from .exceptions import ChunkingError
+from .exceptions import ChunkingError, EmbeddingError
 from .providers.local_ai import EmbeddingService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
 from .providers import qdrant_client
@@ -54,6 +54,11 @@ class RAGService:
 
         # 5. Create a list of vectors
         vectors = self.embed_service.batch_embed(chunks)
+
+        if len(vectors) != len(chunks):
+            raise EmbeddingError(
+                f"Vector count mismatch: expected {len(chunks)}, got {len(vectors)}"
+            )
 
         # 6. Create a list of points
         points = [
@@ -107,7 +112,24 @@ class RAGService:
         }
 
         # Run a function in a separate thread
-        vectors = await asyncio.to_thread(self.embed_service.batch_embed, chunks)
+        estimated_time = len(chunks) * 0.5
+        timeout = max(60, estimated_time * 2)
+
+        try:
+            vectors = await asyncio.wait_for(
+                asyncio.to_thread(self.embed_service.batch_embed, chunks),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            timeout_minutes = timeout / 60
+            raise EmbeddingError(
+                f"Embedding timed out after {timeout_minutes:.1f} minutes"
+            )
+
+        if len(vectors) != len(chunks):
+            raise EmbeddingError(
+                f"Vector count mismatch: expected {len(chunks)}, got {len(vectors)}"
+            )
 
         # 4. Creating points
         yield {"progress": 80, "step": "Creating vector points"}
