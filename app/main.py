@@ -61,7 +61,10 @@ async def structured_log_middleware(request: Request, call_next):
     session_id = request.headers.get("X-Session-ID") or str(uuid.uuid4())
 
     token = request_id_var.set(request_id)
-    session = request_id_var.set(session_id)
+    session = session_id_var.set(session_id)
+
+    request.state.request_id = request_id
+    request.state.session_id = session_id
 
     start_time = time()
 
@@ -77,7 +80,6 @@ async def structured_log_middleware(request: Request, call_next):
         response = await call_next(request)
         duration = time() - start_time
         user = request.state.user if hasattr(request.state, "user") else "anonymous"
-        session_id = request.state.session_id
 
         # Use request.url.scheme instead of request.scope["scheme"]
         scheme = request.url.scheme or "http"  # Fallback to 'http' if scheme is empty
@@ -103,4 +105,4 @@ async def structured_log_middleware(request: Request, call_next):
 
     finally:
         request_id_var.reset(token)
-        request_id_var.reset(session)
+        session_id_var.reset(session)
