@@ -1,5 +1,6 @@
 import asyncio
 from typing import Optional
+from uuid import UUID
 from fastapi import Depends
 import json
 import structlog
@@ -14,6 +15,7 @@ from .prompt import PROMPT_TEMPLATE, PROMPT_TEMPLATE_CHAT
 from ..extraction.exceptions import EmptySourceContentError, SourceException
 from ..extraction.factory import SourceFactory
 from ...core.llm_client import LLMClient, get_llm_client
+from ...core.cost_tracker import cost_tracker
 
 
 class RAGService:
@@ -172,6 +174,7 @@ class RAGService:
 
     def ask(
         self,
+        session_id: UUID,
         user_question: str,
         domain: Optional[str] = None,
         topic: Optional[str] = None,
@@ -225,6 +228,10 @@ class RAGService:
             total_cost=f"${response.cost.total_cost:.6f}",
         )
 
+        cost_tracker.add(
+            session_id, response.usage.total_tokens, response.cost.total_cost
+        )
+
         return QueryResponse(
             answer=answer,
             citations=citations,
@@ -236,6 +243,7 @@ class RAGService:
 
     async def chat_stream(
         self,
+        session_id: UUID,
         user_question: str,
         domain: Optional[str] = None,
         topic: Optional[str] = None,
@@ -306,6 +314,12 @@ class RAGService:
                     }
                 )
             }\n\n"
+
+            cost_tracker.add(
+                session_id,
+                final_response.usage.total_tokens,
+                final_response.cost.total_cost,
+            )
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 

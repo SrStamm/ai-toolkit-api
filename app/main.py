@@ -5,11 +5,11 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.custom_logging import register_exceptions_handlers
-from app.features.extraction.router import router as extraction_router
-from app.features.rag.providers.qdrant_client import get_qdrant_store, QdrantStore
-from app.features.rag.router import router as rag_router
-from app.core.custom_logging import logger
+from .core.custom_logging import register_exceptions_handlers
+from .features.extraction.router import router as extraction_router
+from .features.rag.providers.qdrant_client import get_qdrant_store, QdrantStore
+from .features.rag.router import router as rag_router
+from .core.custom_logging import logger
 
 
 @asynccontextmanager
@@ -48,6 +48,7 @@ app.include_router(rag_router)
 register_exceptions_handlers(app)
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default=None)
+session_id_var: ContextVar[str] = ContextVar("session_id", default=None)
 
 
 @app.middleware("http")
@@ -55,10 +56,15 @@ async def structured_log_middleware(request: Request, call_next):
     # Clean previous context
     structlog.contextvars.clear_contextvars()
 
-    # Create and set request_id
+    # Create and set request_id and session_id
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    session_id = request.headers.get("X-Session-ID") or str(uuid.uuid4())
 
     token = request_id_var.set(request_id)
+    session = session_id_var.set(session_id)
+
+    request.state.request_id = request_id
+    request.state.session_id = session_id
 
     start_time = time()
 
@@ -67,6 +73,7 @@ async def structured_log_middleware(request: Request, call_next):
         method=request.method,
         path=request.url.path,
         client_ip=request.client.host if request.client else "unknown",
+        session_id=session_id,
     )
 
     try:
@@ -84,6 +91,7 @@ async def structured_log_middleware(request: Request, call_next):
         )
 
         response.headers["X-Request-ID"] = request_id
+        response.headers["X-Session-ID"] = session_id
 
         return response
 
@@ -97,3 +105,4 @@ async def structured_log_middleware(request: Request, call_next):
 
     finally:
         request_id_var.reset(token)
+        session_id_var.reset(session)

@@ -1,6 +1,6 @@
 import asyncio
 import json
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 import structlog
 
@@ -96,19 +96,23 @@ def retrieve_search(
     """,
 )
 def ask(
+    request: Request,
     query: QueryRequest,
     serv: RAGService = Depends(get_rag_service),
 ) -> QueryResponse:
-    return serv.ask(query.text, query.domain, query.topic)
+    return serv.ask(request.state.session_id, query.text, query.domain, query.topic)
 
 
 @router.post("/ask-stream")
 async def ask_stream(
+    request: Request,
     query: QueryRequest,
     serv: RAGService = Depends(get_rag_service),
 ):
     return StreamingResponse(
-        serv.chat_stream(query.text, query.domain, query.topic),
+        serv.chat_stream(
+            request.state.session_id, query.text, query.domain, query.topic
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
