@@ -1,6 +1,8 @@
 import asyncio
+from datetime import datetime, UTC
 from typing import Optional
-from uuid import UUID
+import hashlib
+from uuid import UUID, uuid5, NAMESPACE_DNS
 from fastapi import Depends
 import json
 import structlog
@@ -55,31 +57,87 @@ class RAGService:
         if not chunks:
             raise ChunkingError("No chunks generated")
 
-        # 5. Create a list of vectors
-        vectors = self.embed_service.batch_embed(chunks)
+        # 5. Retrieve points if exists
+        hash_ids = set()
 
-        if len(vectors) != len(chunks):
-            raise EmbeddingError(
-                f"Vector count mismatch: expected {len(chunks)}, got {len(vectors)}"
-            )
-
-        # 6. Create a list of points
-        points = [
-            self.vector_store.create_point(
-                vector,
-                {
-                    "text": chunk,
-                    "source": source,
-                    "domain": domain.lower(),
-                    "topic": topic.lower(),
-                    "chunk_index": i,
-                },
-            )
-            for i, (chunk, vector) in enumerate(zip(chunks, vectors))
+        # Hash ids
+        hash_ids = [
+            hashlib.sha256((chunk + source).encode()).hexdigest() for chunk in chunks
         ]
 
-        # 7. Insert points on vector database
-        self.vector_store.insert_vector(points)
+        # turn ids to strings
+        hash_ids_deterministic = [
+            str(uuid5(NAMESPACE_DNS, hash_id)) for hash_id in hash_ids
+        ]
+
+        # call vector store to check existing chunks
+        chunks_in_db = self.vector_store.retrieve(hash_ids_deterministic)
+
+        # Get a set of chunk ids existed
+        ids_in_db = [chunk.id for chunk in chunks_in_db]
+
+        # Filter chunks to process
+        chunks_to_embed = [
+            (hash_ids_deterministic[i], chunk, i)
+            for i, chunk in enumerate(chunks)
+            if hash_ids_deterministic[i] not in ids_in_db
+        ]
+
+        points_to_upsert = []
+        timestamp = datetime.now(UTC).isoformat()
+
+        # --- Case A: new chunks ----
+        if chunks_to_embed:
+            # Get texts to process and embed
+            texts_to_process = [item[1] for item in chunks_to_embed]
+            new_vectors = self.embed_service.batch_embed(texts_to_process)
+
+            if len(new_vectors) != len(texts_to_process):
+                raise EmbeddingError(
+                    f"Vector count mismatch: expected {len(texts_to_process)}, got {len(new_vectors)}"
+                )
+
+            # Create points and add to upsert list
+            for (h_id, text, original_idx), vector in zip(chunks_to_embed, new_vectors):
+                point = self.vector_store.create_point(
+                    hash_id=h_id,
+                    vector=vector,
+                    payload={
+                        "text": text,
+                        "source": source,
+                        "domain": domain.lower(),
+                        "topic": topic.lower(),
+                        "chunk_index": original_idx,
+                        "ingested_at": timestamp,
+                    },
+                )
+                points_to_upsert.append(point)
+
+        # --- Case B: upsert all existing chunks ----
+        for chunk_db in chunks_in_db:
+            point = self.vector_store.create_point(
+                hash_id=chunk_db.id,
+                vector=chunk_db.vector,
+                payload={
+                    **chunk_db.payload,
+                    "ingested_at": timestamp,
+                },
+            )
+            points_to_upsert.append(point)
+
+        # Insert points on vector database
+        if points_to_upsert:
+            self.vector_store.insert_vector(points_to_upsert)
+            self.logger.info(
+                "ingest_completed",
+                url=url,
+                source=source,
+                domain=domain,
+                topic=topic,
+                chunks_processed=len(points_to_upsert),
+                new=len(chunks_to_embed),
+                updated=len(chunks_in_db),
+            )
 
     async def ingest_document_stream(self, url, source, domain, topic):
         """Generator which broadcast progress events"""
@@ -107,6 +165,18 @@ class RAGService:
 
         if not chunks:
             raise ChunkingError("No chunks generated")
+
+        # Retrieve points if exists
+        hash_ids = set()
+        hash_ids = [
+            hashlib.sha256((chunk + source).encode).hexdigest() for chunk in chunks
+        ]
+
+        chunks_existed = self.vector_store.retrieve(hash_ids)
+
+        if chunks_existed:
+            self.logger.info("chuncks_already_ingested")
+            raise
 
         # 3. Embedding
         yield {
@@ -136,15 +206,20 @@ class RAGService:
 
         # 4. Creating points
         yield {"progress": 80, "step": "Creating vector points"}
+
+        timestamp = datetime.now(UTC).isoformat()
+
         points = [
             self.vector_store.create_point(
-                vector,
-                {
+                hash_id=hash_ids[i],
+                vector=vector,
+                payload={
                     "text": chunk,
                     "source": source,
                     "domain": domain.lower(),
                     "topic": topic.lower(),
                     "chunk_index": i,
+                    "ingested_at": timestamp,
                 },
             )
             for i, (chunk, vector) in enumerate(zip(chunks, vectors))
@@ -208,13 +283,19 @@ class RAGService:
 
         seen = set()
         citations = []
+
         for q in query_result:
             src = q.payload["source"]
             if src in seen:
                 continue
             seen.add(src)
 
-            citations.append({"source": src, "chunk_index": q.payload["chunk_index"]})
+            citations.append(
+                {
+                    "source": src,
+                    "chunk_index": q.payload["chunk_index"],
+                }
+            )
 
         self.logger.info(
             "LLM_CALL",
