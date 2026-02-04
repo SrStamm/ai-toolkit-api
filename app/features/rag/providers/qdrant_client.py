@@ -1,5 +1,4 @@
 from typing import List
-from uuid import uuid4
 from sentence_transformers import CrossEncoder
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -10,7 +9,11 @@ from qdrant_client.models import (
     ScoredPoint,
     VectorParams,
     Filter,
+    FilterSelector,
+    Record,
+    DatetimeRange,
 )
+
 from ....core.custom_logging import time_response
 from ..exceptions import VectorStoreError
 from ..interfaces import VectorStoreInterface
@@ -80,8 +83,17 @@ class QdrantStore(VectorStoreInterface):
 
         return search_result
 
-    def create_point(self, vector, payload) -> PointStruct:
-        return PointStruct(id=str(uuid4()), vector=vector, payload=payload)
+    def create_point(self, hash_id, vector, payload) -> PointStruct:
+        return PointStruct(id=hash_id, vector=vector, payload=payload)
+
+    @time_response
+    def retrieve(self, hash_ids: List[str]) -> List[Record]:
+        return self.client.retrieve(
+            collection_name=COLLECTION_NAME,
+            ids=hash_ids,
+            with_payload=True,
+            with_vectors=True,
+        )
 
     @time_response
     def insert_vector(self, points: List[PointStruct], batch_size: int = 64):
@@ -105,6 +117,22 @@ class QdrantStore(VectorStoreInterface):
         search_result.sort(key=lambda x: x.score, reverse=True)
 
         return search_result[:3]
+
+    @time_response
+    def delete_old_data(self, source, timestamp):
+        self.client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=FilterSelector(
+                filter=Filter(
+                    must=[
+                        FieldCondition(key="source", match=MatchValue(value=source)),
+                        FieldCondition(
+                            key="ingested_at", range=DatetimeRange(lt=timestamp)
+                        ),
+                    ]
+                )
+            ),
+        )
 
 
 qdrant_client = QdrantStore(qdrant)
