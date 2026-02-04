@@ -18,12 +18,17 @@ class VectorStoreInterface(ABC):
         pass
 
     @abstractmethod
-    def create_point(self, vector, payload) -> Any:
+    def create_point(self, hash_id, vector, payload) -> Any:
         pass
 
     @abstractmethod
     def insert_vector(self, points: List[Any]) -> None:
         """Insert or update vectors"""
+        pass
+
+    @abstractmethod
+    def retrieve(self, hash_ids: List[Any]) -> List[Any]:
+        """Retrieve vectors by their IDs"""
         pass
 
     @abstractmethod
