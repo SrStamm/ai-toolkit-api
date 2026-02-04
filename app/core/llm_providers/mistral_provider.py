@@ -1,12 +1,13 @@
 from typing import AsyncIterator, Optional
 import random
+import time
+import structlog
+from mistralai import Mistral
+from httpx import ConnectError, NetworkError, TimeoutException
 
 from ..models import LLMResponse, TokenUsage
 from ..pricing import ModelPricing
 from ..settings import BaseLLMProvider, LLMConfig
-from mistralai import Mistral
-import time
-import structlog
 
 
 class MistralProvider(BaseLLMProvider):
@@ -16,7 +17,16 @@ class MistralProvider(BaseLLMProvider):
         self.logger = structlog.get_logger()
 
     def _is_retryable_error(self, e: Exception) -> bool:
-        return isinstance(e, (TimeoutError, ConnectionError))
+        return isinstance(
+            e,
+            (
+                TimeoutError,
+                ConnectionError,
+                ConnectError,
+                TimeoutException,
+                NetworkError,
+            ),
+        )
 
     def _with_retry(self, operation, *, model: str):
         for attempt in range(self.config.max_retries):
@@ -83,10 +93,10 @@ class MistralProvider(BaseLLMProvider):
     async def chat_stream(
         self, prompt: str
     ) -> AsyncIterator[tuple[str, Optional[LLMResponse]]]:
-        accumulated_content = ""
         last_exception = None
 
         for attempt in range(self.config.max_retries):
+            accumulated_content = ""
             try:
                 response = self.client.chat.stream(
                     model=self.config.model,
@@ -116,43 +126,62 @@ class MistralProvider(BaseLLMProvider):
                                 content = delta.content
                                 accumulated_content += content
                                 yield (content, None)
-            except ValueError as e:
+                break
+            except Exception as e:
+                if not self._is_retryable_error(e):
+                    self.logger.error(
+                        "non_retryable_error",
+                        model=self.config.model,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                    )
+                    raise
+
                 # Fail but have partial output
                 if accumulated_content:
-                    self.logger.warning(
+                    self.logger.error(
                         "stream_failed_after_partial_output",
                         model=self.config.model,
-                        attempt=attempt,
+                        attempt=attempt + 1,
+                        error=str(e),
+                        partial_length=len(accumulated_content),
                     )
                     raise
 
                 # Fail
-                self.logger.info(
-                    "attempt failed",
+                self.logger.warning(
+                    "stream_attempt_failed",
                     model=self.config.model,
-                    attempt=attempt,
+                    attempt=attempt + 1,
+                    max_retires=self.config.max_retries,
                     error=str(e),
+                    error_type=type(e).__name__,
                 )
 
                 last_exception = e
 
                 # If not retryable or last attempt, raise
-                if attempt < self.config.max_retries - 1:
-                    base = 2**attempt
-                    jitter = random.uniform(0, 1)
-
-                    self.logger.info(
-                        "retrying attempt",
+                if attempt >= self.config.max_retries - 1:
+                    self.logger.error(
+                        "all attempts failed",
                         model=self.config.model,
-                        attempt=attempt,
-                        seconds=base + jitter,
+                        total_attempts=self.config.max_retries,
                     )
-                    last_exception = e
-                    time.sleep(base + jitter)
-
-                else:
-                    self.logger.error("all attempts failed", model=self.config.model)
                     raise last_exception
+
+                # Waiting before retrying
+                base = 2**attempt
+                jitter = random.uniform(0, 1)
+                sleep_time = base + jitter
+
+                self.logger.info(
+                    "retrying attempt",
+                    model=self.config.model,
+                    attempt=attempt,
+                    seconds=sleep_time,
+                )
+
+                time.sleep(sleep_time)
 
         estimated_prompt_tokens = len(prompt) // 4
         estimated_completion_tokens = len(accumulated_content) // 4
@@ -173,14 +202,6 @@ class MistralProvider(BaseLLMProvider):
             cost=cost,
             model=self.config.model,
             provider="mistral",
-        )
-
-        self.logger.info(
-            "stream_completed",
-            model=self.config.model,
-            tokens=usage.total_tokens,
-            cost_usd=f"${cost.total_cost:.6f}",
-            estimation="simple",
         )
 
         # Yield final con metadata completa
