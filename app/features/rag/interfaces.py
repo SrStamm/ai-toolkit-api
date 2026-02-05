@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, List
 
 
@@ -34,6 +35,10 @@ class VectorStoreInterface(ABC):
     @abstractmethod
     def rerank(self, query: str, search_result: list) -> List[Any]:
         """Sort order results"""
+        pass
+
+    @abstractmethod
+    def delete_old_data(self, source: str, timestamp: datetime) -> None:
         pass
 
 

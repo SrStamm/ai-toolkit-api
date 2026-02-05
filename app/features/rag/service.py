@@ -101,7 +101,7 @@ class RAGService:
             )
             points_to_upsert.append(point)
 
-        return points_to_upsert, chunks_to_embed, chunks_in_db
+        return points_to_upsert, chunks_to_embed, chunks_in_db, timestamp
 
     async def ingest_document(self, url, source, domain, topic):
         # Get tools since factory
@@ -129,7 +129,7 @@ class RAGService:
             raise ChunkingError("No chunks generated")
 
         # call function to prepare points
-        points_to_upsert, chunks_to_embed, chunks_in_db = (
+        points_to_upsert, chunks_to_embed, chunks_in_db, ingestion_timestamp = (
             self._prepare_ingestion_points(chunks, source, topic, domain)
         )
 
@@ -145,6 +145,11 @@ class RAGService:
                 chunks_processed=len(points_to_upsert),
                 new=len(chunks_to_embed),
                 updated=len(chunks_in_db),
+            )
+
+        if chunks_in_db:
+            self.vector_store.delete_old_data(
+                source=source, timestamp=ingestion_timestamp
             )
 
     async def ingest_document_stream(self, url, source, domain, topic):
@@ -257,6 +262,8 @@ class RAGService:
                     },
                 )
                 points_to_upsert.append(point)
+
+            self.vector_store.delete_old_data(source=source, timestamp=timestamp)
 
         # Inserting
         if points_to_upsert:
