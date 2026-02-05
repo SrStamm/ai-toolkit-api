@@ -6,12 +6,15 @@ from qdrant_client.models import (
     FieldCondition,
     MatchValue,
     PointStruct,
+    ScalarQuantization,
+    ScalarType,
     ScoredPoint,
     VectorParams,
     Filter,
     FilterSelector,
     Record,
     DatetimeRange,
+    ScalarQuantizationConfig,
 )
 
 from ....core.custom_logging import time_response
@@ -29,7 +32,8 @@ log = structlog.getLogger()
 class QdrantStore(VectorStoreInterface):
     def __init__(self, client: QdrantClient) -> None:
         self.client = client
-        self.rerank_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        # self.rerank_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        self.rerank_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L4-v2")
 
     @time_response
     def create_collection(self):
@@ -44,7 +48,14 @@ class QdrantStore(VectorStoreInterface):
         try:
             self.client.create_collection(
                 collection_name=COLLECTION_NAME,
-                vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+                vectors_config=VectorParams(
+                    size=384, distance=Distance.COSINE, on_disk=True
+                ),
+                quantization_config=ScalarQuantization(
+                    scalar=ScalarQuantizationConfig(
+                        type=ScalarType.INT8, quantile=0.99, always_ram=False
+                    )
+                ),
             )
 
             log.info("Qdrant collection created", collection=COLLECTION_NAME)

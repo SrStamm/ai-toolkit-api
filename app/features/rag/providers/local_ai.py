@@ -11,7 +11,8 @@ logger = structlog.get_logger()
 
 class EmbeddingService(EmbeddingInterface):
     def __init__(self):
-        self.embed_model = SentenceTransformer("intfloat/multilingual-e5-small")
+        # self.embed_model = SentenceTransformer("intfloat/multilingual-e5-small")
+        self.embed_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
     @time_response
     def embed(self, text: str, query: bool = False) -> List[float]:
@@ -31,7 +32,7 @@ class EmbeddingService(EmbeddingInterface):
 
     @time_response
     def batch_embed(
-        self, chunk_list: list[str], query: bool = False, batch_size: int = 50
+        self, chunk_list: list[str], query: bool = False, batch_size: int = 16
     ) -> List[List[float]]:
         if len(chunk_list) == 0:
             raise EmbeddingError("Chunk list is empty")
