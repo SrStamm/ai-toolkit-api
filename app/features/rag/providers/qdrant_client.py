@@ -1,5 +1,4 @@
 from typing import List
-from sentence_transformers import CrossEncoder
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -17,6 +16,7 @@ from qdrant_client.models import (
     ScalarQuantizationConfig,
 )
 
+from ....core.ia_models import get_rerank_model
 from ....core.custom_logging import time_response
 from ..exceptions import VectorStoreError
 from ..interfaces import VectorStoreInterface
@@ -33,7 +33,8 @@ class QdrantStore(VectorStoreInterface):
     def __init__(self, client: QdrantClient) -> None:
         self.client = client
         # self.rerank_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-        self.rerank_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L4-v2")
+        # self.rerank_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L4-v2")
+        self.rerank_model = get_rerank_model()
 
     @time_response
     def create_collection(self):
@@ -131,7 +132,11 @@ class QdrantStore(VectorStoreInterface):
 
     @time_response
     def delete_old_data(self, source, timestamp):
-        self.client.delete(
+        """
+        Delete old chunks with specific source.
+        Useful for re-ingest and keep only the most recent version
+        """
+        deleted = self.client.delete(
             collection_name=COLLECTION_NAME,
             points_selector=FilterSelector(
                 filter=Filter(
@@ -144,6 +149,7 @@ class QdrantStore(VectorStoreInterface):
                 )
             ),
         )
+        log.info("Old data cleaned", source=source, deleted_count=deleted.operation_id)
 
 
 qdrant_client = QdrantStore(qdrant)

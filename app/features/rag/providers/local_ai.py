@@ -1,7 +1,8 @@
 from typing import List
 import numpy as np
-from sentence_transformers import SentenceTransformer
 import structlog
+
+from ....core.ia_models import get_embedding_model
 from ....core.custom_logging import time_response
 from ..exceptions import EmbeddingError
 from ..interfaces import EmbeddingInterface
@@ -12,7 +13,8 @@ logger = structlog.get_logger()
 class EmbeddingService(EmbeddingInterface):
     def __init__(self):
         # self.embed_model = SentenceTransformer("intfloat/multilingual-e5-small")
-        self.embed_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        # self.embed_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        self.embed_model = get_embedding_model()
 
     @time_response
     def embed(self, text: str, query: bool = False) -> List[float]:
