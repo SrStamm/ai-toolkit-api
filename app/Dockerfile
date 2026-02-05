@@ -3,35 +3,45 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-# Instalamos dependencias de compilación
+# Instala dependencias de compilación
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    && rm -rf /var/lib/apt/lists/*
+    libopenblas-dev \
+    gfortran \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 1. Creamos el entorno virtual
+# Crea venv y lo pone en el PATH
 RUN python -m venv /opt/venv
-# 2. "Activamos" el entorno para el resto del builder poniendo el binario primero en el PATH
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Copia e instala las dependencias
 COPY requirements.txt .
-
-# 3. Instalamos usando el índice de CPU para evitar librerías NVIDIA
-RUN pip install --no-cache-dir \
-    --extra-index-url https://download.pytorch.org/whl/cpu \
-    -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+  && pip install --no-cache-dir \
+       --extra-index-url https://download.pytorch.org/whl/cpu \
+       -r requirements.txt
 
 # -- Etapa 2: Production
 FROM python:3.12-slim AS production
 
 WORKDIR /backend
 
-# 4. Copiamos ÚNICAMENTE el entorno virtual ya preparado
-COPY --from=builder /opt/venv /opt/venv
+# Evita warnings
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1
 
-# 5. Activamos el entorno en la imagen final
+# Copia ÚNICAMENTE el entorno virtual ya preparado
+COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copiamos tu código
+# Copiamos código
 COPY . ./app/
+
+# Usuario no root
+RUN useradd -m appuser
+USER appuser
+
+EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

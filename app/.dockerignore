@@ -119,3 +119,16 @@ __marimo__/
 
 
 .qdrant_data/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+tests/
+docs/
+*.md
+*.log
+venv/
+.env
