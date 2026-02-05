@@ -1,12 +1,14 @@
 services:
   qdrant:
     image: qdrant/qdrant
-    restart: always
+    restart: unless-stopped
     ports:
       - "6333:6333"
-      - "6334:6334"
+      # - "6334:6334"  para grpc
     volumes:
       - qdrant_data:/qdrant/storage
+    mem_limit: 512m
+    mem_reservation: 256m
 
   api:
     build: ./app
@@ -27,6 +29,16 @@ services:
         "8000",
         "--reload",
       ]
+    mem_limit: 768m
+    mem_reservation: 384m
+    depends_on:
+      - qdrant
+    environment:
+      OMP_NUM_THREADS: 1
+      OPENBLAS_NUM_THREADS: 1
+      MKL_NUM_THREADS: 1
+      NUMEXPR_NUM_THREADS: 1
+      TORCH_NUM_THREADS: 1
 
 volumes:
   qdrant_data:
