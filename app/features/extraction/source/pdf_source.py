@@ -1,10 +1,11 @@
 from io import BytesIO
 from fastapi import UploadFile
 import pdfplumber
+from ..interface import SourceInterface
 
 
-class PDFSource:
-    async def extract_data_from_pdf(self, file: UploadFile) -> str:
+class PDFSource(SourceInterface):
+    async def extract(self, file: UploadFile) -> str:
         # Read file
         file_content = await file.read()
 
