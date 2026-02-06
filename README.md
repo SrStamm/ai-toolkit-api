@@ -1,220 +1,232 @@
 # ai-toolkit
 
+> **Versión actual:** `v1.0`  
+> **Estado:** estable (educacional / experimental)
+
 **Herramientas de IA para backend (FastAPI)**
 
-`ai-toolkit` es una **API educativa y experimental** construida en **FastAPI** para explorar **patrones reales de integración de Large Language Models (LLMs) en sistemas backend**, priorizando:
+`ai-toolkit` es una **API educativa y experimental** construida en **FastAPI** para explorar **cómo diseñar sistemas backend con LLMs de forma profesional**, poniendo foco en:
 
-* control estricto del output del modelo
-* validación automática y manejo explícito de errores
-* arquitectura clara, desacoplada y mantenible
-* mínima dependencia de frameworks de orquestación "mágicos"
+- control explícito del comportamiento del modelo
+- validación estricta del output
+- manejo consciente de errores y retries
+- arquitectura desacoplada y extensible
+- observabilidad y medición de costos
 
-> 🎯 **Objetivo**: no es un producto final, sino un *laboratorio backend* para entender y demostrar cómo diseñar servicios con IA de forma segura, testeable y extensible.
+> 🎯 **Objetivo del proyecto**  
+> No es un producto final, sino un **laboratorio backend** para demostrar **criterio arquitectónico real** en sistemas con IA: cómo se diseñan, cómo evolucionan y cómo se preparan para un entorno empresarial.
+
+Este README documenta **el alcance cerrado de la versión v1.0** y describe **la evolución planificada hacia v2 y v3**.
 
 ---
 
-## Estado actual (febrero 2026)
+## Estado actual – v1.0 (RAG baseline)
 
-La aplicación **ya funciona como una API RAG completa para consumo de documentación**, permitiendo **ingerir fuentes externas y realizar preguntas actualizadas sobre ese contexto**, con foco en control, métricas y arquitectura backend.
+La versión **v1.0** representa el **baseline funcional del proyecto**:
+un sistema RAG completamente operativo, diseñado para priorizar **claridad, control y corrección** por sobre escalabilidad.
 
-### RAG (núcleo del proyecto)
+Cuenta con una **demo privada en la nube** para validación funcional.
 
-* ✅ Ingesta de documentación vía URL
-* ✅ Limpieza y normalización por tipo de fuente
-* ✅ Chunking **específico por tipo de documento**:
+---
 
-  * HTML: separación por `<h2>` / `<h3>`
-  * README / Markdown: secciones semánticas
-  * PDF y texto plano: tamaño fijo
-* ✅ Strategy Pattern para chunking
-* ✅ Embeddings locales con `sentence-transformers`
+## Funcionalidades incluidas en v1.0
 
-  * creación por **batches**
-  * manejo de errores (timeouts, respuestas vacías, retry simple)
-* ✅ Vector store **abstraído** (implementación actual: Qdrant)
-* ✅ Batch insert de chunks
-* ✅ Metadata por chunk (`source`, `domain`, `topic`, `chunk_index`)
-* ✅ Query con embedding de consulta
-* ✅ Filtros dinámicos por dominio y temática
-* ✅ **Re-ranking simple con Cross-Encoder**
-* ✅ Construcción explícita del contexto enviado al LLM
-* ✅ Respuestas con **citaciones por chunk**
-* ✅ Streaming de respuesta
+### RAG (núcleo del sistema)
 
-### Observabilidad y control
+- Ingesta de documentación vía URL
+- Limpieza y normalización por tipo de fuente
+- Chunking **específico por tipo de documento**:
+  - HTML: separación por `<h2>` / `<h3>`
+  - README / Markdown: secciones semánticas
+  - PDF y texto plano: tamaño fijo
+- Strategy Pattern para chunking
+- Embeddings locales con `sentence-transformers`
+  - creación por batches
+  - manejo de errores (timeouts, respuestas vacías, retry simple)
+- Vector store abstraído (implementación actual: Qdrant)
+- Batch insert de chunks
+- Metadata por chunk (`source`, `domain`, `topic`, `chunk_index`)
+- Query con embedding de consulta
+- Filtros dinámicos por dominio y temática
+- Re-ranking simple con Cross-Encoder
+- Construcción explícita del contexto enviado al LLM
+- Respuestas con citaciones por chunk
+- Streaming de respuesta
 
-* ✅ Logs estructurados
-* ✅ Medición de tiempo de respuesta del LLM (decorador)
-* ✅ Tracking de tokens consumidos
-* ✅ Estimación de costo por request
+---
+
+### Observabilidad y control (v1.0)
+
+- Logs estructurados
+- Medición de tiempo de respuesta del LLM
+- Tracking de tokens consumidos
+- Estimación de costo por request
+
+---
 
 ### Frontend (demo funcional)
 
-* ✅ Ingesta de URLs
-* ✅ Chat con streaming
-* ✅ Citations visibles
-* ✅ Estados de carga y errores
-* ✅ Inputs opcionales de dominio y temática
-* ✅ Panel simple de estado
+- Ingesta de URLs y PDFs
+- Chat con streaming
+- Citations visibles
+- Estados de carga y error
+- Inputs opcionales de dominio y temática
+- Panel simple de estado
 
 ---
 
 ## Filosofía de diseño
 
-Este proyecto prioriza:
+El proyecto prioriza deliberadamente:
 
-* **Transparencia del flujo** (cada paso del pipeline es explícito)
-* **Control del riesgo** (validación, retries, errores manejados)
-* **Separación de responsabilidades**
-* **Intercambiabilidad de componentes** (LLMs, vector store, embeddings)
+- **Transparencia del flujo**  
+  Cada paso del pipeline es explícito y trazable.
+- **Separación de responsabilidades**  
+  API, lógica de negocio y proveedores están claramente desacoplados.
+- **Control del riesgo**  
+  Validación, retries y errores se manejan de forma consciente.
+- **Intercambiabilidad de componentes**  
+  LLMs, embeddings y vector stores pueden reemplazarse sin afectar el core.
 
-No se abstrae complejidad: se **expone** para poder aprenderla.
+No se oculta complejidad: se **expone para poder aprenderla**.
 
 ---
 
-## Arquitectura general
+## Arquitectura general (v1.0)
 
-```
+```ascii
 HTTP (FastAPI)
-   ↓
+↓
 Routers (API layer)
-   ↓
-Services (lógica de negocio)
-   ↓
+↓
+Services (orquestación explícita)
+↓
 Clients / Providers
-   ├─ LLM providers
-   ├─ Embedding providers
-   └─ Vector store clients
-```
-
-### Capas principales
-
-* **Routers**: definición de endpoints y validación de input
-* **Service layer**: orquestación explícita del flujo (RAG, extracción)
-* **Core**:
-
-  * cliente de LLM
-  * pricing / conteo de tokens
-  * logging estructurado
-  * settings
-* **Providers / Clients**:
-
-  * LLM (ej: Mistral)
-  * Vector DB (Qdrant)
-  * Embeddings locales
-
----
-
-## Extracción estructurada
-
-Extracción de información estructurada desde documentos semi-estructurados usando:
-
-* Prompts determinísticos
-* Schemas Pydantic como contrato de salida
-* Validación automática
-* Manejo explícito de errores y retries
-
-### Ejemplo
-
-Extracción desde un CSV típico del SII (Chile):
-
-```json
-{
-  "invoices": [
-    {
-      "tipo_doc": "30",
-      "folio": "8741",
-      "rut_contraparte": "55555555-5",
-      "razon_social": "Andres E.I.R.L.",
-      "fecha_emision": "01-06-2010",
-      "monto_neto": 148000.0,
-      "monto_iva": 28120.0,
-      "monto_total": 176120.0,
-      "producto_o_descripcion": null
-    }
-  ]
-}
+├─ LLM providers
+├─ Embedding providers
+└─ Vector store clients
 ```
 
 ---
 
-## RAG – Ejemplo de uso
+## Limitaciones conocidas de v1.0
 
-### Ingestar documentación
+Esta versión **no está orientada a producción**.  
+Por diseño:
 
-```http
-POST /rag/ingest
-```
+- la ingesta se realiza de forma síncrona
+- el estado se mantiene en memoria
+- no hay workers ni colas de procesamiento
 
-```json
-{
-  "url": "https://fastapi.tiangolo.com/tutorial/",
-  "domain": "backend",
-  "topic": "fastapi"
-}
-```
+Estas decisiones fueron intencionales para:
 
-### Consultar documentación
+- simplificar el flujo
+- priorizar comprensión y control
+- establecer un baseline claro
 
-```http
-POST /rag/ask
-```
+---
 
-```json
-{
-  "text": "How does dependency injection work in FastAPI?",
-  "domain": "backend",
-  "topic": "fastapi"
-}
-```
+## Versionado conceptual del proyecto
 
-Respuesta:
+El proyecto evoluciona por **versiones conceptuales**, cada una con objetivos claros.
 
-```json
-{
-  "answer": "...",
-  "citations": [
-    {
-      "source": "https://fastapi.tiangolo.com/tutorial/",
-      "chunk_index": 3
-    }
-  ]
-}
+---
+
+## v1.0 – RAG baseline (actual)
+
+**Enfoque**
+
+- RAG explícito y controlado
+- Arquitectura limpia
+- Observabilidad básica
+- Correctness del output
+
+**No incluye**
+
+- Procesamiento asincrónico
+- Workers o colas
+- Métricas persistentes
+- Modelos locales
+- Agentes
+
+---
+
+## v2.0 – RAG asincrónico + observabilidad (en desarrollo)
+
+La versión **v2.0** extiende v1 hacia un **escenario enterprise-like**, mostrando cómo escalar el sistema sin perder control.
+
+### Objetivos de v2
+
+- Separar API y procesamiento pesado
+- Introducir procesamiento asincrónico
+- Mejorar observabilidad técnica
+- Mantener el mismo pipeline RAG, pero ejecutado por workers
+
+### Cambios principales
+
+- Procesamiento asincrónico con **Celery**
+- Broker y backend de estado (Redis)
+- Ingesta de documentos fuera del request HTTP
+- Estado de tareas accesible por `job_id`
+- Métricas del pipeline:
+  - latencia
+  - tokens
+  - errores
+- Factory de LLM providers
+- Comparación entre LLM remoto y modelo local (Ollama)
+
+### Arquitectura v2 (alto nivel)
+
+```ascii
+Cliente / Frontend
+↓
+FastAPI (API layer)
+
+validación
+
+creación de job_id
+
+dispatch de tareas
+↓
+Broker (Redis)
+↓
+Celery Worker
+
+extracción
+
+limpieza
+
+chunking
+
+embeddings
+
+inserción en vector store
 ```
 
 ---
 
-## Roadmap técnico (aprendizaje – 2026)
+## v3.0 – MCP + Agent orchestration (exploratorio)
 
-Las siguientes etapas son **mejoras técnicas incrementales**, manteniendo el proyecto como una **API RAG de documentación**.
+La versión **v3.0** explora patrones avanzados de sistemas con IA.
 
-### Importancia alta
+### Objetivo
 
-* Factory para selección de LLM provider
-* Robustecer retry logic
+- Exponer capacidades del sistema como **skills reutilizables**
+- Introducir un **agente mínimo**, no autónomo
 
-  * circuit breaker simple
-  * fallback a modelo local si el proveedor externo falla
+El agente podrá decidir:
 
-### Importancia media
+- responder directamente
+- usar RAG
+- ejecutar una skill específica
 
-* Cost tracking acumulado
+No se busca:
 
-  * por sesión
-  * por usuario
-* Endpoint de métricas
+- autonomía total
+- loops largos
+- sistemas auto-reflexivos
 
-  * requests
-  * latencia
-  * tokens
-  * errores
-* Re-ingesta incremental de documentos
-
-### Importancia baja / experimental
-
-* Endpoint `/rag/reset`
-* Modelo local vía Ollama
-* Evaluación automática con RAGAS
+Esta versión es **experimental y educativa**.
 
 ---
 
@@ -224,58 +236,4 @@ Las siguientes etapas son **mejoras técnicas incrementales**, manteniendo el pr
 git clone https://github.com/SrStamm/ai-toolkit.git
 cd ai-toolkit
 docker-compose up --build
-```
-
----
-
-## Qué demuestra este proyecto
-
-* Diseño de APIs backend orientadas a IA
-* Integración controlada de LLMs en servidores
-* Validación de outputs no determinísticos
-* Implementación manual de RAG
-* Arquitectura desacoplada y mantenible
-* Seguridad y guardrails pensados desde el diseño
-
----
-
-## Estructura del proyecto
-
-```bash
-ai-toolkit/
-├─ app/
-│  ├─ core/
-│  │  ├─ custom_logging.py
-│  │  ├─ llm_client.py
-│  │  ├─ models.py
-│  │  ├─ pricing.py
-│  │  ├─ settings.py
-│  │  └─ llm_providers/
-│  │     └─ mistral_provider.py
-│  ├─ feature/
-│  │  ├─ extraction/
-│  │  │  ├─ exceptions.py
-│  │  │  ├─ factory.py
-│  │  │  ├─ interface.py
-│  │  │  ├─ prompts.py
-│  │  │  ├─ router.py
-│  │  │  ├─ schema.py
-│  │  │  ├─ service.py
-│  │  │  ├─ cleaners/
-│  │  │  ├─ semantic/
-│  │  │  ├─ source/
-│  │  │  └─ tests/
-│  │  └─ rag/
-│  │     ├─ exceptions.py
-│  │     ├─ interfaces.py
-│  │     ├─ prompt.py
-│  │     ├─ router.py
-│  │     ├─ schemas.py
-│  │     ├─ service.py
-│  │     └─ providers/
-│  │        ├─ local_ai.py
-│  │        └─ qdrant_client.py
-│  ├─ tests/
-│  └─ main.py
-└─ front-ai-toolkit/
 ```
