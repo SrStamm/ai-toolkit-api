@@ -16,12 +16,4 @@ class VectorStoreError(Exception):
 
 
 def error_event(message: str, recoverable: bool):
-    return f"data: {
-        json.dumps(
-            {
-                'type': 'error',
-                'message': message,
-                'recoverable': recoverable,
-            }
-        )
-    }"
+    return f"data: {json.dumps({'type': 'error', 'message': message, 'recoverable': recoverable})}\n\n"

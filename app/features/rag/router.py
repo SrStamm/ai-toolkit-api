@@ -1,6 +1,6 @@
 import asyncio
 import json
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import StreamingResponse
 import structlog
 
@@ -68,6 +68,51 @@ async def ingest_document_stream(
                 message="Processing timed out, try a smaller document",
                 recoverable=False,
             )
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.post("/ingest-pdf")
+async def ingest_pdf(
+    file: UploadFile = File(...),
+    source: str = Form(...),
+    domain: str = Form(...),
+    topic: str = Form(...),
+    serv: RAGService = Depends(get_rag_service),
+):
+    if not file.filename.lower().endswith(".pdf"):
+        return {"status": "error", "message": "File must be a PDF"}
+
+    await serv.ingest_pdf_file(file=file, source=source, domain=domain, topic=topic)
+
+    return {"status": "ingested", "filename": file.filename, "source": source}
+
+
+@router.post("/ingest-pdf-stream")
+async def ingest_pdf_stream(
+    file: UploadFile = File(...),
+    source: str = Form(...),
+    domain: str = Form(...),
+    topic: str = Form(...),
+    serv: RAGService = Depends(get_rag_service),
+):
+    # Validación
+    if not file.filename.lower().endswith(".pdf"):
+
+        async def error_gen():
+            yield error_event(message="File must be a PDF", recoverable=False)
+
+        return StreamingResponse(error_gen(), media_type="text/event-stream")
+
+    # Streaming
+    async def generate():
+        try:
+            async for event in serv.ingest_pdf_file_stream(
+                file=file, source=source, domain=domain, topic=topic
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            yield error_event(message=str(e), recoverable=False)
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 

@@ -1,4 +1,4 @@
-import type { Ingestrequest, QueryRequest } from "@/types/rag";
+import type { IngestFile, Ingestrequest, QueryRequest } from "@/types/rag";
 import Fetch from "@/utils/api";
 
 const url = import.meta.env.VITE_URL;
@@ -41,4 +41,11 @@ export const askStreamFetch = async (body: QueryRequest): Promise<Response> => {
   }
 
   return response;
+};
+
+export const ingestFile = async (body: FormData) => {
+  return await fetch(url + "/rag/ingest-pdf-stream", {
+    method: "POST",
+    body: body,
+  });
 };
