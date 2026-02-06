@@ -1,4 +1,4 @@
-import React, { useId, useState } from "react";
+import React, { useState } from "react";
 
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -19,13 +19,7 @@ function IngestionInterface() {
   const [topic, setTopic] = useState("");
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
-  const [fileId, setFileId] = useState("");
   const [file, setFile] = useState<File | null>(null);
-
-  const InputFileDemo = () => {
-    const id = useId();
-    setFileId(id);
-  };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -205,45 +199,47 @@ function IngestionInterface() {
   return (
     <div className="p-4 w-full max-w-sm">
       <Card>
-        <Tabs defaultValue="URL">
-          <CardHeader>
-            <CardTitle>Ingesta de Datos</CardTitle>
-          </CardHeader>
+        <CardHeader>
+          <CardTitle>Ingesta de Datos</CardTitle>
+        </CardHeader>
 
-          <TabsList>
-            <TabsTrigger value="URL">URL</TabsTrigger>
-            <TabsTrigger value="PDF">PDF</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <Tabs defaultValue="URL" className="w-full">
+          <div className="px-6">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="URL">URL</TabsTrigger>
+              <TabsTrigger value="PDF">PDF</TabsTrigger>
+            </TabsList>
+          </div>
 
-        <TabsContent value="URL">
-          <CardContent className="space-y-4">
-            <Textarea
-              placeholder="Pega la URL aquí..."
-              value={url}
-              onChange={onURLChange}
-            />
-            <Button
-              className="w-full"
-              onClick={handleIngestStream}
-              disabled={loading}
-            >
-              Ingerir Documento
-            </Button>
-          </CardContent>
-        </TabsContent>
+          <TabsContent value="URL">
+            <div className="space-y-4 p-6">
+              <Textarea
+                placeholder="Pega la URL aquí..."
+                value={url}
+                onChange={onURLChange}
+              />
+              <Button
+                className="w-full"
+                onClick={handleIngestStream}
+                disabled={loading || !url.startsWith("http")}
+              >
+                Ingerir Documento
+              </Button>
+            </div>
+          </TabsContent>
 
-        <TabsContent value="PDF">
-          <CardContent className="w-full max-w-xs space-y-2">
-            <Label htmlFor={fileId}>File input</Label>
-            <Input
-              id="pdf-upload"
-              type="file"
-              className="text-muted-foreground file:border-input file:text-foreground p-0 pr-3 italic file:mr-3 file:h-full file:border-0 file:border-r file:border-solid file:bg-transparent file:px-3 file:text-sm file:font-medium file:not-italic"
-              accept=".pdf"
-              onClick={InputFileDemo}
-              onChange={onFileChange}
-            />
+          <TabsContent value="PDF" className="space-y-4 p-6">
+            <div className="space-y-2">
+              <Label htmlFor="pdf-upload">Archivo PDF</Label>
+              <Input
+                id="pdf-upload"
+                type="file"
+                accept=".pdf"
+                onChange={onFileChange}
+                className="cursor-pointer"
+                // className="text-muted-foreground file:border-input file:text-foreground p-0 pr-3 italic file:mr-3 file:h-full file:border-0 file:border-r file:border-solid file:bg-transparent file:px-3 file:text-sm file:font-medium file:not-italic"
+              />
+            </div>
             <Button
               className="w-full"
               onClick={handleIngestPDFStream}
@@ -251,30 +247,34 @@ function IngestionInterface() {
             >
               {loading ? "Procesando..." : "Ingerir Fichero"}
             </Button>
-          </CardContent>
-        </TabsContent>
+          </TabsContent>
+        </Tabs>
 
-        <Input
-          placeholder="Dominio..."
-          value={domain}
-          onChange={onChangeDomain}
-        />
+        <CardContent>
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              placeholder="Dominio..."
+              value={domain}
+              onChange={onChangeDomain}
+            />
 
-        <Input placeholder="Topico..." value={topic} onChange={onChangeTopic} />
-
-        {loading ? (
-          <div className="space-y-2 w-full mt-4">
-            <Progress className="h-2 w-full" value={Number(progress)} />
-            <p className="text-sm text-muted-foreground animate-pulse">
-              {`${Number(progress)}%`}
-            </p>
-            <p className="text-sm text-muted-foreground animate-pulse">
-              {statusMessage || "Iniciando ingesta"}
-            </p>
+            <Input
+              placeholder="Topico..."
+              value={topic}
+              onChange={onChangeTopic}
+            />
           </div>
-        ) : (
-          ""
-        )}
+
+          {loading && (
+            <div className="space-y-2 w-full mt-4 border-t pt-4">
+              <Progress className="h-2 w-full" value={Number(progress)} />
+              <div className="flex justify-between text-xs text-muted-foreground animate-pulse">
+                <span>{statusMessage || "Procesando..."}</span>
+                <span>{`${Number(progress)}%`}</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
       </Card>
     </div>
   );
