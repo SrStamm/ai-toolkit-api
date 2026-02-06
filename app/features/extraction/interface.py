@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
+from typing import Optional
+
+from fastapi import UploadFile
 
 
 class SourceInterface(ABC):
     @abstractmethod
-    async def extract(self, url: str) -> str:
+    async def extract(self, url: Optional[str], file: Optional[UploadFile]) -> str:
         pass
 
 
