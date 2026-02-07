@@ -2,7 +2,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from features.rag.jobs.schemas import JobState, JobStatus
+from .schemas import JobState, JobStatus
 from ....core.redis import redis_client
 
 
