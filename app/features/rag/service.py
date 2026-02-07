@@ -383,62 +383,52 @@ class RAGService:
         user_question: str,
         domain: Optional[str] = None,
         topic: Optional[str] = None,
-    ):
+    ) -> QueryResponse:
+        """Synchronous RAG query"""
+        # Retrieve relevant chunks
         query_result = self.query(user_question, domain, topic)
 
         if not query_result:
             self.logger.info(
-                "NO RAG results",
+                "no_rag_results",
                 domain=domain,
                 topic=topic,
                 user_question=user_question,
             )
+            # ✅ Return early with empty response
+            return QueryResponse(
+                answer="I don't have enough information to answer that question.",
+                citations=[],
+                metadata=Metadata(tokens=0, cost=0.0),
+            )
 
+        # Rerank
         rerank_result = self.vector_store.rerank(user_question, query_result)
 
+        # Build context
         context = "\n\n".join(
             f"[{i + 1}]\n{chunk.payload['text']}"
             for i, chunk in enumerate(rerank_result)
         )
 
+        # Generate answer
         prompt = PROMPT_TEMPLATE_CHAT.format(context=context, question=user_question)
-
         response = self.llm_client.generate_content(prompt)
 
+        # Parse answer
         try:
             parsed = LLMAnswer.model_validate_json(response.content)
             answer = parsed.answer
         except ValidationError:
             answer = response.content
 
-        seen = set()
-        citations = []
+        # Build citations
+        citations = self._build_citations(query_result)
 
-        for q in query_result:
-            src = q.payload["source"]
-            if src in seen:
-                continue
-            seen.add(src)
+        # Log usage
+        self._log_llm_usage(response, stream=False)
 
-            citations.append(
-                {
-                    "source": src,
-                    "chunk_index": q.payload["chunk_index"],
-                }
-            )
-
-        self.logger.info(
-            "LLM_CALL",
-            provider=response.provider,
-            model=response.model,
-            prompt_tokens=response.usage.prompt_tokens,
-            completion_tokens=response.usage.completion_tokens,
-            total_tokens=response.usage.total_tokens,
-            input_cost=f"${response.cost.input_cost:.6f}",
-            output_cost=f"${response.cost.output_cost:.6f}",
-            total_cost=f"${response.cost.total_cost:.6f}",
-        )
-
+        # Track costs
         cost_tracker.add(
             session_id, response.usage.total_tokens, response.cost.total_cost
         )
@@ -458,23 +448,27 @@ class RAGService:
         user_question: str,
         domain: Optional[str] = None,
         topic: Optional[str] = None,
-    ):
+    ) -> AsyncIterator[str]:
+        """Streaming RAG query"""
+        # Retrieve
         query_result = self.query(user_question, domain, topic)
 
         if not query_result:
             yield f"data: {json.dumps({'type': 'error', 'content': 'No results found'})}\n\n"
             return
 
+        # Rerank
         rerank_result = self.vector_store.rerank(user_question, query_result)
 
+        # Build context
         context = "\n\n".join(
             f"[{i + 1}]\n{chunk.payload['text']}"
             for i, chunk in enumerate(rerank_result)
         )
 
+        # Generate answer (streaming)
         prompt = PROMPT_TEMPLATE.format(context=context, question=user_question)
 
-        # LLM Stream response
         final_response = None
         async for chunk, response_data in self.llm_client.generate_content_stream(
             prompt
@@ -483,38 +477,29 @@ class RAGService:
                 final_response = response_data
             else:
                 yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
-                await asyncio.sleep(0)
+                await asyncio.sleep(0)  # ✅ Allow other tasks to run
 
-        # Costs logs
+        # Log usage
         if final_response:
-            self.logger.info(
-                "LLM_CALL_STREAM",
-                provider=final_response.provider,
-                model=final_response.model,
-                prompt_tokens=final_response.usage.prompt_tokens,
-                completion_tokens=final_response.usage.completion_tokens,
-                total_tokens=final_response.usage.total_tokens,
-                input_cost=f"${final_response.cost.input_cost:.6f}",
-                output_cost=f"${final_response.cost.output_cost:.6f}",
-                total_cost=f"${final_response.cost.total_cost:.6f}",
-            )
+            self._log_llm_usage(final_response, stream=True)
 
         # Send citations
-        seen = set()
-        citations = []
-        for q in query_result:
-            src = q.payload["source"]
-            if src not in seen:
-                seen.add(src)
-                citations.append(
-                    {"source": src, "chunk_index": q.payload["chunk_index"]}
-                )
-
+        citations = self._build_citations(query_result)
         yield f"data: {json.dumps({'type': 'citations', 'citations': citations})}\n\n"
 
-        # Send final metadata
+        # Send metadata
         if final_response:
-            yield f"data: {json.dumps({'type': 'metadata', 'tokens': final_response.usage.total_tokens, 'cost': final_response.cost.total_cost, 'model': final_response.model, 'estimated': True})}\n\n"
+            yield f"data: {
+                json.dumps(
+                    {
+                        'type': 'metadata',
+                        'tokens': final_response.usage.total_tokens,
+                        'cost': final_response.cost.total_cost,
+                        'model': final_response.model,
+                        'estimated': True,
+                    }
+                )
+            }\n\n"
 
             cost_tracker.add(
                 session_id,
