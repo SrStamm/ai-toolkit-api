@@ -54,8 +54,12 @@ class RAGService:
         Process ingestion with optional progress reporting.
         This eliminates ALL duplication between sync/stream and URL/PDF variants.
         """
-        if progress_callback:
-            await progress_callback(50, "Analyzing chunks...")
+
+        async def report(percent, msg):
+            if progress_callback:
+                await progress_callback(percent, msg)
+
+        await report(50, "Analyzing chunks...")
 
         # Generate IDs
         hash_ids = self._generate_deterministic_ids(chunks, source)
@@ -71,18 +75,14 @@ class RAGService:
             if hash_ids[i] not in ids_in_db
         ]
 
-        if progress_callback:
-            await progress_callback(
-                55, f"Found {len(news)} new, {len(chunks_in_db)} existing chunks"
-            )
+        await report(55, f"Found {len(news)} new, {len(chunks_in_db)} existing chunks")
 
         timestamp = datetime.now(UTC).isoformat()
         points_to_upsert = []
 
         # Process new chunks
         if news:
-            if progress_callback:
-                await progress_callback(60, "Generating embeddings...")
+            await report(60, "Generating embeddings...")
 
             # Timeout calculation
             estimated_time = len(chunks) * 0.5
@@ -105,8 +105,7 @@ class RAGService:
                     f"Vector mismatch: expected {len(texts_to_process)}, got {len(vectors)}"
                 )
 
-            if progress_callback:
-                await progress_callback(80, "Creating vector points...")
+            await report(80, "Creating vector points...")
 
             # Create points
             for (h_id, text, original_idx), vector in zip(news, vectors):
@@ -126,8 +125,7 @@ class RAGService:
 
         # Update existing chunks
         if chunks_in_db:
-            if progress_callback:
-                await progress_callback(85, "Updating existing chunks...")
+            await report(85, "Updating existing chunks...")
 
             for chunk_db in chunks_in_db:
                 point = self.vector_store.create_point(
@@ -142,8 +140,7 @@ class RAGService:
 
         # Insert into vector store
         if points_to_upsert:
-            if progress_callback:
-                await progress_callback(95, "Storing in vector database...")
+            await report(95, "Storing in vector database...")
 
             self.vector_store.insert_vector(points_to_upsert)
 
