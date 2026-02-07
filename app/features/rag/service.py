@@ -282,9 +282,6 @@ class RAGService:
     ) -> AsyncIterator[dict]:
         """Streaming ingestion from URL with progress reporting"""
 
-        async def report_progress(progress: int, step: str):
-            yield {"progress": progress, "step": step}
-
         # Extraction
         yield {"progress": 10, "step": "Extracting content from URL"}
 
@@ -309,7 +306,11 @@ class RAGService:
         yield {"progress": 50, "step": "Analyzing chunks..."}
 
         result = await self._process_ingestion(
-            chunks, source, domain, topic, progress_callback=None
+            chunks=chunks,
+            source=source,
+            domain=domain,
+            topic=topic,
+            progress_callback=None,
         )
 
         yield {"progress": 95, "step": "Finalizing..."}

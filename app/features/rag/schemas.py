@@ -1,9 +1,9 @@
 from typing import Optional
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class IngestRequest(BaseModel):
-    url: HttpUrl
+    url: str
     domain: str = Field(default="general", min_length=1, max_length=50)
     topic: str = Field(default="unknown", min_length=1, max_length=50)
 
