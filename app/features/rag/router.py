@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import StreamingResponse
 import structlog
 
-from ...features.extraction.exceptions import EmptySourceContentError
-from ...features.rag.exceptions import ChunkingError, EmbeddingError, error_event
+from .jobs.celery_tasks import ingest_html_job
+from .jobs.job_service import JobService
+from ..extraction.exceptions import EmptySourceContentError
+from ..rag.exceptions import ChunkingError, EmbeddingError, error_event
 from .schemas import IngestRequest, QueryRequest, QueryResponse
 from .service import RAGService, get_rag_service
 
@@ -164,3 +166,16 @@ async def ask_stream(
             "Connection": "keep-alive",
         },
     )
+
+
+@router.post(
+    "/ingest/job",
+)
+async def ingest_document_job(
+    ingest: IngestRequest, job_serv: JobService = Depends(JobService)
+):
+    job_id = job_serv.create()
+
+    ingest_html_job.delay(job_id, ingest.model_dump())
+
+    return {"status": "queued", "url": ingest.url}

@@ -242,7 +242,9 @@ class RAGService:
     # PUBLIC METHODS - URL Ingestion
     # ================================
 
-    async def ingest_document(self, url, source, domain, topic):
+    async def ingest_document(
+        self, url: str, source: str, domain: str, topic: str, progress_callback=None
+    ):
         """Synchronous ingestion from URL"""
         # Get tools since factory
         extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
@@ -266,7 +268,9 @@ class RAGService:
             raise ChunkingError("No chunks generated")
 
         # Process (no progress callback)
-        result = await self._process_ingestion(chunks, source, topic, domain)
+        result = await self._process_ingestion(
+            chunks, source, topic, domain, progress_callback
+        )
 
         self.logger.info(
             "ingest_completed",
