@@ -38,6 +38,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copiamos código
 COPY . ./app/
 
+ENV PATH="/usr/local/bin:$PATH"
+
 # Usuario no root
 RUN useradd -m appuser
 USER appuser
