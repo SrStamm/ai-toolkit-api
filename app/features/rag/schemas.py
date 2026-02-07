@@ -1,27 +1,43 @@
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
 class IngestRequest(BaseModel):
-    url: str
-    domain: str = "general"
-    topic: str = "unknown"
+    url: HttpUrl
+    domain: str = Field(default="general", min_length=1, max_length=50)
+    topic: str = Field(default="unknown", min_length=1, max_length=50)
+
+    @field_validator("domain", "topic")
+    @classmethod
+    def normalize_lowercase(cls, v: str) -> str:
+        """Normalize to lowercase"""
+        return v.lower().strip()
 
 
 class QueryRequest(BaseModel):
-    text: str = Field(min_length=5)
-    domain: Optional[str] = None
-    topic: Optional[str] = None
+    text: str = Field(min_length=5, max_length=1000)
+    domain: Optional[str] = Field(None, max_length=50)
+    topic: Optional[str] = Field(None, max_length=50)
+
+    @field_validator("domain", "topic")
+    @classmethod
+    def normalize_lowercase(cls, v: Optional[str]) -> Optional[str]:
+        """Normalize to lowercase"""
+        if v:
+            return v.lower().strip()
+        return v
 
 
 class Citation(BaseModel):
     source: str
-    chunk_index: int
+    chunk_index: int = Field(ge=0)
 
 
 class Metadata(BaseModel):
-    tokens: int
-    cost: float
+    tokens: int = Field(ge=0)
+    cost: float = Field(ge=0.0)
+    model: Optional[str] = None
+    provider: Optional[str] = None
 
 
 class QueryResponse(BaseModel):
