@@ -325,20 +325,57 @@ class RAGService:
 
         yield {"progress": 100, "step": "Done!", **result}
 
+    # ============================================================================
+    # PUBLIC METHODS - Query and Chat
+    # ============================================================================
+
     def query(self, text, domain: Optional[str], topic: Optional[str]):
-        # Get vector for text
+        """Retrieve relevant chunks from vector store"""
+        # Generate query embedding
         vector_query = self.embed_service.embed(text, True)
 
-        # Create filter context
+        # Build filter context
         context = FilterContext()
-
         if domain:
             context.domain = domain.lower()
         if topic:
             context.topic = topic.lower()
 
-        # Search in DB using vector
+        # Search
         return self.vector_store.query(vector_query, limit=10, filter_context=context)
+
+    def _build_citations(self, query_result: list) -> list[dict]:
+        """Centralized LLM usage logging"""
+        seen = set()
+        citations = []
+
+        for hit in query_result:
+            src = hit.payload["source"]
+            if src not in seen:
+                seen.add(src)
+                citations.append(
+                    {
+                        "source": src,
+                        "chunk_index": hit.payload["chunk_index"],
+                    }
+                )
+
+        return citations
+
+    def _log_llm_usage(self, response, stream: bool = False):
+        log_type = "LLM_CALL_STREAM" if stream else "LLM_CALL"
+
+        self.logger.info(
+            log_type,
+            provider=response.provider,
+            model=response.model,
+            prompt_tokens=response.usage.prompt_tokens,
+            completion_tokens=response.usage.completion_tokens,
+            total_tokens=response.usage.total_tokens,
+            input_cost=f"${response.cost.input_cost:.6f}",
+            output_cost=f"${response.cost.output_cost:.6f}",
+            total_cost=f"${response.cost.total_cost:.6f}",
+        )
 
     def ask(
         self,
