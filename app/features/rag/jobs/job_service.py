@@ -7,7 +7,7 @@ from ....core.redis import redis_client
 
 
 class JobService:
-    def _get_state(self, job_id: str) -> JobState:
+    def get_state(self, job_id: str) -> JobState:
         json_data_from_redis = redis_client.get(f"job:{job_id}")
 
         if not json_data_from_redis:
@@ -35,19 +35,19 @@ class JobService:
         return job_id
 
     def update_status(self, job_id: str, status: JobStatus):
-        state = self._get_state(job_id)
+        state = self.get_state(job_id)
         state.status = status
         state.updated_at = datetime.now()
         self._set_state(job_id, state.model_dump_json())
 
     def update_progress(self, job_id: str, progress: int):
-        state = self._get_state(job_id)
+        state = self.get_state(job_id)
         state.progress = progress
         state.updated_at = datetime.now()
         self._set_state(job_id, state.model_dump_json())
 
     def fail(self, job_id: str, error: str):
-        state = self._get_state(job_id)
+        state = self.get_state(job_id)
         state.status = JobStatus.failed
         state.error = error
         state.updated_at = datetime.now()

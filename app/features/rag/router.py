@@ -185,4 +185,9 @@ async def ingest_document_job(
     "/job/{job_id}",
 )
 async def get_status_job(job_id: str, job_serv: JobService = Depends(JobService)):
-    return job_serv._get_state(job_id)
+    try:
+        state = job_serv.get_state(job_id)
+
+        return state
+    except ValueError as e:
+        return {"error": str(e)}, 404
