@@ -3,7 +3,7 @@ from datetime import datetime, UTC
 from typing import AsyncIterator, Optional
 import hashlib
 from uuid import UUID, uuid5, NAMESPACE_DNS
-from fastapi import Depends, UploadFile
+from fastapi import UploadFile
 import json
 import structlog
 from pydantic import ValidationError
@@ -12,7 +12,7 @@ from .schemas import LLMAnswer, Metadata, QueryResponse
 from .exceptions import ChunkingError, EmbeddingError
 from .providers.local_ai import EmbeddingService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
-from .providers import qdrant_client
+from .providers.qdrant_client import get_qdrant_store
 from .prompt import PROMPT_TEMPLATE, PROMPT_TEMPLATE_CHAT
 from ..extraction.exceptions import EmptySourceContentError, SourceException
 from ..extraction.factory import SourceFactory
@@ -515,9 +515,13 @@ class RAGService:
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
-def get_rag_service(
-    llm_client: LLMClient = Depends(get_llm_client),
-    vector_store: VectorStoreInterface = Depends(qdrant_client.get_qdrant_store),
-    embed_service: EmbeddingService = Depends(get_embeddign_service),
-):
-    return RAGService(llm_client, vector_store, embed_service)
+def create_rag_service() -> RAGService:
+    return RAGService(
+        llm_client=get_llm_client(),
+        vector_store=get_qdrant_store(),
+        embed_service=get_embeddign_service(),
+    )
+
+
+def get_rag_service() -> RAGService:
+    return create_rag_service()
