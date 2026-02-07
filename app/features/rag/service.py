@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, UTC
-from typing import Optional
+from typing import AsyncIterator, Optional
 import hashlib
 from uuid import UUID, uuid5, NAMESPACE_DNS
 from fastapi import Depends, UploadFile
@@ -32,49 +32,84 @@ class RAGService:
         self.embed_service = embed_service
         self.logger = structlog.get_logger()
 
-    def _prepare_ingestion_points(self, chunks, source, topic, domain):
-        # Retrieve points if exists
+    def _generate_deterministic_ids(self, chunks: list[str], source: str) -> list[str]:
+        """Generate deterministic UUIDs for chunks"""
         hash_ids = set()
 
-        # Hash ids
         hash_ids = [
             hashlib.sha256((chunk + source).encode()).hexdigest() for chunk in chunks
         ]
 
-        # Convert ids to strings
-        hash_ids_deterministic = [
-            str(uuid5(NAMESPACE_DNS, hash_id)) for hash_id in hash_ids
+        return [str(uuid5(NAMESPACE_DNS, hash_id)) for hash_id in hash_ids]
+
+    async def _process_ingestion(
+        self,
+        chunks: list[str],
+        source: str,
+        domain: str,
+        topic: str,
+        progress_callback: Optional[callable] = None,
+    ):
+        """
+        Process ingestion with optional progress reporting.
+        This eliminates ALL duplication between sync/stream and URL/PDF variants.
+        """
+        if progress_callback:
+            await progress_callback(50, "Analyzing chunks...")
+
+        # Generate IDs
+        hash_ids = self._generate_deterministic_ids(chunks, source)
+
+        # Check existing
+        chunks_in_db = self.vector_store.retrieve(hash_ids)
+        ids_in_db = {chunk.id for chunk in chunks_in_db}
+
+        # Separate new vs existing
+        news = [
+            (hash_ids[i], c, i)
+            for i, c in enumerate(chunks)
+            if hash_ids[i] not in ids_in_db
         ]
 
-        # call vector store to check existing chunks
-        chunks_in_db = self.vector_store.retrieve(hash_ids_deterministic)
+        if progress_callback:
+            await progress_callback(
+                55, f"Found {len(news)} new, {len(chunks_in_db)} existing chunks"
+            )
 
-        # Get a set of chunk ids existed
-        ids_in_db = [chunk.id for chunk in chunks_in_db]
-
-        # Filter chunks to process
-        chunks_to_embed = [
-            (hash_ids_deterministic[i], chunk, i)
-            for i, chunk in enumerate(chunks)
-            if hash_ids_deterministic[i] not in ids_in_db
-        ]
-
-        points_to_upsert = []
         timestamp = datetime.now(UTC).isoformat()
+        points_to_upsert = []
 
-        # --- Case A: new chunks ----
-        if chunks_to_embed:
-            # Get texts to process and embed
-            texts_to_process = [item[1] for item in chunks_to_embed]
-            new_vectors = self.embed_service.batch_embed(texts_to_process)
+        # Process new chunks
+        if news:
+            if progress_callback:
+                await progress_callback(60, "Generating embeddings...")
 
-            if len(new_vectors) != len(texts_to_process):
+            # Timeout calculation
+            estimated_time = len(chunks) * 0.5
+            timeout = max(60, estimated_time * 2)
+
+            try:
+                texts_to_process = [item[1] for item in news]
+                vectors = await asyncio.wait_for(
+                    asyncio.to_thread(self.embed_service.batch_embed, texts_to_process),
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError:
+                timeout_minutes = timeout / 60
                 raise EmbeddingError(
-                    f"Vector count mismatch: expected {len(texts_to_process)}, got {len(new_vectors)}"
+                    f"Embedding timed out after {timeout_minutes:.1f} minutes"
                 )
 
-            # Create points and add to upsert list
-            for (h_id, text, original_idx), vector in zip(chunks_to_embed, new_vectors):
+            if len(vectors) != len(texts_to_process):
+                raise EmbeddingError(
+                    f"Vector mismatch: expected {len(texts_to_process)}, got {len(vectors)}"
+                )
+
+            if progress_callback:
+                await progress_callback(80, "Creating vector points...")
+
+            # Create points
+            for (h_id, text, original_idx), vector in zip(news, vectors):
                 point = self.vector_store.create_point(
                     hash_id=h_id,
                     vector=vector,
@@ -89,74 +124,81 @@ class RAGService:
                 )
                 points_to_upsert.append(point)
 
-        # --- Case B: upsert all existing chunks ----
-        for chunk_db in chunks_in_db:
-            point = self.vector_store.create_point(
-                hash_id=chunk_db.id,
-                vector=chunk_db.vector,
-                payload={
-                    **chunk_db.payload,
-                    "ingested_at": timestamp,
-                },
-            )
-            points_to_upsert.append(point)
+        # Update existing chunks
+        if chunks_in_db:
+            if progress_callback:
+                await progress_callback(85, "Updating existing chunks...")
 
-        return points_to_upsert, chunks_to_embed, chunks_in_db, timestamp
+            for chunk_db in chunks_in_db:
+                point = self.vector_store.create_point(
+                    hash_id=chunk_db.id,
+                    vector=chunk_db.vector,
+                    payload={
+                        **chunk_db.payload,
+                        "ingested_at": timestamp,
+                    },
+                )
+                points_to_upsert.append(point)
+
+        # Insert into vector store
+        if points_to_upsert:
+            if progress_callback:
+                await progress_callback(95, "Storing in vector database...")
+
+            self.vector_store.insert_vector(points_to_upsert)
+
+        # Clean old data
+        if chunks_in_db:
+            self.vector_store.delete_old_data(source=source, timestamp=timestamp)
+
+        return {
+            "chunks_processed": len(points_to_upsert),
+            "new": len(news),
+            "updated": len(chunks_in_db),
+        }
+
+    # ================================
+    # PUBLIC METHODS - PDF Ingestion
+    # ================================
 
     async def ingest_pdf_file(
         self, file: UploadFile, source: str, domain: str, topic: str
     ):
-        """Ingesta un archivo PDF"""
-
-        # Obtener extractor y cleaner
+        """Synchronous PDF ingestion"""
         extractor, cleaner = SourceFactory.get_pdf_cleaner()
 
-        # Extraer texto
+        # Extract
         raw_data = await extractor.extract(file)
 
-        # Limpiar
+        # Clean and Chunk
         content = cleaner.clean(raw_data)
-
         if not content.strip():
-            from ..extraction.exceptions import EmptySourceContentError
-
             raise EmptySourceContentError(file.filename)
 
-        # Dividir en chunks
         chunks = cleaner.chunk(content)
-
         if not chunks:
-            from .exceptions import ChunkingError
-
             raise ChunkingError("No chunks generated")
 
-        # Preparar puntos
-        points_to_upsert, chunks_to_embed, chunks_in_db, timestamp = (
-            self._prepare_ingestion_points(chunks, source, topic, domain)
+        # Process
+        result = await self._process_ingestion(chunks, source, topic, domain)
+
+        self.logger.info(
+            "pdf_ingest_completed",
+            filename=file.filename,
+            source=source,
+            domain=domain,
+            topic=topic,
+            **result,
         )
-
-        # Insertar
-        if points_to_upsert:
-            self.vector_store.insert_vector(points_to_upsert)
-            self.logger.info(
-                "pdf_ingest_completed",
-                filename=file.filename,
-                source=source,
-                chunks_processed=len(points_to_upsert),
-            )
-
-        if chunks_in_db:
-            self.vector_store.delete_old_data(source=source, timestamp=timestamp)
 
     async def ingest_pdf_file_stream(
         self, file: UploadFile, source: str, domain: str, topic: str
     ):
-        """
-        Versión con streaming para mostrar progreso en la UI
-        """
+        """Streaming PDF ingestion with progress reporting"""
 
-        # Extracting
+        # Extraction
         yield {"progress": 10, "step": "Extracting text from PDF"}
+
         extractor, cleaner = SourceFactory.get_pdf_cleaner()
 
         try:
@@ -169,125 +211,39 @@ class RAGService:
 
         # Cleaning
         yield {"progress": 30, "step": "Cleaning and processing PDF content"}
+
         content = cleaner.clean(raw_data)
-
         if not content.strip():
-            from ..extraction.exceptions import EmptySourceContentError
-
             raise EmptySourceContentError(file.filename)
 
         chunks = cleaner.chunk(content)
-
         if not chunks:
-            from .exceptions import ChunkingError
-
             raise ChunkingError("No chunks generated")
 
-        # Análisis de chunks existentes
-        hashes = [
-            hashlib.sha256((chunk + source).encode()).hexdigest() for chunk in chunks
-        ]
-        all_uuid_ids = [str(uuid5(NAMESPACE_DNS, h)) for h in hashes]
-        chunks_in_db = self.vector_store.retrieve(all_uuid_ids)
-        ids_in_db = [chunk.id for chunk in chunks_in_db]
+        # Process with progress reporting
+        yield {"progress": 50, "step": "Processing chunks..."}
 
-        news = [
-            (all_uuid_ids[i], c, i)
-            for i, c in enumerate(chunks)
-            if all_uuid_ids[i] not in ids_in_db
-        ]
+        result = await self._process_ingestion(chunks, source, domain, topic)
 
-        yield {
-            "progress": 50,
-            "step": f"Analysis complete: {len(news)} new chunks, {len(chunks_in_db)} existing.",
-        }
+        yield {"progress": 95, "step": "Finalizing..."}
 
-        timestamp = datetime.now(UTC).isoformat()
-        points_to_upsert = []
+        self.logger.info(
+            "pdf_ingest_completed",
+            filename=file.filename,
+            source=source,
+            domain=domain,
+            topic=topic,
+            **result,
+        )
 
-        if news:
-            yield {"progress": 60, "step": "Generating embeddings for PDF chunks..."}
+        yield {"progress": 100, "step": "Done!", **result}
 
-            estimated_time = len(chunks) * 0.5
-            timeout = max(60, estimated_time * 2)
-
-            try:
-                texts_to_process = [item[1] for item in news]
-                vectors = await asyncio.wait_for(
-                    asyncio.to_thread(self.embed_service.batch_embed, texts_to_process),
-                    timeout=timeout,
-                )
-            except asyncio.TimeoutError:
-                from .exceptions import EmbeddingError
-
-                timeout_minutes = timeout / 60
-                raise EmbeddingError(
-                    f"Embedding timed out after {timeout_minutes:.1f} minutes"
-                )
-
-            if len(vectors) != len(texts_to_process):
-                from .exceptions import EmbeddingError
-
-                raise EmbeddingError(
-                    f"Vector count mismatch: expected {len(texts_to_process)}, got {len(vectors)}"
-                )
-
-            # Creating points
-            yield {"progress": 80, "step": "Creating vector points"}
-
-            for (h_id, text, original_idx), vector in zip(news, vectors):
-                point = self.vector_store.create_point(
-                    hash_id=h_id,
-                    vector=vector,
-                    payload={
-                        "text": text,
-                        "source": source,
-                        "domain": domain.lower(),
-                        "topic": topic.lower(),
-                        "chunk_index": original_idx,
-                        "ingested_at": timestamp,
-                    },
-                )
-                points_to_upsert.append(point)
-
-        if chunks_in_db:
-            yield {
-                "progress": 85,
-                "step": "Updating timestamps for existing content...",
-            }
-
-            for chunk_db in chunks_in_db:
-                point = self.vector_store.create_point(
-                    hash_id=chunk_db.id,
-                    vector=chunk_db.vector,
-                    payload={
-                        **chunk_db.payload,
-                        "ingested_at": timestamp,
-                    },
-                )
-                points_to_upsert.append(point)
-
-            self.vector_store.delete_old_data(source=source, timestamp=timestamp)
-
-        # Inserting
-        if points_to_upsert:
-            yield {"progress": 95, "step": "Storing in vector database"}
-            self.vector_store.insert_vector(points_to_upsert)
-
-            self.logger.info(
-                "pdf_ingest_completed",
-                filename=file.filename,
-                source=source,
-                domain=domain,
-                topic=topic,
-                chunks_processed=len(points_to_upsert),
-                new=len(news),
-                updated=len(chunks_in_db),
-            )
-
-        yield {"progress": 100, "step": "Done!", "chunks_processed": len(chunks)}
+    # ================================
+    # PUBLIC METHODS - URL Ingestion
+    # ================================
 
     async def ingest_document(self, url, source, domain, topic):
+        """Synchronous ingestion from URL"""
         # Get tools since factory
         extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
 
@@ -300,240 +256,117 @@ class RAGService:
             )
             raise
 
-        # Clean content
+        # Clean and chunk
         content = cleaner.clean(raw_data)
-
         if not content.strip():
             raise EmptySourceContentError(url)
 
-        # Chunks content
         chunks = cleaner.chunk(content)
-
         if not chunks:
             raise ChunkingError("No chunks generated")
 
-        # call function to prepare points
-        points_to_upsert, chunks_to_embed, chunks_in_db, ingestion_timestamp = (
-            self._prepare_ingestion_points(chunks, source, topic, domain)
+        # Process (no progress callback)
+        result = await self._process_ingestion(chunks, source, topic, domain)
+
+        self.logger.info(
+            "ingest_completed",
+            url=url,
+            source=source,
+            domain=domain,
+            topic=topic,
+            **result,
         )
 
-        # Insert points on vector database
-        if points_to_upsert:
-            self.vector_store.insert_vector(points_to_upsert)
-            self.logger.info(
-                "ingest_completed",
-                url=url,
-                source=source,
-                domain=domain,
-                topic=topic,
-                chunks_processed=len(points_to_upsert),
-                new=len(chunks_to_embed),
-                updated=len(chunks_in_db),
-            )
+    async def ingest_document_stream(
+        self, url: str, source: str, domain: str, topic: str
+    ) -> AsyncIterator[dict]:
+        """Streaming ingestion from URL with progress reporting"""
 
-        if chunks_in_db:
-            self.vector_store.delete_old_data(
-                source=source, timestamp=ingestion_timestamp
-            )
+        async def report_progress(progress: int, step: str):
+            yield {"progress": progress, "step": step}
 
-    async def ingest_document_stream(self, url, source, domain, topic):
-        """Generator which broadcast progress events"""
-
-        # Extracting
+        # Extraction
         yield {"progress": 10, "step": "Extracting content from URL"}
-        extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
 
+        extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
         try:
             raw_data = await extractor.extract(url)
         except SourceException as e:
-            self.logger.warning(
-                "Source extraction failed", error=str(e), url=url, source=source
-            )
+            self.logger.warning("Source extraction failed", error=str(e), url=url)
             raise
 
         # Cleaning
         yield {"progress": 30, "step": "Cleaning and processing content"}
-        content = cleaner.clean(raw_data)
 
+        content = cleaner.clean(raw_data)
         if not content.strip():
             raise EmptySourceContentError(url)
 
         chunks = cleaner.chunk(content)
-
         if not chunks:
             raise ChunkingError("No chunks generated")
 
-        # Retrieve points if exists
-        hashes = [
-            hashlib.sha256((chunk + source).encode()).hexdigest() for chunk in chunks
-        ]
+        yield {"progress": 50, "step": "Analyzing chunks..."}
 
-        all_uuid_ids = [str(uuid5(NAMESPACE_DNS, h)) for h in hashes]
+        result = await self._process_ingestion(
+            chunks, source, domain, topic, progress_callback=None
+        )
 
-        chunks_in_db = self.vector_store.retrieve(all_uuid_ids)
-        ids_in_db = [chunk.id for chunk in chunks_in_db]
+        yield {"progress": 95, "step": "Finalizing..."}
 
-        # Separate
-        news = [
-            (all_uuid_ids[i], c, i)
-            for i, c in enumerate(chunks)
-            if all_uuid_ids[i] not in ids_in_db
-        ]
+        self.logger.info(
+            "ingest_completed",
+            url=url,
+            source=source,
+            domain=domain,
+            topic=topic,
+            **result,
+        )
 
-        yield {
-            "progress": 50,
-            "step": f"Analysis complete: {len(news)} new chunks, {len(chunks_in_db)} existing.",
-        }
+        yield {"progress": 100, "step": "Done!", **result}
 
-        timestamp = datetime.now(UTC).isoformat()
-        points_to_upsert = []
-
-        if news:
-            yield {"progress": 60, "step": "Generating embeddings for new content..."}
-
-            # Run a function in a separate thread
-            estimated_time = len(chunks) * 0.5
-            timeout = max(60, estimated_time * 2)
-
-            try:
-                texts_to_process = [item[1] for item in news]
-                vectors = await asyncio.wait_for(
-                    asyncio.to_thread(self.embed_service.batch_embed, texts_to_process),
-                    timeout=timeout,
-                )
-            except asyncio.TimeoutError:
-                timeout_minutes = timeout / 60
-                raise EmbeddingError(
-                    f"Embedding timed out after {timeout_minutes:.1f} minutes"
-                )
-
-            if len(vectors) != len(texts_to_process):
-                raise EmbeddingError(
-                    f"Vector count mismatch: expected {len(texts_to_process)}, got {len(vectors)}"
-                )
-
-            # Creating points
-            yield {"progress": 80, "step": "Creating vector points"}
-
-            for (h_id, text, original_idx), vector in zip(news, vectors):
-                point = self.vector_store.create_point(
-                    hash_id=h_id,
-                    vector=vector,
-                    payload={
-                        "text": text,
-                        "source": source,
-                        "domain": domain.lower(),
-                        "topic": topic.lower(),
-                        "chunk_index": original_idx,
-                        "ingested_at": timestamp,
-                    },
-                )
-                points_to_upsert.append(point)
-
-        if chunks_in_db:
-            yield {
-                "progress": 85,
-                "step": "Updating timestamps for existing content...",
-            }
-
-            for chunk_db in chunks_in_db:
-                point = self.vector_store.create_point(
-                    hash_id=chunk_db.id,
-                    vector=chunk_db.vector,
-                    payload={
-                        **chunk_db.payload,
-                        "ingested_at": timestamp,
-                    },
-                )
-                points_to_upsert.append(point)
-
-            self.vector_store.delete_old_data(source=source, timestamp=timestamp)
-
-        # Inserting
-        if points_to_upsert:
-            yield {"progress": 95, "step": "Storing in vector database"}
-            self.vector_store.insert_vector(points_to_upsert)
-
-            self.logger.info(
-                "ingest_completed",
-                url=url,
-                source=source,
-                domain=domain,
-                topic=topic,
-                chunks_processed=len(points_to_upsert),
-                new=len(news),
-                updated=len(chunks_in_db),
-            )
-
-        yield {"progress": 100, "step": "Done!", "chunks_processed": len(chunks)}
+    # ============================================================================
+    # PUBLIC METHODS - Query and Chat
+    # ============================================================================
 
     def query(self, text, domain: Optional[str], topic: Optional[str]):
-        # Get vector for text
+        """Retrieve relevant chunks from vector store"""
+        # Generate query embedding
         vector_query = self.embed_service.embed(text, True)
 
-        # Create filter context
+        # Build filter context
         context = FilterContext()
-
         if domain:
             context.domain = domain.lower()
         if topic:
             context.topic = topic.lower()
 
-        # Search in DB using vector
+        # Search
         return self.vector_store.query(vector_query, limit=10, filter_context=context)
 
-    def ask(
-        self,
-        session_id: UUID,
-        user_question: str,
-        domain: Optional[str] = None,
-        topic: Optional[str] = None,
-    ):
-        query_result = self.query(user_question, domain, topic)
-
-        if not query_result:
-            self.logger.info(
-                "NO RAG results",
-                domain=domain,
-                topic=topic,
-                user_question=user_question,
-            )
-
-        rerank_result = self.vector_store.rerank(user_question, query_result)
-
-        context = "\n\n".join(
-            f"[{i + 1}]\n{chunk.payload['text']}"
-            for i, chunk in enumerate(rerank_result)
-        )
-
-        prompt = PROMPT_TEMPLATE_CHAT.format(context=context, question=user_question)
-
-        response = self.llm_client.generate_content(prompt)
-
-        try:
-            parsed = LLMAnswer.model_validate_json(response.content)
-            answer = parsed.answer
-        except ValidationError:
-            answer = response.content
-
+    def _build_citations(self, query_result: list) -> list[dict]:
+        """Centralized LLM usage logging"""
         seen = set()
         citations = []
 
-        for q in query_result:
-            src = q.payload["source"]
-            if src in seen:
-                continue
-            seen.add(src)
+        for hit in query_result:
+            src = hit.payload["source"]
+            if src not in seen:
+                seen.add(src)
+                citations.append(
+                    {
+                        "source": src,
+                        "chunk_index": hit.payload["chunk_index"],
+                    }
+                )
 
-            citations.append(
-                {
-                    "source": src,
-                    "chunk_index": q.payload["chunk_index"],
-                }
-            )
+        return citations
+
+    def _log_llm_usage(self, response, stream: bool = False):
+        log_type = "LLM_CALL_STREAM" if stream else "LLM_CALL"
 
         self.logger.info(
-            "LLM_CALL",
+            log_type,
             provider=response.provider,
             model=response.model,
             prompt_tokens=response.usage.prompt_tokens,
@@ -544,6 +377,58 @@ class RAGService:
             total_cost=f"${response.cost.total_cost:.6f}",
         )
 
+    def ask(
+        self,
+        session_id: UUID,
+        user_question: str,
+        domain: Optional[str] = None,
+        topic: Optional[str] = None,
+    ) -> QueryResponse:
+        """Synchronous RAG query"""
+        # Retrieve relevant chunks
+        query_result = self.query(user_question, domain, topic)
+
+        if not query_result:
+            self.logger.info(
+                "no_rag_results",
+                domain=domain,
+                topic=topic,
+                user_question=user_question,
+            )
+            # ✅ Return early with empty response
+            return QueryResponse(
+                answer="I don't have enough information to answer that question.",
+                citations=[],
+                metadata=Metadata(tokens=0, cost=0.0),
+            )
+
+        # Rerank
+        rerank_result = self.vector_store.rerank(user_question, query_result)
+
+        # Build context
+        context = "\n\n".join(
+            f"[{i + 1}]\n{chunk.payload['text']}"
+            for i, chunk in enumerate(rerank_result)
+        )
+
+        # Generate answer
+        prompt = PROMPT_TEMPLATE_CHAT.format(context=context, question=user_question)
+        response = self.llm_client.generate_content(prompt)
+
+        # Parse answer
+        try:
+            parsed = LLMAnswer.model_validate_json(response.content)
+            answer = parsed.answer
+        except ValidationError:
+            answer = response.content
+
+        # Build citations
+        citations = self._build_citations(query_result)
+
+        # Log usage
+        self._log_llm_usage(response, stream=False)
+
+        # Track costs
         cost_tracker.add(
             session_id, response.usage.total_tokens, response.cost.total_cost
         )
@@ -563,23 +448,27 @@ class RAGService:
         user_question: str,
         domain: Optional[str] = None,
         topic: Optional[str] = None,
-    ):
+    ) -> AsyncIterator[str]:
+        """Streaming RAG query"""
+        # Retrieve
         query_result = self.query(user_question, domain, topic)
 
         if not query_result:
             yield f"data: {json.dumps({'type': 'error', 'content': 'No results found'})}\n\n"
             return
 
+        # Rerank
         rerank_result = self.vector_store.rerank(user_question, query_result)
 
+        # Build context
         context = "\n\n".join(
             f"[{i + 1}]\n{chunk.payload['text']}"
             for i, chunk in enumerate(rerank_result)
         )
 
+        # Generate answer (streaming)
         prompt = PROMPT_TEMPLATE.format(context=context, question=user_question)
 
-        # LLM Stream response
         final_response = None
         async for chunk, response_data in self.llm_client.generate_content_stream(
             prompt
@@ -588,38 +477,29 @@ class RAGService:
                 final_response = response_data
             else:
                 yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
-                await asyncio.sleep(0)
+                await asyncio.sleep(0)  # ✅ Allow other tasks to run
 
-        # Costs logs
+        # Log usage
         if final_response:
-            self.logger.info(
-                "LLM_CALL_STREAM",
-                provider=final_response.provider,
-                model=final_response.model,
-                prompt_tokens=final_response.usage.prompt_tokens,
-                completion_tokens=final_response.usage.completion_tokens,
-                total_tokens=final_response.usage.total_tokens,
-                input_cost=f"${final_response.cost.input_cost:.6f}",
-                output_cost=f"${final_response.cost.output_cost:.6f}",
-                total_cost=f"${final_response.cost.total_cost:.6f}",
-            )
+            self._log_llm_usage(final_response, stream=True)
 
         # Send citations
-        seen = set()
-        citations = []
-        for q in query_result:
-            src = q.payload["source"]
-            if src not in seen:
-                seen.add(src)
-                citations.append(
-                    {"source": src, "chunk_index": q.payload["chunk_index"]}
-                )
-
+        citations = self._build_citations(query_result)
         yield f"data: {json.dumps({'type': 'citations', 'citations': citations})}\n\n"
 
-        # Send final metadata
+        # Send metadata
         if final_response:
-            yield f"data: {json.dumps({'type': 'metadata', 'tokens': final_response.usage.total_tokens, 'cost': final_response.cost.total_cost, 'model': final_response.model, 'estimated': True})}\n\n"
+            yield f"data: {
+                json.dumps(
+                    {
+                        'type': 'metadata',
+                        'tokens': final_response.usage.total_tokens,
+                        'cost': final_response.cost.total_cost,
+                        'model': final_response.model,
+                        'estimated': True,
+                    }
+                )
+            }\n\n"
 
             cost_tracker.add(
                 session_id,
