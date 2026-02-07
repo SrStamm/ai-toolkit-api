@@ -178,4 +178,11 @@ async def ingest_document_job(
 
     ingest_html_job.delay(job_id, ingest.model_dump())
 
-    return {"status": "queued", "url": ingest.url}
+    return {"status": "queued", "url": ingest.url, "job_id": job_id}
+
+
+@router.get(
+    "/job/{job_id}",
+)
+async def get_status_job(job_id: str, job_serv: JobService = Depends(JobService)):
+    return job_serv._get_state(job_id)
