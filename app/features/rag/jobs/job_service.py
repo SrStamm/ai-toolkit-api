@@ -1,5 +1,6 @@
 # state and lifecycle of jobs
 from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
 from .schemas import JobState, JobStatus
@@ -40,9 +41,10 @@ class JobService:
         state.updated_at = datetime.now()
         self._set_state(job_id, state.model_dump_json())
 
-    def update_progress(self, job_id: str, progress: int):
+    def update_progress(self, job_id: str, progress: int, step: str | None = None):
         state = self.get_state(job_id)
         state.progress = progress
+        state.step = step
         state.updated_at = datetime.now()
         self._set_state(job_id, state.model_dump_json())
 

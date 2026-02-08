@@ -19,6 +19,7 @@ class JobCreate(BaseModel):
 class JobState(BaseModel):
     job_id: str
     status: JobStatus
+    step: Optional[str] = None
     progress: Optional[int] = None
     error: Optional[str] = None
     created_at: datetime

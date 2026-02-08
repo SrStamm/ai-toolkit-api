@@ -27,7 +27,7 @@ def ingest_html_job(self, job_id: str, ingest_data: dict):
             logger.info(
                 "ingest_job_progress", job_id=job_id, progress=percent, step=message
             )
-            job_service.update_progress(job_id, percent)
+            job_service.update_progress(job_id, percent, message)
 
         asyncio.run(
             rag_service.ingest_document(
