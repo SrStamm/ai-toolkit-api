@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -7,8 +7,7 @@ import { Textarea } from "./ui/textarea";
 import { Input } from "./ui/input";
 import CustomizedToast from "./toast";
 
-import type { Ingestrequest } from "@/types/rag";
-import { ingestFile, ingestURLStream } from "@/services/ragServices";
+import { getJobStatus, ingestFile, ingestURLJob } from "@/services/ragServices";
 import { Label } from "./ui/label.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs.tsx";
 
@@ -20,6 +19,7 @@ function IngestionInterface() {
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [jobId, setActiveJobId] = useState<string | null>(null);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -39,88 +39,82 @@ function IngestionInterface() {
     setUrl(e.target.value);
   };
 
-  // --- Function to ingest without stream ---
+  useEffect(() => {
+    let timer: number;
 
-  // const handleIngest = async () => {
-  //   try {
-  //     setLoading(true);
-
-  //     new URL(url);
-
-  //     const body: Ingestrequest = {
-  //       url: url,
-  //       domain: typeof domain === "string" ? domain : undefined,
-  //       topic: typeof topic === "string" ? topic : undefined,
-  //     };
-
-  //     await ingestURLFetch(body);
-
-  //     CustomizedToast({ type: "info", msg: "Document consumed successfully" });
-  //   } catch (err) {
-  //     const msg = err instanceof Error ? err.message : "Unknown error";
-  //     CustomizedToast({ type: "error", msg: msg });
-  //   } finally {
-  //     setLoading(false);
-  //     setUrl("");
-  //   }
-  // };
-
-  const handleIngestStream = async () => {
-    try {
-      setLoading(true);
-
-      new URL(url);
-
-      const body: Ingestrequest = {
-        url: url,
-        domain: typeof domain === "string" ? domain : undefined,
-        topic: typeof topic === "string" ? topic : undefined,
-      };
+    const poll = async () => {
+      if (!jobId) return;
 
       try {
-        const response = await ingestURLStream(body);
+        const data = await getJobStatus(jobId);
 
-        const reader = response.body!.getReader();
-        const decoder = new TextDecoder();
+        let nextMessage = "";
 
-        while (true) {
-          const { done, value } = await reader.read();
+        if (data.status === "completed") nextMessage = "¡Completado!";
+        else if (data.status === "running")
+          nextMessage = data.step || "Procesando...";
+        else nextMessage = data.status;
 
-          if (done) {
-            break;
-          }
+        setProgress(data.progress);
+        setStatusMessage(nextMessage);
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n\n").filter((line) => line.trim());
+        console.log(
+          "Estado actual del Job:",
+          data.progress,
+          "% -",
+          nextMessage,
+        );
+        console.log("data", data);
 
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = JSON.parse(line.slice(6));
+        if (data.status === "running") setStatusMessage("Procesando...");
 
-              if (data.error) {
-                CustomizedToast({ type: "error", msg: data.error });
-                break;
-              }
-
-              setProgress(data.progress);
-              setStatusMessage(data.step);
-
-              if (data.progress === 100) {
-                CustomizedToast({
-                  type: "success",
-                  msg: `Processed ${data.chunks_processed} chunks`,
-                });
-                break;
-              }
-            }
-          }
+        if (data.status === "completed") {
+          setLoading(false);
+          setActiveJobId(null);
+          setProgress(100);
+          CustomizedToast({
+            type: "success",
+            msg: "¡Ingesta completada con éxito!",
+          });
+        } else if (data.status === "failed") {
+          setLoading(false);
+          setActiveJobId(null);
+          CustomizedToast({
+            type: "error",
+            msg: `Error: ${data.error || "Desconocido"}`,
+          });
+        } else {
+          // Sigue preguntando cada 2 segundos
+          timer = setTimeout(poll, 500);
         }
       } catch (error) {
-        CustomizedToast({ type: "error", msg: String(error) });
+        setLoading(false);
+        console.error("Polling error:", error);
       }
-    } finally {
+    };
+
+    if (jobId) {
+      poll();
+    }
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [jobId]);
+
+  const handleIngestJob = async () => {
+    if (!url) return;
+    setLoading(true);
+    setProgress(0);
+
+    try {
+      const response = await ingestURLJob({ url, domain, topic });
+      if (response.job_id) {
+        setActiveJobId(response.job_id);
+      }
+    } catch {
       setLoading(false);
-      setUrl("");
+      CustomizedToast({ type: "error", msg: "No se pudo iniciar la tarea" });
     }
   };
 
@@ -220,7 +214,7 @@ function IngestionInterface() {
               />
               <Button
                 className="w-full"
-                onClick={handleIngestStream}
+                onClick={handleIngestJob}
                 disabled={loading || !url.startsWith("http")}
               >
                 Ingerir Documento
@@ -237,7 +231,6 @@ function IngestionInterface() {
                 accept=".pdf"
                 onChange={onFileChange}
                 className="cursor-pointer"
-                // className="text-muted-foreground file:border-input file:text-foreground p-0 pr-3 italic file:mr-3 file:h-full file:border-0 file:border-r file:border-solid file:bg-transparent file:px-3 file:text-sm file:font-medium file:not-italic"
               />
             </div>
             <Button

@@ -49,3 +49,11 @@ export const ingestFile = async (body: FormData) => {
     body: body,
   });
 };
+
+export const getJobStatus = async (jobId: string) => {
+  return await Fetch({ path: `/rag/job/${jobId}`, method: "GET" });
+};
+
+export const ingestURLJob = async (body: Ingestrequest) => {
+  return await Fetch({ path: "/rag/ingest/job", method: "POST", body: body });
+};
