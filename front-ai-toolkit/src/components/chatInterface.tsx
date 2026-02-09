@@ -128,9 +128,9 @@ function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-col h-full p-2 md:p-4 w-full">
+    <div className="flex flex-col h-full p-2 md:p-4 w-full overflow-hidden">
       {/* Area de mensajes */}
-      <div className="flex-1 overflow-y-auto space-y-4 mb-4 p-4 border rounded-lg">
+      <div className="flex-1 overflow-y-auto space-y-4 mb-4 p-4 border rounded-lg min-h-0">
         {messages.map((msg, index) => (
           <div
             key={index}
@@ -192,7 +192,7 @@ function ChatInterface() {
       </div>
 
       {/* Input de Pregunta */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 shrink-0 bg-background pt-2">
         <div className="flex-col flex-1 space-y-2">
           <Input
             placeholder="Haz una pregunta sobre los documentos..."
@@ -200,7 +200,7 @@ function ChatInterface() {
             onChange={onChangeQuery}
           />
 
-          <div className="flex gap-2 space-x-1">
+          <div className="flex gap-2 ">
             <Input
               placeholder="Dominio..."
               value={domain}
