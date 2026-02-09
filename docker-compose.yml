@@ -30,12 +30,14 @@ services:
     env_file: .env
     volumes:
       - .:/backend
+      - shared_data:/backend/api_data
 
   api:
     build: ./app
     volumes:
       - hf_cache:/root/.cache
       - .:/backend
+      - shared_data:/backend/api_data
     env_file:
       - .env
     ports:
@@ -65,3 +67,4 @@ volumes:
   qdrant_data:
   hf_cache:
   redis_data_dev:
+  shared_data:
