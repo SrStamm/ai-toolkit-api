@@ -26,6 +26,11 @@ FROM python:3.12-slim AS production
 
 WORKDIR /backend
 
+# Crea el usuario y directorio primero
+RUN useradd -m appuser && \
+    mkdir -p /backend/api_data && \
+    chown -R appuser:appuser /backend/api_data
+
 # Evita warnings
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -36,10 +41,11 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copiamos código
-COPY . ./app/
+COPY --chown=appuser:appuser . ./app/
+
+ENV PATH="/usr/local/bin:$PATH"
 
 # Usuario no root
-RUN useradd -m appuser
 USER appuser
 
 EXPOSE 8000

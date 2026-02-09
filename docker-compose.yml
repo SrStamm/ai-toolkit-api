@@ -10,11 +10,34 @@ services:
     mem_limit: 512m
     mem_reservation: 256m
 
+  redis:
+    image: redis/redis-stack:latest
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redis_data_dev:/var/lib/redis/data
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+    env_file: .env
+
+  celery:
+    build: ./app
+    command: celery -A app.core.celery_app worker --loglevel=info
+    depends_on:
+      - redis
+    env_file: .env
+    volumes:
+      - .:/backend
+      - shared_data:/backend/api_data
+
   api:
     build: ./app
     volumes:
       - hf_cache:/root/.cache
       - .:/backend
+      - shared_data:/backend/api_data
     env_file:
       - .env
     ports:
@@ -43,3 +66,5 @@ services:
 volumes:
   qdrant_data:
   hf_cache:
+  redis_data_dev:
+  shared_data:

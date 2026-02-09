@@ -131,7 +131,7 @@ class QdrantStore(VectorStoreInterface):
         return search_result[:3]
 
     @time_response
-    def delete_old_data(self, source, timestamp):
+    def delete_old_data(self, source):
         """
         Delete old chunks with specific source.
         Useful for re-ingest and keep only the most recent version
@@ -142,9 +142,6 @@ class QdrantStore(VectorStoreInterface):
                 filter=Filter(
                     must=[
                         FieldCondition(key="source", match=MatchValue(value=source)),
-                        FieldCondition(
-                            key="ingested_at", range=DatetimeRange(lt=timestamp)
-                        ),
                     ]
                 )
             ),

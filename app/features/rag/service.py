@@ -3,7 +3,7 @@ from datetime import datetime, UTC
 from typing import AsyncIterator, Optional
 import hashlib
 from uuid import UUID, uuid5, NAMESPACE_DNS
-from fastapi import Depends, UploadFile
+from fastapi import UploadFile
 import json
 import structlog
 from pydantic import ValidationError
@@ -12,7 +12,7 @@ from .schemas import LLMAnswer, Metadata, QueryResponse
 from .exceptions import ChunkingError, EmbeddingError
 from .providers.local_ai import EmbeddingService, get_embeddign_service
 from .interfaces import FilterContext, VectorStoreInterface
-from .providers import qdrant_client
+from .providers.qdrant_client import get_qdrant_store
 from .prompt import PROMPT_TEMPLATE, PROMPT_TEMPLATE_CHAT
 from ..extraction.exceptions import EmptySourceContentError, SourceException
 from ..extraction.factory import SourceFactory
@@ -54,8 +54,12 @@ class RAGService:
         Process ingestion with optional progress reporting.
         This eliminates ALL duplication between sync/stream and URL/PDF variants.
         """
-        if progress_callback:
-            await progress_callback(50, "Analyzing chunks...")
+
+        async def report(percent, msg):
+            if progress_callback:
+                await progress_callback(percent, msg)
+
+        await report(50, "Analyzing chunks...")
 
         # Generate IDs
         hash_ids = self._generate_deterministic_ids(chunks, source)
@@ -71,18 +75,14 @@ class RAGService:
             if hash_ids[i] not in ids_in_db
         ]
 
-        if progress_callback:
-            await progress_callback(
-                55, f"Found {len(news)} new, {len(chunks_in_db)} existing chunks"
-            )
+        await report(55, f"Found {len(news)} new, {len(chunks_in_db)} existing chunks")
 
         timestamp = datetime.now(UTC).isoformat()
         points_to_upsert = []
 
         # Process new chunks
         if news:
-            if progress_callback:
-                await progress_callback(60, "Generating embeddings...")
+            await report(60, "Generating embeddings...")
 
             # Timeout calculation
             estimated_time = len(chunks) * 0.5
@@ -105,8 +105,7 @@ class RAGService:
                     f"Vector mismatch: expected {len(texts_to_process)}, got {len(vectors)}"
                 )
 
-            if progress_callback:
-                await progress_callback(80, "Creating vector points...")
+            await report(80, "Creating vector points...")
 
             # Create points
             for (h_id, text, original_idx), vector in zip(news, vectors):
@@ -126,8 +125,7 @@ class RAGService:
 
         # Update existing chunks
         if chunks_in_db:
-            if progress_callback:
-                await progress_callback(85, "Updating existing chunks...")
+            await report(85, "Updating existing chunks...")
 
             for chunk_db in chunks_in_db:
                 point = self.vector_store.create_point(
@@ -142,14 +140,13 @@ class RAGService:
 
         # Insert into vector store
         if points_to_upsert:
-            if progress_callback:
-                await progress_callback(95, "Storing in vector database...")
+            await report(95, "Storing in vector database...")
 
             self.vector_store.insert_vector(points_to_upsert)
 
         # Clean old data
         if chunks_in_db:
-            self.vector_store.delete_old_data(source=source, timestamp=timestamp)
+            self.vector_store.delete_old_data(source=source)
 
         return {
             "chunks_processed": len(points_to_upsert),
@@ -162,7 +159,7 @@ class RAGService:
     # ================================
 
     async def ingest_pdf_file(
-        self, file: UploadFile, source: str, domain: str, topic: str
+        self, file: UploadFile, source: str, domain: str, topic: str, progress_callback=None
     ):
         """Synchronous PDF ingestion"""
         extractor, cleaner = SourceFactory.get_pdf_cleaner()
@@ -180,7 +177,7 @@ class RAGService:
             raise ChunkingError("No chunks generated")
 
         # Process
-        result = await self._process_ingestion(chunks, source, topic, domain)
+        result = await self._process_ingestion(chunks=chunks, source=source, domain=domain, topic=topic, progress_callback=progress_callback)
 
         self.logger.info(
             "pdf_ingest_completed",
@@ -223,7 +220,7 @@ class RAGService:
         # Process with progress reporting
         yield {"progress": 50, "step": "Processing chunks..."}
 
-        result = await self._process_ingestion(chunks, source, domain, topic)
+        result = await self._process_ingestion(chunks=chunks, source=source, domain=domain, topic=topic, progress_callback=None)
 
         yield {"progress": 95, "step": "Finalizing..."}
 
@@ -242,7 +239,9 @@ class RAGService:
     # PUBLIC METHODS - URL Ingestion
     # ================================
 
-    async def ingest_document(self, url, source, domain, topic):
+    async def ingest_document(
+        self, url: str, source: str, domain: str, topic: str, progress_callback=None
+    ):
         """Synchronous ingestion from URL"""
         # Get tools since factory
         extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
@@ -266,7 +265,9 @@ class RAGService:
             raise ChunkingError("No chunks generated")
 
         # Process (no progress callback)
-        result = await self._process_ingestion(chunks, source, topic, domain)
+        result = await self._process_ingestion(
+            chunks=chunks, source=source, domain=domain, topic=topic, progress_callback=progress_callback
+        )
 
         self.logger.info(
             "ingest_completed",
@@ -511,9 +512,13 @@ class RAGService:
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
-def get_rag_service(
-    llm_client: LLMClient = Depends(get_llm_client),
-    vector_store: VectorStoreInterface = Depends(qdrant_client.get_qdrant_store),
-    embed_service: EmbeddingService = Depends(get_embeddign_service),
-):
-    return RAGService(llm_client, vector_store, embed_service)
+def create_rag_service() -> RAGService:
+    return RAGService(
+        llm_client=get_llm_client(),
+        vector_store=get_qdrant_store(),
+        embed_service=get_embeddign_service(),
+    )
+
+
+def get_rag_service() -> RAGService:
+    return create_rag_service()

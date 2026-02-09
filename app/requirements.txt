@@ -11,3 +11,5 @@ mistralai
 sentence-transformers
 python-multipart
 structlog
+redis 
+celery
