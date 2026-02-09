@@ -38,7 +38,7 @@ class VectorStoreInterface(ABC):
         pass
 
     @abstractmethod
-    def delete_old_data(self, source: str, timestamp: datetime) -> None:
+    def delete_old_data(self, source: str) -> None:
         pass
 
 

@@ -146,7 +146,7 @@ class RAGService:
 
         # Clean old data
         if chunks_in_db:
-            self.vector_store.delete_old_data(source=source, timestamp=timestamp)
+            self.vector_store.delete_old_data(source=source)
 
         return {
             "chunks_processed": len(points_to_upsert),
@@ -159,7 +159,7 @@ class RAGService:
     # ================================
 
     async def ingest_pdf_file(
-        self, file: UploadFile, source: str, domain: str, topic: str
+        self, file: UploadFile, source: str, domain: str, topic: str, progress_callback=None
     ):
         """Synchronous PDF ingestion"""
         extractor, cleaner = SourceFactory.get_pdf_cleaner()
@@ -177,7 +177,7 @@ class RAGService:
             raise ChunkingError("No chunks generated")
 
         # Process
-        result = await self._process_ingestion(chunks, source, topic, domain)
+        result = await self._process_ingestion(chunks=chunks, source=source, domain=domain, topic=topic, progress_callback=progress_callback)
 
         self.logger.info(
             "pdf_ingest_completed",
@@ -220,7 +220,7 @@ class RAGService:
         # Process with progress reporting
         yield {"progress": 50, "step": "Processing chunks..."}
 
-        result = await self._process_ingestion(chunks, source, domain, topic)
+        result = await self._process_ingestion(chunks=chunks, source=source, domain=domain, topic=topic, progress_callback=None)
 
         yield {"progress": 95, "step": "Finalizing..."}
 
@@ -266,7 +266,7 @@ class RAGService:
 
         # Process (no progress callback)
         result = await self._process_ingestion(
-            chunks, source, topic, domain, progress_callback
+            chunks=chunks, source=source, domain=domain, topic=topic, progress_callback=progress_callback
         )
 
         self.logger.info(
