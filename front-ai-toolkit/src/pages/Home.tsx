@@ -1,5 +1,13 @@
 import ChatInterface from "@/components/chatInterface";
 import IngestionInterface from "@/components/ingestionInterface";
+import {
+  Sheet,
+  SheetTrigger,
+  SheetContent,
+  SheetClose,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 
 function Home() {
   return (
@@ -8,9 +16,20 @@ function Home() {
         <IngestionInterface />
       </section>
 
-      <section className="absolute md:hidden">
+      <section className="absolute top-0 left-0 md:hidden">
         <Sheet>
-          <IngestionInterface />
+          <SheetTrigger>
+            <Button>Open</Button>
+          </SheetTrigger>
+          <SheetContent showCloseButton={false}>
+            <IngestionInterface />
+
+            <SheetFooter>
+              <SheetClose asChild>
+                <Button>Close</Button>
+              </SheetClose>
+            </SheetFooter>
+          </SheetContent>
         </Sheet>
       </section>
 
