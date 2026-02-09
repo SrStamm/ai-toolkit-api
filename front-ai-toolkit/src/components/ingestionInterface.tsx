@@ -160,7 +160,7 @@ function IngestionInterface() {
   };
 
   return (
-    <div className="p-4 w-full max-w-sm">
+    <div className="p-4 w-full md:max-w-sm">
       <Card>
         <CardHeader>
           <CardTitle>Ingesta de Datos</CardTitle>
