@@ -128,7 +128,7 @@ function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-col h-[90vh] p-4 w-full">
+    <div className="flex flex-col h-full p-2 md:p-4 w-full">
       {/* Area de mensajes */}
       <div className="flex-1 overflow-y-auto space-y-4 mb-4 p-4 border rounded-lg">
         {messages.map((msg, index) => (

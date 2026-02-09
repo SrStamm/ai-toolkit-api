@@ -1,41 +1,36 @@
 import ChatInterface from "@/components/chatInterface";
 import IngestionInterface from "@/components/ingestionInterface";
-import {
-  Sheet,
-  SheetTrigger,
-  SheetContent,
-  SheetClose,
-  SheetFooter,
-} from "@/components/ui/sheet";
+import { Sheet, SheetTrigger, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 
 function Home() {
   return (
-    <main className="relative flex md:static md:flex-row min-h-screen bg-background">
-      <section className="hidden md:block md:relative md:w-1/3 md:border-r">
+    <main className="flex h-screen w-full bg-background overflow-hidden">
+      <aside className="hidden md:block md:w-80 border-r bg-muted/30">
         <IngestionInterface />
-      </section>
+      </aside>
 
-      <section className="absolute top-0 left-0 md:hidden">
-        <Sheet>
-          <SheetTrigger>
-            <Button>Open</Button>
-          </SheetTrigger>
-          <SheetContent showCloseButton={false}>
-            <IngestionInterface />
+      <div className="flex flex-col flex-1 h-full">
+        <header className="flex items-center p-4 border-b md:hidden bg-card">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm">
+                Configurar Ingesta
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-75 sm:w-[100] p-0">
+              <div className="pt-10">
+                <IngestionInterface />
+              </div>
+            </SheetContent>
+          </Sheet>
+          <h1 className="ml-4 font-semibold text-sm">Mi RAG App</h1>
+        </header>
 
-            <SheetFooter>
-              <SheetClose asChild>
-                <Button>Close</Button>
-              </SheetClose>
-            </SheetFooter>
-          </SheetContent>
-        </Sheet>
-      </section>
-
-      <section className="md:w-2/3">
-        <ChatInterface />
-      </section>
+        <section className="flex-1 overflow-hidden min-h-0">
+          <ChatInterface />
+        </section>
+      </div>
     </main>
   );
 }
