@@ -7,7 +7,11 @@ import { Textarea } from "./ui/textarea";
 import { Input } from "./ui/input";
 import CustomizedToast from "./toast";
 
-import { getJobStatus, ingestFile, ingestURLJob } from "@/services/ragServices";
+import {
+  getJobStatus,
+  ingestFileJob,
+  ingestURLJob,
+} from "@/services/ragServices";
 import { Label } from "./ui/label.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs.tsx";
 
@@ -118,7 +122,7 @@ function IngestionInterface() {
     }
   };
 
-  const handleIngestPDFStream = async () => {
+  const handleIngestPDFJob = async () => {
     if (!file) {
       CustomizedToast({
         type: "error",
@@ -127,66 +131,31 @@ function IngestionInterface() {
       return;
     }
 
+    setLoading(true);
+    setProgress(0);
+
+    // Create FormData container
+    const formData = new FormData();
+
+    // Add the fields
+    formData.append("file", file);
+    formData.append("source", file.name);
+    formData.append("domain", domain || "general");
+    formData.append("topic", topic || "pdf-upload");
+
     try {
-      setLoading(true);
-      setProgress(0);
+      // Fetch
+      const response = await ingestFileJob(formData);
 
-      // Create FormData container
-      const formData = new FormData();
+      if (!response.ok) throw new Error("Error en la subida");
 
-      // Add the fields
-      formData.append("file", file);
-      formData.append("source", file.name);
-      formData.append("domain", domain || "general");
-      formData.append("topic", topic || "pdf-upload");
-
-      try {
-        // Fetch
-        const response = await ingestFile(formData);
-
-        if (!response.ok) throw new Error("Error en la subida");
-
-        // Stream logic
-        const reader = response.body!.getReader();
-        const decoder = new TextDecoder();
-
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            break;
-          }
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n\n").filter((line) => line.trim());
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = JSON.parse(line.slice(6));
-
-              if (data.error) {
-                CustomizedToast({ type: "error", msg: data.error });
-                break;
-              }
-
-              setProgress(data.progress);
-              setStatusMessage(data.step);
-
-              if (data.progress === 100) {
-                CustomizedToast({
-                  type: "success",
-                  msg: `Processed ${data.chunks_processed} chunks`,
-                });
-                break;
-              }
-            }
-          }
-        }
-      } catch (error) {
-        CustomizedToast({ type: "error", msg: String(error) });
+      if (response.job_id) {
+        setActiveJobId(response.job_id);
       }
-    } finally {
+    } catch (err) {
       setLoading(false);
+      CustomizedToast({ type: "error", msg: "No se pudo iniciar la tarea" });
+      console.log(err);
     }
   };
 
@@ -235,7 +204,7 @@ function IngestionInterface() {
             </div>
             <Button
               className="w-full"
-              onClick={handleIngestPDFStream}
+              onClick={handleIngestPDFJob}
               disabled={loading || !file}
             >
               {loading ? "Procesando..." : "Ingerir Fichero"}
