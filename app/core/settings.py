@@ -10,6 +10,7 @@ class LLMConfig(BaseModel):
     model: str = "mistral-small-latest"
     temperature: float = 0.0
     max_retries: int = 3
+    url: Optional[str] = None
 
 
 class BaseLLMProvider(ABC):
