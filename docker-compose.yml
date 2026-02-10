@@ -62,7 +62,9 @@ services:
   ollama:
     profiles:
       - ollama
-    image: ollama/ollama:latest
+    image: ollama/ollama:rocm
+    devices:
+      - "/dev/dri:/dev/dri"
     ports:
       - 11434:11434
     volumes:
@@ -72,6 +74,7 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=24h
       - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=-1
     networks:
       - backend_net
 

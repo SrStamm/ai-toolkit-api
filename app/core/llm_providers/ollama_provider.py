@@ -16,7 +16,7 @@ class OllamaProvider(BaseLLMProvider):
         self.config = config
         self.model = config.model
         self.logger = structlog.get_logger()
-        self.url = "http://ollama:11434"
+
 
     def chat(self, prompt: str) -> LLMResponse:
         pass
@@ -37,7 +37,8 @@ class OllamaProvider(BaseLLMProvider):
 
         async with httpx.AsyncClient() as client:
             accumulated_content = ""
-            async with client.stream("POST", self.url + '/api/chat', json=data, timeout=None) as r:
+            url = self.config.url + "/api/chat"
+            async with client.stream("POST", url, json=data, timeout=None) as r:
                 async for line in r.aiter_lines():
                     if not line:
                         continue

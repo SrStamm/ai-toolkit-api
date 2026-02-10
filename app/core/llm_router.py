@@ -129,6 +129,12 @@ def get_llm_router() -> LLMRouter:
 
     config = LLMConfig(api_key=API_KEY)
 
-    primary = MistralProvider(config)
-    fallback = OllamaProvider()
+    OLLAMA_MODEL= os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+    OLLAMA_URL= os.getenv("OLLAMA_URL", "http://localhost:11434")
+
+    config_ollama = LLMConfig(api_key="", model=OLLAMA_MODEL, url=OLLAMA_URL)
+
+    fallback = MistralProvider(config)
+    primary = OllamaProvider(config_ollama)
+
     return LLMRouter(primary, fallback)
