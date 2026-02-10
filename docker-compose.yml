@@ -7,14 +7,10 @@ services:
       # - "6334:6334"  para grpc
     volumes:
       - qdrant_data:/qdrant/storage
-    mem_limit: 512m
-    mem_reservation: 256m
 
   redis:
     image: redis/redis-stack:latest
     restart: unless-stopped
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
       - redis_data_dev:/var/lib/redis/data
     ports:
@@ -52,16 +48,21 @@ services:
         "8000",
         "--reload",
       ]
-    mem_limit: 768m
-    mem_reservation: 384m
     depends_on:
       - qdrant
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - 11434:11434
+    volumes:
+      - .:/backend
+      - ./ollama/ollama:/root/.ollama
+    pull_policy: always
+    restart: always
     environment:
-      OMP_NUM_THREADS: 1
-      OPENBLAS_NUM_THREADS: 1
-      MKL_NUM_THREADS: 1
-      NUMEXPR_NUM_THREADS: 1
-      TORCH_NUM_THREADS: 1
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_HOST=0.0.0.0
 
 volumes:
   qdrant_data:

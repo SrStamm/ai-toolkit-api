@@ -1,0 +1,20 @@
+services:
+  qdrant:
+    mem_limit: 512m
+    mem_reservation: 256m
+
+  celery:
+    command: >
+      sh -c "sleep 10 &&
+            celery -A app.core.celery_app worker --loglevel=info --concurrency=1"
+
+  api:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    mem_limit: 768m
+    mem_reservation: 384m
+    environment:
+      OMP_NUM_THREADS: 1
+      OPENBLAS_NUM_THREADS: 1
+      MKL_NUM_THREADS: 1
+      NUMEXPR_NUM_THREADS: 1
+      TORCH_NUM_THREADS: 1

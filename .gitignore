@@ -208,3 +208,5 @@ __marimo__/
 
 
 .qdrant_data/
+ollama/
+api_data/
