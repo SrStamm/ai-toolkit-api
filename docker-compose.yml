@@ -7,6 +7,8 @@ services:
       # - "6334:6334"  para grpc
     volumes:
       - qdrant_data:/qdrant/storage
+    networks:
+      - backend_net
 
   redis:
     image: redis/redis-stack:latest
@@ -17,6 +19,8 @@ services:
       - "6379:6379"
       - "8001:8001"
     env_file: .env
+    networks:
+      - backend_net
 
   celery:
     build: ./app
@@ -27,6 +31,8 @@ services:
     volumes:
       - .:/backend
       - shared_data:/backend/api_data
+    networks:
+      - backend_net
 
   api:
     build: ./app
@@ -50,8 +56,12 @@ services:
       ]
     depends_on:
       - qdrant
+    networks:
+      - backend_net
 
   ollama:
+    profiles:
+      - ollama
     image: ollama/ollama:latest
     ports:
       - 11434:11434
@@ -63,9 +73,15 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=24h
       - OLLAMA_HOST=0.0.0.0
+    networks:
+      - backend_net
 
 volumes:
   qdrant_data:
   hf_cache:
   redis_data_dev:
   shared_data:
+
+networks:
+  backend_net:
+    driver: bridge
