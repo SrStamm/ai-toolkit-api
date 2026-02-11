@@ -23,3 +23,18 @@ circuit_state_changes_total = Counter(
     "Circuit breaker state transitions",
     ["new_state"],
 )
+
+rag_vector_search_duration_seconds = Histogram(
+    'rag_vector_search_duration_seconds',
+    'Vector search duration in seconds'
+)
+
+rag_pipeline_duration_seconds = Histogram(
+    'rag_pipeline_duration_seconds',
+    'Pipeline duration'
+)
+
+rag_chunks_retrieved = Histogram(
+    "rag_chunks_retrieved",
+    "Number of chunks retrieved per query"
+)
