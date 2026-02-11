@@ -1,13 +1,13 @@
 from prometheus_client import Counter, Histogram
 
 llm_requests_total = Counter(
-    'llm_request_total',
+    'llm_requests_total',
     "Total LLM requests",
     labelnames=['provider', 'model', 'status']
 )
 
 llm_request_duration_seconds = Histogram(
-    'llm_request_duration_seconds',
+    'llm_requests_duration_seconds',
     'LLM request latency',
     ['provider', 'model']
 )
