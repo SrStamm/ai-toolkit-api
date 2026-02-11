@@ -10,6 +10,8 @@ from .features.extraction.router import router as extraction_router
 from .features.rag.providers.qdrant_client import get_qdrant_store, QdrantStore
 from .features.rag.router import router as rag_router
 from .core.custom_logging import logger
+from .core.metrics import http_requests_total
+from prometheus_client import make_asgi_app
 
 
 @asynccontextmanager
@@ -45,6 +47,9 @@ app.add_middleware(
 
 app.include_router(extraction_router)
 app.include_router(rag_router)
+
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 register_exceptions_handlers(app)
 
@@ -90,6 +95,8 @@ async def structured_log_middleware(request: Request, call_next):
         logger.info(
             f"method={request.method} path={request.url.path} user={user} duration={duration:.3f}s status={response.status_code}"
         )
+
+        http_requests_total.labels(request.method, request.url.path, response.status_code).inc()
 
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Session-ID"] = session_id

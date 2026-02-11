@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, UTC
+import time
 from typing import AsyncIterator, Optional
 import hashlib
 from uuid import UUID, uuid5, NAMESPACE_DNS
@@ -18,6 +19,8 @@ from ..extraction.exceptions import EmptySourceContentError, SourceException
 from ..extraction.factory import SourceFactory
 from ...core.llm_client import LLMClient, get_llm_client
 from ...core.cost_tracker import cost_tracker
+from ...core.metrics import rag_vector_search_duration_seconds, rag_pipeline_duration_seconds, rag_chunks_retrieved
+
 
 
 class RAGService:
@@ -344,7 +347,16 @@ class RAGService:
             context.topic = topic.lower()
 
         # Search
-        return self.vector_store.query(vector_query, limit=10, filter_context=context)
+        start_search = time.perf_counter()
+
+        result = self.vector_store.query(vector_query, limit=10, filter_context=context)
+
+        finish_search = time.perf_counter() - start_search
+        rag_vector_search_duration_seconds.observe(finish_search)
+
+        rag_chunks_retrieved.observe(len(result))
+
+        return result 
 
     def _build_citations(self, query_result: list) -> list[dict]:
         """Centralized LLM usage logging"""
@@ -387,6 +399,8 @@ class RAGService:
         topic: Optional[str] = None,
     ) -> QueryResponse:
         """Synchronous RAG query"""
+        start_pipeline = time.perf_counter()
+
         # Retrieve relevant chunks
         query_result = self.query(user_question, domain, topic)
 
@@ -407,6 +421,7 @@ class RAGService:
         # Rerank
         rerank_result = self.vector_store.rerank(user_question, query_result)
 
+
         # Build context
         context = "\n\n".join(
             f"[{i + 1}]\n{chunk.payload['text']}"
@@ -416,6 +431,9 @@ class RAGService:
         # Generate answer
         prompt = PROMPT_TEMPLATE_CHAT.format(context=context, question=user_question)
         response = self.llm_client.generate_content(prompt)
+
+        finish_pipeline = time.perf_counter() - start
+        rag_pipeline_duration_seconds.observe(finish_pipeline)
 
         # Parse answer
         try:
@@ -452,6 +470,8 @@ class RAGService:
         topic: Optional[str] = None,
     ) -> AsyncIterator[str]:
         """Streaming RAG query"""
+        start_pipeline = time.perf_counter()
+
         # Retrieve
         query_result = self.query(user_question, domain, topic)
 
@@ -461,6 +481,7 @@ class RAGService:
 
         # Rerank
         rerank_result = self.vector_store.rerank(user_question, query_result)
+
 
         # Build context
         context = "\n\n".join(
@@ -484,6 +505,9 @@ class RAGService:
         # Log usage
         if final_response:
             self._log_llm_usage(final_response, stream=True)
+
+        finish_pipeline = time.perf_counter() - start_pipeline
+        rag_pipeline_duration_seconds.observe(finish_pipeline)
 
         # Send citations
         citations = self._build_citations(query_result)

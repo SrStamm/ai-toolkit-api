@@ -14,6 +14,9 @@ class LLMConfig(BaseModel):
 
 
 class BaseLLMProvider(ABC):
+    name: str
+    model: str
+
     @abstractmethod
     def chat(self, prompt: str) -> LLMResponse:
         pass

@@ -17,6 +17,7 @@ from ..settings import BaseLLMProvider, LLMConfig
 class OllamaProvider(BaseLLMProvider):
     def __init__(self, config: LLMConfig):
         self.config = config
+        self.name = 'ollama'
         self.model = config.model
         self.logger = structlog.get_logger()
 

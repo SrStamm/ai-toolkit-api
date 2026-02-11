@@ -8,6 +8,12 @@ import threading
 from .llm_providers.mistral_provider import MistralProvider
 from .llm_providers.ollama_provider import OllamaProvider
 from .settings import BaseLLMProvider, LLMConfig
+from .metrics import (
+    llm_requests_total,
+    llm_request_duration_seconds,
+    llm_fallback_total,
+    circuit_state_changes_total,
+)
 
 
 class LLMRouter:
@@ -47,54 +53,147 @@ class LLMRouter:
 
     def chat(self, prompt: str):
         now = time.time()
+        provider_name = self.primary.name
+        model_name = self.primary.model
 
-        # if state OPEN, check timeout
-        # Else, fallback
         if self.state == "OPEN":
             if now - self.opened_at >= self.open_timeout:
                 self.state = "HALF-OPEN"
+                circuit_state_changes_total.labels("HALF-OPEN").inc()
                 self.logger.info("circuit_half_open")
             else:
+                llm_fallback_total.labels(
+                    provider_name,
+                    self.fallback.name
+                ).inc()
+
+                llm_requests_total.labels(
+                    self.fallback.name,
+                    self.fallback.model,
+                    "fallback"
+                ).inc()
+
                 self.logger.info("llm_fallback_used", state=self.state, reason="OPEN")
                 return self.fallback.chat(prompt)
 
-        # If state HALF-OPEN or CLOSED, try primary
+        start = time.perf_counter()
+
         try:
             response = self.primary.chat(prompt)
 
-            if self.state == "HALF-OPEN":
-                self.logger.info(
-                    "circuit_closed",
-                    previous_state="HALF-OPEN",
-                    failure_count=self.failure_count,
-                )
+            duration = time.perf_counter() - start
 
-                self.state = "CLOSED"
-                self.failure_count = 0
+            llm_request_duration_seconds.labels(
+                provider_name,
+                model_name
+            ).observe(duration)
+
+            llm_requests_total.labels(
+                provider_name,
+                model_name,
+                "success"
+            ).inc()
+
+            with self._lock:
+                if self.state == "HALF-OPEN":
+                    self.logger.info(
+                        "circuit_closed",
+                        previous_state="HALF-OPEN",
+                        failure_count=self.failure_count,
+                    )
+
+                    self.state = "CLOSED"
+                    self.failure_count = 0
+                    circuit_state_changes_total.labels("CLOSED").inc()
 
             return response
+
         except Exception:
+            duration = time.perf_counter() - start
+            llm_request_duration_seconds.labels(
+                provider_name,
+                model_name
+            ).observe(duration)
+
+            llm_requests_total.labels(
+                provider_name,
+                model_name,
+                "error"
+            ).inc()
+
             self._on_failure()
 
             self.logger.info(
                 "llm_fallback_used", state=self.state, reason="threshold reached"
             )
 
-            return self.fallback.chat(prompt)
+            llm_fallback_total.labels(
+                provider_name,
+                self.fallback.name,
+            ).inc()
 
+            start_fb = time.perf_counter()
+            response = self.fallback.chat(prompt)
+            duration_fb = time.perf_counter() - start_fb
+
+            llm_request_duration_seconds.labels(
+                self.fallback.name,
+                self.fallback.model
+            ).observe(duration_fb)
+
+            llm_requests_total.labels(
+                self.fallback.name,
+                self.fallback.model,
+                "fallback"
+            ).inc()
+
+            return response
 
     def chat_stream(self, prompt: str):
         async def _stream():
+            provider_name = self.primary.name
+            model_name = self.primary.model
+
+            start = time.perf_counter()
+
             try:
                 async for chunk in self.primary.chat_stream(prompt):
                     yield chunk
 
-                if self.state == "HALF-OPEN":
-                    self.state = "CLOSED"
-                    self.failure_count = 0
+                duration = time.perf_counter() - start
+
+                llm_request_duration_seconds.labels(
+                    provider_name,
+                    model_name
+                ).observe(duration)
+
+                llm_requests_total.labels(
+                    provider_name,
+                    model_name,
+                    "success"
+                ).inc()
+
+                with self._lock:
+                    if self.state == "HALF-OPEN":
+                        self.state = "CLOSED"
+                        self.failure_count = 0
+                        circuit_state_changes_total.labels("CLOSED").inc()
 
             except Exception:
                 self._on_failure()
+
+                llm_requests_total.labels(
+                    provider_name,
+                    model_name,
+                    "error"
+                ).inc()
+
+                llm_fallback_total.labels(
+                    provider_name,
+                    self.fallback.name
+                ).inc()
+
+
                 async for chunk in self.fallback.chat_stream(prompt):
                     yield chunk
 

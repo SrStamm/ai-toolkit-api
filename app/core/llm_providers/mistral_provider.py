@@ -14,6 +14,8 @@ class MistralProvider(BaseLLMProvider):
     def __init__(self, config: LLMConfig):
         self.config = config
         self.client = Mistral(api_key=self.config.api_key)
+        self.name = 'mistral'
+        self.model = config.model
         self.logger = structlog.get_logger()
 
     def _is_retryable_error(self, e: Exception) -> bool:
