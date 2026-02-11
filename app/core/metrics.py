@@ -51,3 +51,9 @@ celery_task_duration_seconds = Histogram(
     ['task_name']
 )
 
+http_requests_total = Counter(
+    'http_requests_total',
+    'Total HTTP requests',
+    ["method", "endpoint", "status"]
+)
+
