@@ -38,3 +38,16 @@ rag_chunks_retrieved = Histogram(
     "rag_chunks_retrieved",
     "Number of chunks retrieved per query"
 )
+
+celery_tasks_total = Counter(
+    'celery_tasks_total',
+    'Total tasks finally',
+    ['task_name', 'status']
+)
+
+celery_task_duration_seconds = Histogram(
+    'celery_task_duration_seconds',
+    'Task duration',
+    ['task_name']
+)
+
