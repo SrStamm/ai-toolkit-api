@@ -3,6 +3,7 @@
 import os
 import time
 import structlog
+import threading
 
 from .llm_providers.mistral_provider import MistralProvider
 from .llm_providers.ollama_provider import OllamaProvider
@@ -27,7 +28,22 @@ class LLMRouter:
         self.state = "CLOSED"
         self.opened_at = None
 
+        self._lock = threading.Lock()
+
         self.logger = structlog.get_logger()
+
+    def _on_failure(self):
+        with self._lock:
+            self.failure_count += 1
+
+        if self.failure_count >= self.failure_threshold:
+            self.state = "OPEN"
+            self.opened_at = time.time()
+            self.logger.warning(
+                    "circuit_opened",
+                    failure_count=self.failure_count,
+                    timeout=self.open_timeout,
+            )
 
     def chat(self, prompt: str):
         now = time.time()
@@ -35,7 +51,7 @@ class LLMRouter:
         # if state OPEN, check timeout
         # Else, fallback
         if self.state == "OPEN":
-            if now - self.opened_at < self.open_timeout:
+            if now - self.opened_at >= self.open_timeout:
                 self.state = "HALF-OPEN"
                 self.logger.info("circuit_half_open")
             else:
@@ -58,77 +74,46 @@ class LLMRouter:
 
             return response
         except Exception:
-            self.failure_count += 1
-
-            # Set state to OPEN if threshold reached
-            if self.failure_count >= self.failure_threshold:
-                self.state = "OPEN"
-                self.opened_at = time.time()
-                self.logger.warning(
-                    "circuit_opened",
-                    failure_count=self.failure_count,
-                    timeout=self.open_timeout,
-                )
+            self._on_failure()
 
             self.logger.info(
                 "llm_fallback_used", state=self.state, reason="threshold reached"
             )
+
             return self.fallback.chat(prompt)
 
+
     def chat_stream(self, prompt: str):
-        now = time.time()
+        async def _stream():
+            try:
+                async for chunk in self.primary.chat_stream(prompt):
+                    yield chunk
 
-        if self.state == "OPEN":
-            if now - self.opened_at < self.open_timeout:
-                self.state = "HALF-OPEN"
-                self.logger.info("circuit_half_open")
-            else:
-                self.logger.info(
-                    "llm_fallback_used", state=self.state, reason="active timeout"
-                )
-                return self.fallback.chat_stream(prompt)
+                if self.state == "HALF-OPEN":
+                    self.state = "CLOSED"
+                    self.failure_count = 0
 
-        try:
-            response = self.primary.chat_stream(prompt)
+            except Exception:
+                self._on_failure()
+                async for chunk in self.fallback.chat_stream(prompt):
+                    yield chunk
 
-            if self.state == "HALF-OPEN":
-                self.logger.info(
-                    "circuit_closed",
-                    previous_state="HALF-OPEN",
-                    failure_count=self.failure_count,
-                )
+        return _stream()
 
-                self.state = "CLOSED"
-                self.failure_count = 0
-
-            return response
-        except Exception:
-            self.failure_count += 1
-
-            if self.failure_count >= self.failure_threshold:
-                self.state = "OPEN"
-                self.opened_at = time.time()
-
-                self.logger.warning(
-                    "circuit_opened",
-                    failure_count=self.failure_count,
-                    timeout=self.open_timeout,
-                )
-
-            self.logger.info(
-                "llm_fallback_used", state=self.state, reason="threshold reached"
-            )
-            return self.fallback.chat_stream(prompt)
 
 
 def get_llm_router() -> LLMRouter:
     API_KEY = os.getenv("MISTRAL_API_KEY")
+    OLLAMA_MODEL= os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+    OLLAMA_URL= os.getenv("OLLAMA_URL", "http://localhost:11434")
 
     if not API_KEY:
         raise ValueError("API_KEY no configurada")
 
     config = LLMConfig(api_key=API_KEY)
+    config_ollama = LLMConfig(api_key="", model=OLLAMA_MODEL, url=OLLAMA_URL)
 
-    primary = MistralProvider(config)
-    fallback = OllamaProvider()
-    return LLMRouter(primary, fallback)
+    return LLMRouter(
+        primary= MistralProvider(config),
+        fallback=OllamaProvider(config_ollama)
+    )
