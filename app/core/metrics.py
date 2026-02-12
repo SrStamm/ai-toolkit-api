@@ -1,4 +1,7 @@
-from prometheus_client import Counter, Histogram
+from prometheus_client import CollectorRegistry, Counter, Histogram, multiprocess
+
+registry = CollectorRegistry()
+multiprocess.MultiProcessCollector(registry)
 
 llm_requests_total = Counter(
     'llm_requests_total',
