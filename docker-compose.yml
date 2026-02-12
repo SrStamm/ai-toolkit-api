@@ -89,11 +89,23 @@ services:
     networks:
       - backend_net
 
+  grafana:
+    profiles:
+      - monitoring
+    image: grafana/grafana-enterprise
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - backend_net
+
 volumes:
   qdrant_data:
   hf_cache:
   redis_data_dev:
   shared_data:
+  grafana-storage:
 
 networks:
   backend_net:
