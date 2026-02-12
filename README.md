@@ -1,232 +1,153 @@
 # ai-toolkit
 
-> **Versión actual:** `v1.0`  
+> **Versión actual:** `v2.0`  
 > **Estado:** estable (educacional / experimental)
 
 **Herramientas de IA para backend (FastAPI)**
 
-`ai-toolkit` es una **API educativa y experimental** construida en **FastAPI** para explorar **cómo diseñar sistemas backend con LLMs de forma profesional**, poniendo foco en:
+`ai-toolkit` es una API educativa y experimental construida en FastAPI para explorar cómo diseñar sistemas backend con LLMs de forma profesional, poniendo foco en:
 
 - control explícito del comportamiento del modelo
 - validación estricta del output
 - manejo consciente de errores y retries
 - arquitectura desacoplada y extensible
-- observabilidad y medición de costos
+- observabilidad y métricas
 
-> 🎯 **Objetivo del proyecto**  
-> No es un producto final, sino un **laboratorio backend** para demostrar **criterio arquitectónico real** en sistemas con IA: cómo se diseñan, cómo evolucionan y cómo se preparan para un entorno empresarial.
-
-Este README documenta **el alcance cerrado de la versión v1.0** y describe **la evolución planificada hacia v2 y v3**.
+> 🎯 Objetivo del proyecto
+> No es un producto final, sino un laboratorio backend para demostrar criterio arquitectónico real en sistemas con IA: cómo se diseñan, cómo evolucionan y cómo se preparan para un entorno enterprise-like.
 
 ---
 
-## Estado actual – v1.0 (RAG baseline)
+## Estado actual – v2.0 (RAG asincrónico + observabilidad)
 
-La versión **v1.0** representa el **baseline funcional del proyecto**:
-un sistema RAG completamente operativo, diseñado para priorizar **claridad, control y corrección** por sobre escalabilidad.
+La versión v2.0 representa un salto hacia un sistema escalable, donde la ingesta y el procesamiento de datos se ejecutan fuera del request HTTP mediante Celery, manteniendo el pipeline RAG y añadiendo observabilidad avanzada.
 
-Cuenta con una **demo privada en la nube** para validación funcional.
-
----
-
-## Funcionalidades incluidas en v1.0
-
-### RAG (núcleo del sistema)
-
-- Ingesta de documentación vía URL
-- Limpieza y normalización por tipo de fuente
-- Chunking **específico por tipo de documento**:
-  - HTML: separación por `<h2>` / `<h3>`
-  - README / Markdown: secciones semánticas
-  - PDF y texto plano: tamaño fijo
-- Strategy Pattern para chunking
-- Embeddings locales con `sentence-transformers`
-  - creación por batches
-  - manejo de errores (timeouts, respuestas vacías, retry simple)
-- Vector store abstraído (implementación actual: Qdrant)
-- Batch insert de chunks
-- Metadata por chunk (`source`, `domain`, `topic`, `chunk_index`)
-- Query con embedding de consulta
-- Filtros dinámicos por dominio y temática
-- Re-ranking simple con Cross-Encoder
-- Construcción explícita del contexto enviado al LLM
-- Respuestas con citaciones por chunk
-- Streaming de respuesta
-
----
-
-### Observabilidad y control (v1.0)
-
-- Logs estructurados
-- Medición de tiempo de respuesta del LLM
-- Tracking de tokens consumidos
-- Estimación de costo por request
-
----
-
-### Frontend (demo funcional)
-
-- Ingesta de URLs y PDFs
-- Chat con streaming
-- Citations visibles
-- Estados de carga y error
-- Inputs opcionales de dominio y temática
-- Panel simple de estado
-
----
-
-## Filosofía de diseño
-
-El proyecto prioriza deliberadamente:
-
-- **Transparencia del flujo**  
-  Cada paso del pipeline es explícito y trazable.
-- **Separación de responsabilidades**  
-  API, lógica de negocio y proveedores están claramente desacoplados.
-- **Control del riesgo**  
-  Validación, retries y errores se manejan de forma consciente.
-- **Intercambiabilidad de componentes**  
-  LLMs, embeddings y vector stores pueden reemplazarse sin afectar el core.
-
-No se oculta complejidad: se **expone para poder aprenderla**.
-
----
-
-## Arquitectura general (v1.0)
-
-```ascii
-HTTP (FastAPI)
-↓
-Routers (API layer)
-↓
-Services (orquestación explícita)
-↓
-Clients / Providers
-├─ LLM providers
-├─ Embedding providers
-└─ Vector store clients
-```
-
----
-
-## Limitaciones conocidas de v1.0
-
-Esta versión **no está orientada a producción**.  
-Por diseño:
-
-- la ingesta se realiza de forma síncrona
-- el estado se mantiene en memoria
-- no hay workers ni colas de procesamiento
-
-Estas decisiones fueron intencionales para:
-
-- simplificar el flujo
-- priorizar comprensión y control
-- establecer un baseline claro
-
----
-
-## Versionado conceptual del proyecto
-
-El proyecto evoluciona por **versiones conceptuales**, cada una con objetivos claros.
-
----
-
-## v1.0 – RAG baseline (actual)
-
-**Enfoque**
-
-- RAG explícito y controlado
-- Arquitectura limpia
-- Observabilidad básica
-- Correctness del output
-
-**No incluye**
-
-- Procesamiento asincrónico
-- Workers o colas
-- Métricas persistentes
-- Modelos locales
-- Agentes
-
----
-
-## v2.0 – RAG asincrónico + observabilidad (en desarrollo)
-
-La versión **v2.0** extiende v1 hacia un **escenario enterprise-like**, mostrando cómo escalar el sistema sin perder control.
-
-### Objetivos de v2
+### Objetivos de v2.0
 
 - Separar API y procesamiento pesado
-- Introducir procesamiento asincrónico
+- Introducir procesamiento asincrónico con workers
 - Mejorar observabilidad técnica
-- Mantener el mismo pipeline RAG, pero ejecutado por workers
+- Mantener el pipeline RAG, pero ejecutado por Celery
+- Medir latencia, tokens, errores y uso de recursos
+- Comparar LLM remoto vs LLM local (Ollama)
 
 ### Cambios principales
 
-- Procesamiento asincrónico con **Celery**
-- Broker y backend de estado (Redis)
-- Ingesta de documentos fuera del request HTTP
-- Estado de tareas accesible por `job_id`
-- Métricas del pipeline:
-  - latencia
-  - tokens
-  - errores
-- Factory de LLM providers
-- Comparación entre LLM remoto y modelo local (Ollama)
+- FastAPI + Celery:
+  - API solo recibe requests y crea job_id para tasks asincrónicas
+  - Workers realizan:
+    - Extracción y limpieza de documentos
+    - Chunking (HTML, Markdown, PDF)
+    - Creación de embeddings
+    - Inserción en vector store (Qdrant)
+    - Eliminación de chunks antiguos o duplicados
+- Métricas Prometheus:
+  - Histogram de latencia por etapa: vector search, RAG pipeline, LLM
+  - Tokens por request
+  - Errores por etapa
+  - Uso de fallback y circuit breaker
+- Observabilidad:
+  - Logs estructurados con structlog
+  - Tracking de tokens consumidos y costo estimado
+- LLM Factory:
+  - Se puede cambiar entre modelo remoto (Mistral) o local (Ollama)
+  - Dashboard en Grafana (pendiente en V2.1 para métricas completas)
 
-### Arquitectura v2 (alto nivel)
+### Arquitectura v2.0
 
 ```ascii
 Cliente / Frontend
 ↓
 FastAPI (API layer)
-
-validación
-
-creación de job_id
-
-dispatch de tareas
+  - Validación
+  - Creación de job_id
+  - Dispatch de tareas a Celery
 ↓
-Broker (Redis)
+Broker / Backend (Redis)
 ↓
 Celery Worker
-
-extracción
-
-limpieza
-
-chunking
-
-embeddings
-
-inserción en vector store
+  - Extracción
+  - Limpieza
+  - Chunking
+  - Embeddings
+  - Inserción en Vector Store
+  - Actualización de estado en Redis
+↓
+Respuesta a Frontend vía job_id
 ```
 
 ---
 
-## v3.0 – MCP + Agent orchestration (exploratorio)
+## Funcionalidades incluidas en v2.0
 
-La versión **v3.0** explora patrones avanzados de sistemas con IA.
+### Core RAG
 
-### Objetivo
+- Ingesta de documentos vía URL o archivos
+- Chunking específico por tipo de documento
+- Strategy Pattern para chunking
+- Embeddings locales y remotos con batching
+- Re-ranking simple
+- Construcción de contexto explícito para el LLM
+- Streaming de respuesta
+- Metadata por chunk (source, domain, topic, chunk_index)
 
-- Exponer capacidades del sistema como **skills reutilizables**
-- Introducir un **agente mínimo**, no autónomo
+### Observabilidad y métricas
 
-El agente podrá decidir:
+- Logs estructurados
+- Decoradores de latencia por LLM y RAG
+- Métricas Prometheus:
+- Histogram de latencia por etapa
+- Tokens consumidos
+- Errores por etapa
+- Fallbacks y circuit breaker
+- Métricas específicas para Celery:
+- Duración de tasks
+- Status (success/error)
+- Panel básico de estado en Frontend
 
-- responder directamente
-- usar RAG
-- ejecutar una skill específica
+### Frontend
 
-No se busca:
+- Chat estilo RAG
+- Inputs opcionales: dominio, topic
+- Estado de carga y errores
+- Citations por chunk
+- Visualización parcial del progreso de tasks
 
-- autonomía total
-- loops largos
-- sistemas auto-reflexivos
+---
 
-Esta versión es **experimental y educativa**.
+## Roadmap de versiones siguientes
+
+### V2.1 – Observabilidad avanzada
+
+- Histogram por etapa del RAG
+- Métrica de tamaño promedio de chunks por request y size_tokens
+- Métrica de recall (top_k hit ratio, requiere dataset de prueba)
+- Dashboard serio en Grafana
+
+### V2.2 – Performance profiling
+
+- Benchmarks LLM local vs remoto
+- Latencia de embedding vs tamaño batch
+- Throughput de Celery
+- Optimización de batch insert y creación de embeddings
+
+### V3.0 – MCP + Agent orchestration (exploratorio)
+
+- Exponer capacidades como skills reutilizables
+- Introducir un agente mínimo que decida:
+- Responder directamente
+- Usar RAG
+- Ejecutar una skill específica
+- Experimental: no loops largos ni autonomía total
+
+---
+
+## Filosofía de diseño
+
+- Transparencia del flujo: cada paso del pipeline es trazable
+- Separación de responsabilidades: API, lógica de negocio y proveedores desacoplados
+- Control del riesgo: retries, errores y fallback explícitos
+- Intercambiabilidad de componentes: LLM, embeddings y vector stores reemplazables sin afectar el core
 
 ---
 
