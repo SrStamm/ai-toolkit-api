@@ -24,10 +24,16 @@ services:
 
   celery:
     build: ./app
-    command: celery -A app.core.celery_app worker --loglevel=info
+    command: >
+      sh -c "
+      mkdir -p /backend/prometheus &&
+      celery -A app.core.celery_app worker --loglevel=info
+      "
     depends_on:
       - redis
     env_file: .env
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/backend/prometheus
     volumes:
       - .:/backend
       - shared_data:/backend/api_data
@@ -36,6 +42,8 @@ services:
 
   api:
     build: ./app
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/backend/prometheus
     volumes:
       - hf_cache:/root/.cache
       - .:/backend
@@ -44,16 +52,12 @@ services:
       - .env
     ports:
       - "8000:8000"
-    command:
-      [
-        "uvicorn",
-        "app.main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8000",
-        "--reload",
-      ]
+    command: >
+      sh -c "
+      rm -rf /backend/prometheus/* &&
+      mkdir -p /backend/prometheus &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
     depends_on:
       - qdrant
     networks:
