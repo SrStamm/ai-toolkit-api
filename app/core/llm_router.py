@@ -13,6 +13,7 @@ from .metrics import (
     llm_request_duration_seconds,
     llm_fallback_total,
     circuit_state_changes_total,
+    llm_circuit_state,
 )
 
 
@@ -38,6 +39,14 @@ class LLMRouter:
 
         self.logger = structlog.get_logger()
 
+        # Initialize gauge to CLOSED (0)
+        llm_circuit_state.set(0)
+
+    def _update_circuit_gauge(self, state: str):
+        """Update the circuit breaker gauge: 0=CLOSED, 1=HALF-OPEN, 2=OPEN"""
+        state_map = {"CLOSED": 0, "HALF-OPEN": 1, "OPEN": 2}
+        llm_circuit_state.set(state_map.get(state, 0))
+
     def _on_failure(self):
         with self._lock:
             self.failure_count += 1
@@ -45,6 +54,8 @@ class LLMRouter:
         if self.failure_count >= self.failure_threshold:
             self.state = "OPEN"
             self.opened_at = time.time()
+            self._update_circuit_gauge("OPEN")
+            circuit_state_changes_total.labels("OPEN").inc()
             self.logger.warning(
                     "circuit_opened",
                     failure_count=self.failure_count,
@@ -59,6 +70,7 @@ class LLMRouter:
         if self.state == "OPEN":
             if now - self.opened_at >= self.open_timeout:
                 self.state = "HALF-OPEN"
+                self._update_circuit_gauge("HALF-OPEN")
                 circuit_state_changes_total.labels("HALF-OPEN").inc()
                 self.logger.info("circuit_half_open")
             else:
@@ -104,6 +116,7 @@ class LLMRouter:
 
                     self.state = "CLOSED"
                     self.failure_count = 0
+                    self._update_circuit_gauge("CLOSED")
                     circuit_state_changes_total.labels("CLOSED").inc()
 
             return response
@@ -177,6 +190,7 @@ class LLMRouter:
                     if self.state == "HALF-OPEN":
                         self.state = "CLOSED"
                         self.failure_count = 0
+                        self._update_circuit_gauge("CLOSED")
                         circuit_state_changes_total.labels("CLOSED").inc()
 
             except Exception:
@@ -213,6 +227,7 @@ def get_llm_router() -> LLMRouter:
     config_ollama = LLMConfig(api_key="", model=OLLAMA_MODEL, url=OLLAMA_URL)
 
     return LLMRouter(
-        primary= MistralProvider(config),
-        fallback=OllamaProvider(config_ollama)
+        primary = OllamaProvider(config_ollama),
+        fallback= OllamaProvider(config_ollama),
+        # fallback=MistralProvider(config),
     )
