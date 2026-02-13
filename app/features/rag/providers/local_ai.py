@@ -1,9 +1,11 @@
 from typing import List
+import time
 import numpy as np
 import structlog
 
 from ....core.ia_models import get_embedding_model
 from ....core.custom_logging import time_response
+from ....core.metrics import embedding_duration_seconds, embedding_requests_total
 from ..exceptions import EmbeddingError
 from ..interfaces import EmbeddingInterface
 
@@ -18,6 +20,9 @@ class EmbeddingService(EmbeddingInterface):
 
     @time_response
     def embed(self, text: str, query: bool = False) -> List[float]:
+        start = time.perf_counter()
+        model_name = self.embed_model.model_id if hasattr(self.embed_model, 'model_id') else 'default'
+        
         try:
             if query:
                 embedding = self.embed_model.encode(
@@ -28,8 +33,13 @@ class EmbeddingService(EmbeddingInterface):
                     f"passage: {text}", normalize_embeddings=True
                 )
 
+            duration = time.perf_counter() - start
+            embedding_duration_seconds.labels(model=model_name, batch_size='1').observe(duration)
+            embedding_requests_total.labels(model=model_name, status='success').inc()
+            
             return embedding.tolist()
         except Exception as e:
+            embedding_requests_total.labels(model=model_name, status='error').inc()
             raise EmbeddingError(str(e)) from e
 
     @time_response
@@ -39,16 +49,19 @@ class EmbeddingService(EmbeddingInterface):
         if len(chunk_list) == 0:
             raise EmbeddingError("Chunk list is empty")
 
+        start = time.perf_counter()
+        model_name = self.embed_model.model_id if hasattr(self.embed_model, 'model_id') else 'default'
+
         try:
             all_batches = []
 
-            for batch_enum, start in enumerate(range(0, len(chunk_list), batch_size)):
-                end = min(start + batch_size, len(chunk_list))
+            for batch_enum, start_idx in enumerate(range(0, len(chunk_list), batch_size)):
+                end = min(start_idx + batch_size, len(chunk_list))
 
-                logger.debug(f"Proccessing batch {batch_enum + 1}: {start} to {end}")
+                logger.debug(f"Proccessing batch {batch_enum + 1}: {start_idx} to {end}")
 
                 # Slice batchs
-                batchs = chunk_list[start:end]
+                batchs = chunk_list[start_idx:end]
 
                 # Format batchs
                 batch_formated = [
@@ -74,8 +87,13 @@ class EmbeddingService(EmbeddingInterface):
             if any(np.isnan(v).any() or np.isinf(v).any() for v in final):
                 raise EmbeddingError("One or more vectors contain NaN or Inf values")
 
+            duration = time.perf_counter() - start
+            embedding_duration_seconds.labels(model=model_name, batch_size=str(batch_size)).observe(duration)
+            embedding_requests_total.labels(model=model_name, status='success').inc()
+            
             return final.tolist()
         except Exception as e:
+            embedding_requests_total.labels(model=model_name, status='error').inc()
             raise EmbeddingError(str(e)) from e
 
 

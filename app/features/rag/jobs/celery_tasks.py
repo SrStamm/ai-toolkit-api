@@ -11,7 +11,11 @@ from .schemas import JobStatus
 from .job_service import JobService
 from ..service import RAGService, get_rag_service
 from ....core.celery_app import celery_app
-from ....core.metrics import celery_task_duration_seconds, celery_tasks_total
+from ....core.metrics import (
+    celery_task_duration_seconds, 
+    celery_tasks_total,
+    documents_ingested_total,
+)
 
 logger = structlog.get_logger()
 
@@ -54,6 +58,7 @@ def ingest_html_job(self, job_id: str, ingest_data: dict):
 
     except Exception as e:
         celery_tasks_total.labels('ingest_html_job', 'error').inc()
+        documents_ingested_total.labels(source_type='url', status='error').inc()
         logger.error("ingest_job_failed", job_id=job_id, error=str(e), exc_info=True)
         job_service.fail(job_id, str(e))
         raise
@@ -105,6 +110,7 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
         logger.error("ingest_job_failed", job_id=job_id, error=str(e), exc_info=True)
         job_service.fail(job_id, str(e))
         celery_tasks_total.labels('ingest_file_job', 'error').inc()
+        documents_ingested_total.labels(source_type='pdf', status='error').inc()
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)

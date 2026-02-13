@@ -27,7 +27,7 @@ services:
     command: >
       sh -c "
       mkdir -p /backend/prometheus &&
-      celery -A app.core.celery_app worker --loglevel=info
+      celery -A app.core.celery_app worker --loglevel=info --events
       "
     depends_on:
       - redis
@@ -90,6 +90,16 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
+    networks:
+      - backend_net
+
+  celery-exporter:
+    image: danihodovic/celery-exporter:latest
+    environment:
+      - CE_BROKER_URL=redis://redis:6379/0
+      - CE_RESULT_BACKEND=redis://redis:6379/0
+    ports:
+      - "9808:9808"
     networks:
       - backend_net
 

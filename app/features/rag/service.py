@@ -19,7 +19,17 @@ from ..extraction.exceptions import EmptySourceContentError, SourceException
 from ..extraction.factory import SourceFactory
 from ...core.llm_client import LLMClient, get_llm_client
 from ...core.cost_tracker import cost_tracker
-from ...core.metrics import rag_vector_search_duration_seconds, rag_pipeline_duration_seconds, rag_chunks_retrieved
+from ...core.metrics import (
+    rag_vector_search_duration_seconds, 
+    rag_pipeline_duration_seconds, 
+    rag_chunks_retrieved,
+    embedding_duration_seconds,
+    embedding_requests_total,
+    documents_ingested_total,
+    documents_chunks_total,
+    llm_total_cost_dollars,
+    llm_tokens_used_total,
+)
 
 
 
@@ -182,6 +192,7 @@ class RAGService:
         # Process
         result = await self._process_ingestion(chunks=chunks, source=source, domain=domain, topic=topic, progress_callback=progress_callback)
 
+        # Log and metrics
         self.logger.info(
             "pdf_ingest_completed",
             filename=file.filename,
@@ -190,6 +201,9 @@ class RAGService:
             topic=topic,
             **result,
         )
+        
+        documents_ingested_total.labels(source_type='pdf', status='success').inc()
+        documents_chunks_total.labels(source_type='pdf').inc(result['chunks_processed'])
 
     async def ingest_pdf_file_stream(
         self, file: UploadFile, source: str, domain: str, topic: str
@@ -235,6 +249,9 @@ class RAGService:
             topic=topic,
             **result,
         )
+        
+        documents_ingested_total.labels(source_type='pdf', status='success').inc()
+        documents_chunks_total.labels(source_type='pdf').inc(result['chunks_processed'])
 
         yield {"progress": 100, "step": "Done!", **result}
 
@@ -280,6 +297,9 @@ class RAGService:
             topic=topic,
             **result,
         )
+        
+        documents_ingested_total.labels(source_type='url', status='success').inc()
+        documents_chunks_total.labels(source_type='url').inc(result['chunks_processed'])
 
     async def ingest_document_stream(
         self, url: str, source: str, domain: str, topic: str
@@ -327,6 +347,9 @@ class RAGService:
             topic=topic,
             **result,
         )
+        
+        documents_ingested_total.labels(source_type='url', status='success').inc()
+        documents_chunks_total.labels(source_type='url').inc(result['chunks_processed'])
 
         yield {"progress": 100, "step": "Done!", **result}
 
@@ -352,9 +375,15 @@ class RAGService:
         result = self.vector_store.query(vector_query, limit=10, filter_context=context)
 
         finish_search = time.perf_counter() - start_search
-        rag_vector_search_duration_seconds.observe(finish_search)
+        rag_vector_search_duration_seconds.labels(
+            domain=domain or 'all',
+            topic=topic or 'all'
+        ).observe(finish_search)
 
-        rag_chunks_retrieved.observe(len(result))
+        rag_chunks_retrieved.labels(
+            domain=domain or 'all',
+            topic=topic or 'all'
+        ).observe(len(result))
 
         return result 
 
@@ -432,8 +461,30 @@ class RAGService:
         prompt = PROMPT_TEMPLATE_CHAT.format(context=context, question=user_question)
         response = self.llm_client.generate_content(prompt)
 
-        finish_pipeline = time.perf_counter() - start
-        rag_pipeline_duration_seconds.observe(finish_pipeline)
+        finish_pipeline = time.perf_counter() - start_pipeline
+        rag_pipeline_duration_seconds.labels(
+            operation_type='ask',
+            domain=domain or 'all',
+            topic=topic or 'all'
+        ).observe(finish_pipeline)
+
+        # Log cost metrics
+        llm_total_cost_dollars.labels(
+            provider=response.provider,
+            model=response.model
+        ).inc(response.cost.total_cost)
+
+        llm_tokens_used_total.labels(
+            provider=response.provider,
+            model=response.model,
+            token_type='prompt'
+        ).inc(response.usage.prompt_tokens)
+
+        llm_tokens_used_total.labels(
+            provider=response.provider,
+            model=response.model,
+            token_type='completion'
+        ).inc(response.usage.completion_tokens)
 
         # Parse answer
         try:
@@ -502,12 +553,33 @@ class RAGService:
                 yield f"data: {json.dumps({'type': 'content', 'content': chunk})}\n\n"
                 await asyncio.sleep(0)  # ✅ Allow other tasks to run
 
-        # Log usage
+        # Log usage and cost metrics
         if final_response:
             self._log_llm_usage(final_response, stream=True)
+            
+            llm_total_cost_dollars.labels(
+                provider=final_response.provider,
+                model=final_response.model
+            ).inc(final_response.cost.total_cost)
+
+            llm_tokens_used_total.labels(
+                provider=final_response.provider,
+                model=final_response.model,
+                token_type='prompt'
+            ).inc(final_response.usage.prompt_tokens)
+
+            llm_tokens_used_total.labels(
+                provider=final_response.provider,
+                model=final_response.model,
+                token_type='completion'
+            ).inc(final_response.usage.completion_tokens)
 
         finish_pipeline = time.perf_counter() - start_pipeline
-        rag_pipeline_duration_seconds.observe(finish_pipeline)
+        rag_pipeline_duration_seconds.labels(
+            operation_type='ask_stream',
+            domain=domain or 'all',
+            topic=topic or 'all'
+        ).observe(finish_pipeline)
 
         # Send citations
         citations = self._build_citations(query_result)
