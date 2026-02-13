@@ -78,7 +78,7 @@ class OllamaProvider(BaseLLMProvider):
         estimated_prompt_tokens = 0
         estimated_completion_tokens = 0
 
-        timeout = httpx.Timeout(connect=10.0, read=None)
+        timeout = httpx.Timeout(timeout=10.0, connect=10.0, read=None)
 
         async with httpx.AsyncClient() as client:
             for attempt in range(self.config.max_retries):
