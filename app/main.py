@@ -110,6 +110,7 @@ async def structured_log_middleware(request: Request, call_next):
             "request_failed",
             exc_mesg=str(exc),
         )
+        http_requests_total.labels(request.method, request.url.path, 500).inc()
         raise exc
 
     finally:
