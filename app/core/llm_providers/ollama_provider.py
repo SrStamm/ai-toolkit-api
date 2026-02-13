@@ -60,7 +60,55 @@ class OllamaProvider(BaseLLMProvider):
                 time.sleep(base + jitter)
 
     def chat(self, prompt: str) -> LLMResponse:
-        pass
+        def operation():
+            data = {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "stream": False,
+            }
+
+            estimated_prompt_tokens = 0
+            estimated_completion_tokens = 0
+
+            timeout = httpx.Timeout(timeout=10.0, connect=10.0, read=None)
+
+            with httpx.Client() as client:
+                url = self.config.url + "/api/chat"
+                chat_response = client.post(url, json=data, timeout=timeout)
+
+                data = chat_response.json()
+
+                estimated_prompt_tokens = data.get("prompt_eval_count")
+                estimated_completion_tokens = data.get("eval_count")
+
+                delta = data.get("message", {}).get("content", "")
+
+                usage = TokenUsage(
+                    prompt_tokens=estimated_prompt_tokens,
+                    completion_tokens=estimated_completion_tokens,
+                    total_tokens=estimated_completion_tokens + estimated_prompt_tokens,
+                )
+
+                cost = ModelPricing.calculate_cost(
+                    model="ollama",
+                    prompt_tokens=usage.prompt_tokens,
+                    completion_tokens=usage.completion_tokens,
+                )
+
+                return LLMResponse(
+                    content=delta,
+                    usage=usage,
+                    cost=cost,
+                    model=self.config.model,
+                    provider="ollama",
+                )
+
+        return self._with_retry(operation, model=self.config.model)
 
     async def chat_stream(self, prompt: str) -> AsyncIterator[tuple[str, Optional[LLMResponse]]]:
         last_exception = None
