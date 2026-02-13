@@ -3,4 +3,4 @@ docker compose --profile monitoring --profile ollama start || docker compose --p
 
 docker compose logs -f
 
-docker compose --profile monitoring stop
+docker compose --profile monitoring --profile ollama stop
