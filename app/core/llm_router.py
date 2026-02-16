@@ -227,7 +227,6 @@ def get_llm_router() -> LLMRouter:
     config_ollama = LLMConfig(api_key="", model=OLLAMA_MODEL, url=OLLAMA_URL)
 
     return LLMRouter(
-        primary = OllamaProvider(config_ollama),
+        primary = MistralProvider(config),
         fallback= OllamaProvider(config_ollama),
-        # fallback=MistralProvider(config),
     )
