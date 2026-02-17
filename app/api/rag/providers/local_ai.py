@@ -3,7 +3,7 @@ import time
 import numpy as np
 import structlog
 
-from ....core.ia_models import get_embedding_model
+from ....infrastructure.embedding import get_embedding_model
 from ....infrastructure.logging import time_response
 from ....infrastructure.metrics import embedding_duration_seconds, embedding_requests_total
 from ..exceptions import EmbeddingError

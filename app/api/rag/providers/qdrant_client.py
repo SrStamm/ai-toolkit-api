@@ -16,7 +16,7 @@ from qdrant_client.models import (
     ScalarQuantizationConfig,
 )
 
-from ....core.ia_models import get_rerank_model
+from ....infrastructure.embedding import get_rerank_model
 from ....infrastructure.logging import time_response
 from ..exceptions import VectorStoreError
 from ..interfaces import VectorStoreInterface
