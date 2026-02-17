@@ -7,7 +7,8 @@ from httpx import ConnectError, NetworkError, TimeoutException
 
 from ..models import LLMResponse, TokenUsage
 from ...domain.services.pricing import ModelPricing
-from ...core.settings import BaseLLMProvider, LLMConfig
+from ...core.settings import LLMConfig
+from .base import BaseLLMProvider
 
 
 class MistralProvider(BaseLLMProvider):

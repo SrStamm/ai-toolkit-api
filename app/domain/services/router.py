@@ -7,7 +7,8 @@ import threading
 
 from ..providers.mistral import MistralProvider
 from ..providers.ollama import OllamaProvider
-from ...core.settings import BaseLLMProvider, LLMConfig
+from ...core.settings import LLMConfig
+from ...domain.providers.base import BaseLLMProvider
 from ...infrastructure.metrics import (
     llm_requests_total,
     llm_request_duration_seconds,

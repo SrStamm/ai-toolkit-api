@@ -10,7 +10,8 @@ from typing import AsyncIterator, Optional
 
 from ..models import LLMResponse, TokenUsage
 from ...domain.services.pricing import ModelPricing
-from ...core.settings import BaseLLMProvider, LLMConfig
+from ...core.settings import LLMConfig
+from .base import BaseLLMProvider
 
 
 class OllamaProvider(BaseLLMProvider):
