@@ -16,10 +16,10 @@ from qdrant_client.models import (
     ScalarQuantizationConfig,
 )
 
-from ....infrastructure.embedding import get_rerank_model
-from ....infrastructure.logging import time_response
-from ..exceptions import VectorStoreError
-from ..interfaces import VectorStoreInterface
+from ..embedding import get_rerank_model
+from ..logging import time_response
+from ...api.rag.exceptions import VectorStoreError
+from .interfaces import VectorStoreInterface
 import structlog
 
 

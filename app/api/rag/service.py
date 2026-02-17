@@ -10,10 +10,10 @@ import structlog
 from pydantic import ValidationError
 
 from .schemas import LLMAnswer, Metadata, QueryResponse
-from .providers.local_ai import EmbeddingService, get_embeddign_service
+from ...infrastructure.storage.local_ai import EmbeddingService, get_embeddign_service
+from ...infrastructure.storage.qdrant_client import get_qdrant_store
+from ...infrastructure.storage.interfaces import FilterContext, VectorStoreInterface
 from .exceptions import ChunkingError, EmbeddingError
-from .interfaces import FilterContext, VectorStoreInterface
-from .providers.qdrant_client import get_qdrant_store
 from .prompt import PROMPT_TEMPLATE, PROMPT_TEMPLATE_CHAT
 from ..extraction.exceptions import EmptySourceContentError, SourceException
 from ..extraction.factory import SourceFactory

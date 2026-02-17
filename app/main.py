@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .infrastructure.logging import register_exceptions_handlers, logger
 from .infrastructure.metrics import http_requests_total, registry
 from .api.extraction.router import router as extraction_router
-from .api.rag.providers.qdrant_client import get_qdrant_store, QdrantStore
+from .infrastructure.storage.qdrant_client import get_qdrant_store, QdrantStore
 from .api.rag.router import router as rag_router
 from prometheus_client import make_asgi_app
 
