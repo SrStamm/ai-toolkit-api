@@ -1,4 +1,4 @@
-from ....core.llm_client import LLMClient
+from ....application.llm.client import LLMClient
 from ..prompts import EXTRACTION_PROMPT
 from ..schema import PersonSchema
 

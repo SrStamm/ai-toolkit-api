@@ -3,15 +3,14 @@
 import random
 import time
 import asyncio
-from typing import AsyncIterator, Optional
 import httpx
 import structlog
 import json
-
-from ..pricing import ModelPricing
+from typing import AsyncIterator, Optional
 
 from ..models import LLMResponse, TokenUsage
-from ..settings import BaseLLMProvider, LLMConfig
+from ...domain.services.pricing import ModelPricing
+from ...core.settings import BaseLLMProvider, LLMConfig
 
 
 class OllamaProvider(BaseLLMProvider):

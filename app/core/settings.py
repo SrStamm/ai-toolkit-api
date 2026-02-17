@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 from typing_extensions import AsyncIterator
-from .models import LLMResponse
+from ..domain.models import LLMResponse
 from pydantic import BaseModel
 
 

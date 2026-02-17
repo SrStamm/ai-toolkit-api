@@ -1,5 +1,5 @@
 from typing import Dict
-from .models import CostBreakdown
+from ...domain.models import CostBreakdown
 
 
 class ModelPricing:

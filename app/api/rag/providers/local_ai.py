@@ -4,8 +4,8 @@ import numpy as np
 import structlog
 
 from ....core.ia_models import get_embedding_model
-from ....core.custom_logging import time_response
-from ....core.metrics import embedding_duration_seconds, embedding_requests_total
+from ....infrastructure.logging import time_response
+from ....infrastructure.metrics import embedding_duration_seconds, embedding_requests_total
 from ..exceptions import EmbeddingError
 from ..interfaces import EmbeddingInterface
 

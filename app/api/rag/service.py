@@ -17,9 +17,9 @@ from .providers.qdrant_client import get_qdrant_store
 from .prompt import PROMPT_TEMPLATE, PROMPT_TEMPLATE_CHAT
 from ..extraction.exceptions import EmptySourceContentError, SourceException
 from ..extraction.factory import SourceFactory
-from ...core.llm_client import LLMClient, get_llm_client
-from ...core.cost_tracker import cost_tracker
-from ...core.metrics import (
+from ...application.llm.client import LLMClient, get_llm_client
+from ...domain.services.cost_tracker import cost_tracker
+from ...infrastructure.metrics import (
     rag_vector_search_duration_seconds, 
     rag_pipeline_duration_seconds, 
     rag_chunks_retrieved,
