@@ -1,5 +1,5 @@
 from fastapi import Depends, UploadFile
-from ...core.llm_client import LLMClient, get_llm_client
+from ...application.llm.client import LLMClient, get_llm_client
 from .semantic.invoice_extractor import InvoiceExtractor
 from .semantic.person_extractor import PersonExtractor
 from .source.csv_source import CSVSource

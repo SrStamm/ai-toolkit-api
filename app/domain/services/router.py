@@ -5,10 +5,11 @@ import time
 import structlog
 import threading
 
-from .llm_providers.mistral_provider import MistralProvider
-from .llm_providers.ollama_provider import OllamaProvider
-from .settings import BaseLLMProvider, LLMConfig
-from .metrics import (
+from ..providers.mistral import MistralProvider
+from ..providers.ollama import OllamaProvider
+from ...core.settings import LLMConfig
+from ...domain.providers.base import BaseLLMProvider
+from ...infrastructure.metrics import (
     llm_requests_total,
     llm_request_duration_seconds,
     llm_fallback_total,

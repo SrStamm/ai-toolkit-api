@@ -5,12 +5,11 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from .core.custom_logging import register_exceptions_handlers
-from .features.extraction.router import router as extraction_router
-from .features.rag.providers.qdrant_client import get_qdrant_store, QdrantStore
-from .features.rag.router import router as rag_router
-from .core.custom_logging import logger
-from .core.metrics import http_requests_total, registry
+from .infrastructure.logging import register_exceptions_handlers, logger
+from .infrastructure.metrics import http_requests_total, registry
+from .api.extraction.router import router as extraction_router
+from .infrastructure.storage.qdrant_client import get_qdrant_store, QdrantStore
+from .api.rag.router import router as rag_router
 from prometheus_client import make_asgi_app
 
 

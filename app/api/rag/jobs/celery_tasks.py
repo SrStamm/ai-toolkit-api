@@ -11,7 +11,7 @@ from .schemas import JobStatus
 from .job_service import JobService
 from ..service import RAGService, get_rag_service
 from ....core.celery_app import celery_app
-from ....core.metrics import (
+from ....infrastructure.metrics import (
     celery_task_duration_seconds, 
     celery_tasks_total,
     documents_ingested_total,

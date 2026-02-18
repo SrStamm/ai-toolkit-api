@@ -9,4 +9,4 @@ celery_app = Celery(
     # backend=settings.CELERY_RESULT_BACKEND,
 )
 
-celery_app.autodiscover_tasks(["app.features.rag.jobs.celery_tasks"])
+celery_app.autodiscover_tasks(["app.api.rag.jobs.celery_tasks"])

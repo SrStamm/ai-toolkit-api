@@ -1,4 +1,3 @@
-# app/core/models.py
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import torch
 
