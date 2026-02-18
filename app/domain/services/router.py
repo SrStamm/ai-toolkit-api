@@ -7,7 +7,7 @@ import threading
 
 from ..providers.factory_provider import LLMFactory
 from ..providers.base import BaseLLMProvider
-from ...core.settings import LLMConfig
+from ...core.settings import AppConfig
 from ...infrastructure.metrics import (
     llm_requests_total,
     llm_request_duration_seconds,
@@ -216,17 +216,8 @@ class LLMRouter:
 
 
 def get_llm_router() -> LLMRouter:
-    config_primary = LLMConfig(
-        provider="mistral",
-        api_key=os.getenv("MISTRAL_API_KEY")
-    )
-
-    config_fallback = LLMConfig(
-        provider="ollama",
-        api_key="",
-        model=os.getenv("OLLAMA_MODEL", "qwen2.5:7b"),
-        url=os.getenv("OLLAMA_URL", "http://localhost:11434")
-    )
+    config_primary = AppConfig.get_primary_config()
+    config_fallback =AppConfig.get_fallback_config()
 
     primary = LLMFactory.create_provider(config_primary)
     fallback= LLMFactory.create_provider(config_fallback)
