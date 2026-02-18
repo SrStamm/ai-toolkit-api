@@ -149,8 +149,9 @@ function IngestionInterface() {
 
       if (!response.ok) throw new Error("Error en la subida");
 
-      if (response.job_id) {
-        setActiveJobId(response.job_id);
+      const json = await response.json();
+      if (json.job_id) {
+        setActiveJobId(json.job_id);
       }
     } catch (err) {
       setLoading(false);
