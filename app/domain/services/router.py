@@ -5,10 +5,9 @@ import time
 import structlog
 import threading
 
-from ..providers.mistral import MistralProvider
-from ..providers.ollama import OllamaProvider
+from ..providers.factory_provider import LLMFactory
+from ..providers.base import BaseLLMProvider
 from ...core.settings import LLMConfig
-from ...domain.providers.base import BaseLLMProvider
 from ...infrastructure.metrics import (
     llm_requests_total,
     llm_request_duration_seconds,
@@ -217,17 +216,22 @@ class LLMRouter:
 
 
 def get_llm_router() -> LLMRouter:
-    API_KEY = os.getenv("MISTRAL_API_KEY")
-    OLLAMA_MODEL= os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-    OLLAMA_URL= os.getenv("OLLAMA_URL", "http://localhost:11434")
+    config_primary = LLMConfig(
+        provider="mistral",
+        api_key=os.getenv("MISTRAL_API_KEY")
+    )
 
-    if not API_KEY:
-        raise ValueError("API_KEY no configurada")
+    config_fallback = LLMConfig(
+        provider="ollama",
+        api_key="",
+        model=os.getenv("OLLAMA_MODEL", "qwen2.5:7b"),
+        url=os.getenv("OLLAMA_URL", "http://localhost:11434")
+    )
 
-    config = LLMConfig(api_key=API_KEY)
-    config_ollama = LLMConfig(api_key="", model=OLLAMA_MODEL, url=OLLAMA_URL)
+    primary = LLMFactory.create_provider(config_primary)
+    fallback= LLMFactory.create_provider(config_fallback)
 
     return LLMRouter(
-        primary = MistralProvider(config),
-        fallback= OllamaProvider(config_ollama),
+        primary=primary,
+        fallback=fallback
     )
