@@ -2,8 +2,8 @@ from typing import List
 import time
 import numpy as np
 import structlog
+from sentence_transformers import SentenceTransformer
 
-from ...infrastructure.embedding import get_embedding_model
 from ...infrastructure.logging import time_response
 from ...infrastructure.metrics import embedding_duration_seconds, embedding_requests_total
 from ...api.rag.exceptions import EmbeddingError
@@ -13,10 +13,8 @@ logger = structlog.get_logger()
 
 
 class EmbeddingService(EmbeddingInterface):
-    def __init__(self):
-        # self.embed_model = SentenceTransformer("intfloat/multilingual-e5-small")
-        # self.embed_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-        self.embed_model = get_embedding_model()
+    def __init__(self, model: SentenceTransformer):
+        self.embed_model = model
 
     @time_response
     def embed(self, text: str, query: bool = False) -> List[float]:
@@ -90,14 +88,20 @@ class EmbeddingService(EmbeddingInterface):
             duration = time.perf_counter() - start
             embedding_duration_seconds.labels(model=model_name, batch_size=str(batch_size)).observe(duration)
             embedding_requests_total.labels(model=model_name, status='success').inc()
-            
+
             return final.tolist()
         except Exception as e:
             embedding_requests_total.labels(model=model_name, status='error').inc()
             raise EmbeddingError(str(e)) from e
 
 
-embedding = EmbeddingService()
+# "intfloat/multilingual-e5-small"
+
+embedding = EmbeddingService(
+    model=SentenceTransformer(
+            "sentence-transformers/all-MiniLM-L6-v2", device="cpu"
+        )
+    )
 
 
 def get_embeddign_service() -> EmbeddingService:

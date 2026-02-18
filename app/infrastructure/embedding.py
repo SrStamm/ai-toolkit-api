@@ -1,21 +1,10 @@
-from sentence_transformers import SentenceTransformer, CrossEncoder
+from sentence_transformers import CrossEncoder
 import torch
 
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
 
-_embedding_model = None
 _rerank_model = None
-
-
-def get_embedding_model():
-    global _embedding_model
-    if _embedding_model is None:
-        _embedding_model = SentenceTransformer(
-            "sentence-transformers/all-MiniLM-L6-v2", device="cpu"
-        )
-    return _embedding_model
-
 
 def get_rerank_model():
     global _rerank_model
