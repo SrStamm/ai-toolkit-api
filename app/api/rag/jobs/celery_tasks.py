@@ -106,6 +106,9 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
 
         celery_tasks_total.labels('ingest_file_job', 'success').inc()
 
+        job_service.update_progress(job_id, 100)
+        job_service.update_status(job_id, JobStatus.completed)
+
     except Exception as e:
         logger.error("ingest_job_failed", job_id=job_id, error=str(e), exc_info=True)
         job_service.fail(job_id, str(e))

@@ -62,14 +62,6 @@ function IngestionInterface() {
         setProgress(data.progress);
         setStatusMessage(nextMessage);
 
-        console.log(
-          "Estado actual del Job:",
-          data.progress,
-          "% -",
-          nextMessage,
-        );
-        console.log("data", data);
-
         if (data.status === "running") setStatusMessage("Procesando...");
 
         if (data.status === "completed") {
@@ -89,7 +81,7 @@ function IngestionInterface() {
           });
         } else {
           // Sigue preguntando cada 2 segundos
-          timer = setTimeout(poll, 500);
+          timer = setTimeout(poll, 2000);
         }
       } catch (error) {
         setLoading(false);
@@ -149,8 +141,9 @@ function IngestionInterface() {
 
       if (!response.ok) throw new Error("Error en la subida");
 
-      if (response.job_id) {
-        setActiveJobId(response.job_id);
+      const json = await response.json();
+      if (json.job_id) {
+        setActiveJobId(json.job_id);
       }
     } catch (err) {
       setLoading(false);
