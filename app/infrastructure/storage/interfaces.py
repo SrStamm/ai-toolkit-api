@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, List
+from typing import Any, List, Dict
+from pydantic import BaseModel
 
 
 @dataclass
@@ -8,11 +9,14 @@ class FilterContext:
     domain: str | None = None
     topic: str | None = None
 
+class HybridVector(BaseModel):
+    dense: List[float]
+    sparse: Dict[str, Any]
 
 class VectorStoreInterface(ABC):
     @abstractmethod
     def query(
-        self, query_vector: List[float], limit: int, filter_context: FilterContext
+        self, query_vector: HybridVector, limit: int, filter_context: FilterContext
     ) -> list[Any]:
         """Search similar vectors"""
         pass
@@ -37,7 +41,7 @@ class VectorStoreInterface(ABC):
         pass
 
     @abstractmethod
-    def delete_old_data(self, source: str) -> None:
+    def delete_old_data(self, source: str, timestamp: int) -> None:
         pass
 
 
@@ -49,3 +53,15 @@ class EmbeddingInterface(ABC):
     @abstractmethod
     def batch_embed(self, chunk_list: list[str], query: bool = False) -> List[Any]:
         pass
+
+
+
+class HybridEmbeddingInterface(ABC):
+    @abstractmethod
+    def embed(self, text: str, query: bool = False) -> HybridVector:
+        pass
+
+    @abstractmethod
+    def batch_embed(self, chunk_list: list[str], query: bool = False) -> List[HybridVector]:
+        pass
+

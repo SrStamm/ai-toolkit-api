@@ -10,9 +10,9 @@ import structlog
 from pydantic import ValidationError
 
 from .schemas import LLMAnswer, Metadata, QueryResponse
-from ...infrastructure.storage.local_ai import EmbeddingService, get_embeddign_service
 from ...infrastructure.storage.qdrant_client import get_qdrant_store
 from ...infrastructure.storage.interfaces import FilterContext, VectorStoreInterface
+from ...infrastructure.storage.hybrid_ai import HybridEmbeddingService, get_hybrid_embeddign_service
 from .exceptions import ChunkingError, EmbeddingError
 from .prompt import PROMPT_TEMPLATE, PROMPT_TEMPLATE_CHAT
 from ..extraction.exceptions import EmptySourceContentError, SourceException
@@ -38,7 +38,7 @@ class RAGService:
         self,
         llm_client: LLMClient,
         vector_store: VectorStoreInterface,
-        embed_service: EmbeddingService,
+        embed_service: HybridEmbeddingService,
     ):
         self.llm_client = llm_client
         self.vector_store = vector_store
@@ -90,7 +90,7 @@ class RAGService:
 
         await report(55, f"Found {len(news)} new, {len(chunks_in_db)} existing chunks")
 
-        timestamp = datetime.now(UTC).isoformat()
+        timestamp = int(datetime.now(UTC).isoformat())
         points_to_upsert = []
 
         # Process new chunks
@@ -124,7 +124,10 @@ class RAGService:
             for (h_id, text, original_idx), vector in zip(news, vectors):
                 point = self.vector_store.create_point(
                     hash_id=h_id,
-                    vector=vector,
+                    vector={
+                        "dense": vector.dense,
+                        "sparse": vector.sparse
+                    },
                     payload={
                         "text": text,
                         "source": source,
@@ -159,7 +162,7 @@ class RAGService:
 
         # Clean old data
         if chunks_in_db:
-            self.vector_store.delete_old_data(source=source)
+            self.vector_store.delete_old_data(source=source, timestamp=timestamp)
 
         return {
             "chunks_processed": len(points_to_upsert),
@@ -372,7 +375,7 @@ class RAGService:
         # Search
         start_search = time.perf_counter()
 
-        result = self.vector_store.query(vector_query, limit=10, filter_context=context)
+        result = self.vector_store.query(vector_query, limit=20, filter_context=context)
 
         finish_search = time.perf_counter() - start_search
         rag_vector_search_duration_seconds.labels(
@@ -385,7 +388,7 @@ class RAGService:
             topic=topic or 'all'
         ).observe(len(result))
 
-        return result 
+        return result
 
     def _build_citations(self, query_result: list) -> list[dict]:
         """Centralized LLM usage logging"""
@@ -612,7 +615,7 @@ def create_rag_service() -> RAGService:
     return RAGService(
         llm_client=get_llm_client(),
         vector_store=get_qdrant_store(),
-        embed_service=get_embeddign_service(),
+        embed_service=get_hybrid_embeddign_service(),
     )
 
 
