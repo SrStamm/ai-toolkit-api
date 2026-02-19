@@ -55,14 +55,11 @@ function IngestionInterface() {
         let nextMessage = "";
 
         if (data.status === "completed") nextMessage = "¡Completado!";
-        else if (data.status === "running")
-          nextMessage = data.step || "Procesando...";
+        else if (data.status === "running") nextMessage = data.step;
         else nextMessage = data.status;
 
         setProgress(data.progress);
         setStatusMessage(nextMessage);
-
-        if (data.status === "running") setStatusMessage("Procesando...");
 
         if (data.status === "completed") {
           setLoading(false);
@@ -224,7 +221,7 @@ function IngestionInterface() {
             <div className="space-y-2 w-full mt-4 border-t pt-4">
               <Progress className="h-2 w-full" value={Number(progress)} />
               <div className="flex justify-between text-xs text-muted-foreground animate-pulse">
-                <span>{statusMessage || "Procesando..."}</span>
+                <span>{statusMessage}</span>
                 <span>{`${Number(progress)}%`}</span>
               </div>
             </div>
