@@ -8,7 +8,10 @@ from qdrant_client.models import (
     ScalarQuantization,
     ScalarType,
     ScoredPoint,
+    SparseIndexParams,
+    SparseVector,
     VectorParams,
+    SparseVectorParams,
     Filter,
     FilterSelector,
     Record,
@@ -49,9 +52,18 @@ class QdrantStore(VectorStoreInterface):
         try:
             self.client.create_collection(
                 collection_name=COLLECTION_NAME,
-                vectors_config=VectorParams(
-                    size=384, distance=Distance.COSINE, on_disk=True
-                ),
+                vectors_config={
+                    "dense": VectorParams(
+                        size=384, distance=Distance.COSINE, on_disk=True
+                    ),
+                },
+                sparse_vectors_config={
+                    "sparse": SparseVectorParams(
+                        index=SparseIndexParams(
+                            on_disk=True
+                        )
+                    )
+                },
                 quantization_config=ScalarQuantization(
                     scalar=ScalarQuantizationConfig(
                         type=ScalarType.INT8, quantile=0.99, always_ram=False
@@ -96,7 +108,11 @@ class QdrantStore(VectorStoreInterface):
         return search_result
 
     def create_point(self, hash_id, vector, payload) -> PointStruct:
-        return PointStruct(id=hash_id, vector=vector, payload=payload)
+        return PointStruct(
+            id=hash_id,
+            vector=vector,
+            payload=payload
+        )
 
     @time_response
     def retrieve(self, hash_ids: List[str]) -> List[Record]:
@@ -109,6 +125,9 @@ class QdrantStore(VectorStoreInterface):
 
     @time_response
     def insert_vector(self, points: List[PointStruct], batch_size: int = 64):
+        if points:
+            print(f"DEBUG VECTOR ESTRUCTURA: {points[0].vector}")
+
         for i in range(0, len(points), batch_size):
             batch = points[i : i + batch_size]
             self.client.upsert(collection_name=COLLECTION_NAME, points=batch)
