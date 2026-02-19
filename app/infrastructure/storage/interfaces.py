@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, List
+from typing import Any, List, Dict
+from pydantic import BaseModel
 
 
 @dataclass
@@ -49,3 +50,18 @@ class EmbeddingInterface(ABC):
     @abstractmethod
     def batch_embed(self, chunk_list: list[str], query: bool = False) -> List[Any]:
         pass
+
+
+class HybridVector(BaseModel):
+    dense: List[float]
+    sparse: Dict[str, Any]
+
+class HybridEmbeddingInterface(ABC):
+    @abstractmethod
+    def embed(self, text: str, query: bool = False) -> HybridVector:
+        pass
+
+    @abstractmethod
+    def batch_embed(self, chunk_list: list[str], query: bool = False) -> List[HybridVector]:
+        pass
+
