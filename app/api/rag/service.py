@@ -90,7 +90,7 @@ class RAGService:
 
         await report(55, f"Found {len(news)} new, {len(chunks_in_db)} existing chunks")
 
-        timestamp = datetime.now(UTC).isoformat()
+        timestamp = int(datetime.now(UTC).isoformat())
         points_to_upsert = []
 
         # Process new chunks
@@ -162,7 +162,7 @@ class RAGService:
 
         # Clean old data
         if chunks_in_db:
-            self.vector_store.delete_old_data(source=source)
+            self.vector_store.delete_old_data(source=source, timestamp=timestamp)
 
         return {
             "chunks_processed": len(points_to_upsert),
@@ -375,7 +375,7 @@ class RAGService:
         # Search
         start_search = time.perf_counter()
 
-        result = self.vector_store.query(vector_query, limit=10, filter_context=context)
+        result = self.vector_store.query(vector_query, limit=20, filter_context=context)
 
         finish_search = time.perf_counter() - start_search
         rag_vector_search_duration_seconds.labels(
@@ -388,7 +388,7 @@ class RAGService:
             topic=topic or 'all'
         ).observe(len(result))
 
-        return result 
+        return result
 
     def _build_citations(self, query_result: list) -> list[dict]:
         """Centralized LLM usage logging"""
