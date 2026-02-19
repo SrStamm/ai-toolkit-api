@@ -90,54 +90,67 @@ class RAGService:
 
         await report(55, f"Found {len(news)} new, {len(chunks_in_db)} existing chunks")
 
-        timestamp = int(datetime.now(UTC).isoformat())
-        points_to_upsert = []
+        timestamp = int(datetime.now(UTC).timestamp())
+        old_points_to_upsert = []
+
+        # Clean old data
+        if chunks_in_db:
+            self.vector_store.delete_old_data(source=source, timestamp=timestamp)
 
         # Process new chunks
         if news:
             await report(60, "Generating embeddings...")
 
             # Timeout calculation
-            estimated_time = len(chunks) * 0.5
+            estimated_time = len(news) * 0.5
             timeout = max(60, estimated_time * 2)
 
-            try:
-                texts_to_process = [item[1] for item in news]
-                vectors = await asyncio.wait_for(
-                    asyncio.to_thread(self.embed_service.batch_embed, texts_to_process),
-                    timeout=timeout,
-                )
-            except asyncio.TimeoutError:
-                timeout_minutes = timeout / 60
-                raise EmbeddingError(
-                    f"Embedding timed out after {timeout_minutes:.1f} minutes"
-                )
+            BATCH_SIZE = 20
 
-            if len(vectors) != len(texts_to_process):
-                raise EmbeddingError(
-                    f"Vector mismatch: expected {len(texts_to_process)}, got {len(vectors)}"
-                )
+            for i in range(0, len(news), BATCH_SIZE):
+                try:
+                    batch = news[i:i+BATCH_SIZE]
+                    texts_to_process = [item[1] for item in batch]
+                    vectors = await asyncio.wait_for(
+                        asyncio.to_thread(self.embed_service.batch_embed, texts_to_process),
+                        timeout=timeout,
+                    )
 
-            await report(80, "Creating vector points...")
+                except asyncio.TimeoutError:
+                    timeout_minutes = timeout / 60
+                    raise EmbeddingError(
+                        f"Embedding timed out after {timeout_minutes:.1f} minutes"
+                    )
 
-            # Create points
-            for (h_id, text, original_idx), vector in zip(news, vectors):
-                point = self.vector_store.create_point(
-                    hash_id=h_id,
-                    vector={
-                        "dense": vector.dense,
-                        "sparse": vector.sparse
-                    },
-                    payload={
-                        "text": text,
-                        "source": source,
-                        "domain": domain.lower(),
-                        "topic": topic.lower(),
-                        "chunk_index": original_idx,
-                        "ingested_at": timestamp,
-                    },
-                )
-                points_to_upsert.append(point)
+                if len(vectors) != len(texts_to_process):
+                    raise EmbeddingError(
+                            f"Vector mismatch: expected {len(texts_to_process)}, got {len(vectors)}"
+                        )
+
+                new_points = []
+
+                # Create points
+                for (h_id, text, original_idx), vector in zip(batch, vectors):
+                    point = self.vector_store.create_point(
+                        hash_id=h_id,
+                        vector={
+                            "dense": vector.dense,
+                            "sparse": vector.sparse
+                        },
+                        payload={
+                            "text": text,
+                            "source": source,
+                            "domain": domain.lower(),
+                            "topic": topic.lower(),
+                            "chunk_index": original_idx,
+                            "ingested_at": timestamp,
+                        },
+                    )
+                    new_points.append(point)
+
+                self.vector_store.insert_vector(new_points)
+
+                await report(60, f"Ingesting batch {i} of {len(news)}...")
 
         # Update existing chunks
         if chunks_in_db:
@@ -152,20 +165,16 @@ class RAGService:
                         "ingested_at": timestamp,
                     },
                 )
-                points_to_upsert.append(point)
+                old_points_to_upsert.append(point)
 
         # Insert into vector store
-        if points_to_upsert:
+        if old_points_to_upsert:
             await report(95, "Storing in vector database...")
 
-            self.vector_store.insert_vector(points_to_upsert)
-
-        # Clean old data
-        if chunks_in_db:
-            self.vector_store.delete_old_data(source=source, timestamp=timestamp)
+            self.vector_store.insert_vector(old_points_to_upsert)
 
         return {
-            "chunks_processed": len(points_to_upsert),
+            "chunks_processed": len(chunks),
             "new": len(news),
             "updated": len(chunks_in_db),
         }
@@ -263,7 +272,7 @@ class RAGService:
     # ================================
 
     async def ingest_document(
-        self, url: str, source: str, domain: str, topic: str, progress_callback=None
+        self, url: str, source: str, domain: str, topic: str, progress_callback: Optional[callable] =None
     ):
         """Synchronous ingestion from URL"""
         # Get tools since factory
