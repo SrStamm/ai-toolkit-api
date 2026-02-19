@@ -31,6 +31,7 @@ class JobService:
             progress=0,
             created_at=datetime.now(),
             updated_at=datetime.now(),
+            step="queued"
         )
         self._set_state(job_id, state.model_dump_json())
         return job_id
@@ -41,7 +42,7 @@ class JobService:
         state.updated_at = datetime.now()
         self._set_state(job_id, state.model_dump_json())
 
-    def update_progress(self, job_id: str, progress: int, step: str | None = None):
+    def update_progress(self, job_id: str, progress: int, step: str):
         state = self.get_state(job_id)
         state.progress = progress
         state.step = step

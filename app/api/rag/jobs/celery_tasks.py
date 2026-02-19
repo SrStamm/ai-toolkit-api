@@ -31,7 +31,7 @@ def ingest_html_job(self, job_id: str, ingest_data: dict):
 
     try:
         job_service.update_status(job_id, JobStatus.running)
-        job_service.update_progress(job_id, 10)
+        job_service.update_progress(job_id, 10, "Starting task")
 
         async def tracker(percent, message):
             logger.info(
@@ -51,7 +51,7 @@ def ingest_html_job(self, job_id: str, ingest_data: dict):
 
         logger.info("ingest_job_success", job_id=job_id)
 
-        job_service.update_progress(job_id, 100)
+        job_service.update_progress(job_id, 100, "completed")
         job_service.update_status(job_id, JobStatus.completed)
 
         celery_tasks_total.labels('ingest_html_job', 'success').inc()
@@ -106,7 +106,7 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
 
         celery_tasks_total.labels('ingest_file_job', 'success').inc()
 
-        job_service.update_progress(job_id, 100)
+        job_service.update_progress(job_id, 100, "completed")
         job_service.update_status(job_id, JobStatus.completed)
 
     except Exception as e:
