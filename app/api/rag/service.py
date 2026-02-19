@@ -10,9 +10,9 @@ import structlog
 from pydantic import ValidationError
 
 from .schemas import LLMAnswer, Metadata, QueryResponse
-from ...infrastructure.storage.local_ai import EmbeddingService, get_embeddign_service
 from ...infrastructure.storage.qdrant_client import get_qdrant_store
 from ...infrastructure.storage.interfaces import FilterContext, VectorStoreInterface
+from ...infrastructure.storage.hybrid_ai import HybridEmbeddingService, get_hybrid_embeddign_service
 from .exceptions import ChunkingError, EmbeddingError
 from .prompt import PROMPT_TEMPLATE, PROMPT_TEMPLATE_CHAT
 from ..extraction.exceptions import EmptySourceContentError, SourceException
@@ -38,7 +38,7 @@ class RAGService:
         self,
         llm_client: LLMClient,
         vector_store: VectorStoreInterface,
-        embed_service: EmbeddingService,
+        embed_service: HybridEmbeddingService,
     ):
         self.llm_client = llm_client
         self.vector_store = vector_store
@@ -124,7 +124,10 @@ class RAGService:
             for (h_id, text, original_idx), vector in zip(news, vectors):
                 point = self.vector_store.create_point(
                     hash_id=h_id,
-                    vector=vector,
+                    vector={
+                        "dense": vector.dense,
+                        "sparse": vector.sparse
+                    },
                     payload={
                         "text": text,
                         "source": source,
@@ -612,7 +615,7 @@ def create_rag_service() -> RAGService:
     return RAGService(
         llm_client=get_llm_client(),
         vector_store=get_qdrant_store(),
-        embed_service=get_embeddign_service(),
+        embed_service=get_hybrid_embeddign_service(),
     )
 
 
