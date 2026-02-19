@@ -150,7 +150,7 @@ class RAGService:
 
                 self.vector_store.insert_vector(new_points)
 
-                await report(60, f"Ingesting batch {i} of {len(news)}...")
+                await report(60, f"Ingested batch {i} of {len(news) + BATCH_SIZE}...")
 
         # Update existing chunks
         if chunks_in_db:
