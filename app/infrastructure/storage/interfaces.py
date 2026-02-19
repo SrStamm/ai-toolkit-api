@@ -9,11 +9,14 @@ class FilterContext:
     domain: str | None = None
     topic: str | None = None
 
+class HybridVector(BaseModel):
+    dense: List[float]
+    sparse: Dict[str, Any]
 
 class VectorStoreInterface(ABC):
     @abstractmethod
     def query(
-        self, query_vector: List[float], limit: int, filter_context: FilterContext
+        self, query_vector: HybridVector, limit: int, filter_context: FilterContext
     ) -> list[Any]:
         """Search similar vectors"""
         pass
@@ -38,7 +41,7 @@ class VectorStoreInterface(ABC):
         pass
 
     @abstractmethod
-    def delete_old_data(self, source: str) -> None:
+    def delete_old_data(self, source: str, timestamp: int) -> None:
         pass
 
 
@@ -52,9 +55,6 @@ class EmbeddingInterface(ABC):
         pass
 
 
-class HybridVector(BaseModel):
-    dense: List[float]
-    sparse: Dict[str, Any]
 
 class HybridEmbeddingInterface(ABC):
     @abstractmethod
