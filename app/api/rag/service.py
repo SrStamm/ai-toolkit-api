@@ -88,7 +88,7 @@ class RAGService:
             if hash_ids[i] not in ids_in_db
         ]
 
-        await report(55, f"Found {len(news)} new, {len(chunks_in_db)} existing chunks")
+        await report(55, f"Found {len(news)} news, {len(chunks_in_db)} existing chunks")
 
         timestamp = int(datetime.now(UTC).timestamp())
         old_points_to_upsert = []
@@ -150,7 +150,7 @@ class RAGService:
 
                 self.vector_store.insert_vector(new_points)
 
-                await report(60, f"Ingested batch {i} of {len(news) + BATCH_SIZE}...")
+                await report(60, f"Ingested {i} of {len(news) + BATCH_SIZE} batchs")
 
         # Update existing chunks
         if chunks_in_db:

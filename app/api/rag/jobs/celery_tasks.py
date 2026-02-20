@@ -31,7 +31,7 @@ def ingest_html_job(self, job_id: str, ingest_data: dict):
 
     try:
         job_service.update_status(job_id, JobStatus.running)
-        job_service.update_progress(job_id, 10, "Starting task")
+        job_service.update_progress(job_id, 10, "Starting document ingesting")
 
         async def tracker(percent, message):
             logger.info(
@@ -78,6 +78,7 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
 
     try:
         job_service.update_status(job_id, JobStatus.running)
+        job_service.update_progress(job_id, 10, "Starting document ingesting")
 
         async def tracker(percent, message):
             logger.info(
