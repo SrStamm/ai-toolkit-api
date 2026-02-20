@@ -384,7 +384,7 @@ class RAGService:
         # Search
         start_search = time.perf_counter()
 
-        result = self.vector_store.query(vector_query, limit=20, filter_context=context)
+        result = self.vector_store.query(vector_query, limit=50, filter_context=context)
 
         finish_search = time.perf_counter() - start_search
         rag_vector_search_duration_seconds.labels(
@@ -445,6 +445,8 @@ class RAGService:
         # Retrieve relevant chunks
         query_result = self.query(user_question, domain, topic)
 
+        self.logger.info("query_chunks_retrieved", quantity=len(query_result))
+
         if not query_result:
             self.logger.info(
                 "no_rag_results",
@@ -461,6 +463,7 @@ class RAGService:
 
         # Rerank
         rerank_result = self.vector_store.rerank(user_question, query_result)
+        self.logger.info("chunks_reranked", quantity=len(rerank_result))
 
 
         # Build context
@@ -537,6 +540,7 @@ class RAGService:
 
         # Retrieve
         query_result = self.query(user_question, domain, topic)
+        self.logger.info("query_chunks_retrieved", quantity=len(query_result))
 
         if not query_result:
             yield f"data: {json.dumps({'type': 'error', 'content': 'No results found'})}\n\n"
@@ -544,6 +548,11 @@ class RAGService:
 
         # Rerank
         rerank_result = self.vector_store.rerank(user_question, query_result)
+        self.logger.info("chunks_reranked", quantity=len(rerank_result))
+
+        for i, chunk in enumerate(rerank_result[:3]):
+            print("----", i)
+            print(chunk.payload["text"][:500])
 
 
         # Build context
@@ -594,7 +603,7 @@ class RAGService:
         ).observe(finish_pipeline)
 
         # Send citations
-        citations = self._build_citations(query_result)
+        citations = self._build_citations(rerank_result)
         yield f"data: {json.dumps({'type': 'citations', 'citations': citations})}\n\n"
 
         # Send metadata
