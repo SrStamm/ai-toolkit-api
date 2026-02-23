@@ -28,3 +28,7 @@ class InvoiceSchema(BaseModel):
 
 class InvoiceList(BaseModel):
     invoices: List[InvoiceSchema]
+
+class ChunkWithMetadata(BaseModel):
+    text: str
+    section: Optional[str] = None

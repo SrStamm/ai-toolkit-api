@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
-
 from fastapi import UploadFile
+from .schema import ChunkWithMetadata
 
 
 class SourceInterface(ABC):
@@ -16,5 +16,5 @@ class CleanerInterface(ABC):
         pass
 
     @abstractmethod
-    def chunk(self, clean_text: str) -> list[str]:
+    def chunk(self, clean_text: str) -> list[ChunkWithMetadata]:
         pass
