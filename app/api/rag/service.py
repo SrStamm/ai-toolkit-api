@@ -384,7 +384,7 @@ class RAGService:
         # Search
         start_search = time.perf_counter()
 
-        result = self.vector_store.query(vector_query, limit=50, filter_context=context)
+        result = self.vector_store.query(vector_query, limit=20, filter_context=context)
 
         finish_search = time.perf_counter() - start_search
         rag_vector_search_duration_seconds.labels(
