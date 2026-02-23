@@ -90,6 +90,7 @@ class QdrantStore(VectorStoreInterface):
             query=models.FusionQuery(fusion=models.Fusion.RRF),
             with_payload=True,
             query_filter=query_filter,
+            limit=limit
         ).points
 
         return search_result
@@ -119,12 +120,14 @@ class QdrantStore(VectorStoreInterface):
     @time_response
     def rerank(self, query: str, search_result: list) -> List[models.ScoredPoint]:
 
+        if not search_result:
+            return []
+
         pairs = [[query, hit.payload["text"]] for hit in search_result]
         scores = self.rerank_model.predict(pairs)
 
         for i, hit in enumerate(search_result):
             hit.payload["rerank_score"] = float(scores[i])
-            print(hit.payload["rerank_score"])
 
         # ordenar por el nuevo score
         search_result.sort(
@@ -132,16 +135,21 @@ class QdrantStore(VectorStoreInterface):
             reverse=True
         )
 
-        # filtrar por threshold relativo
         best_score = search_result[0].payload["rerank_score"]
-        threshold = best_score * 0.7
 
         filtered = [
             hit for hit in search_result
-            if hit.payload["rerank_score"] >= threshold
+            if hit.payload["rerank_score"] >= best_score - 2.0
         ]
 
-        return search_result[:7]
+        print("BEST:", best_score)
+        print("ALL:", [hit.payload["rerank_score"] for hit in search_result])
+        print("FILTERED:", len(filtered))
+
+        if len(filtered) < 3:
+            filtered = search_result[:3]
+
+        return filtered[:7]
 
     @time_response
     def delete_old_data(self, source: str, timestamp: int):
