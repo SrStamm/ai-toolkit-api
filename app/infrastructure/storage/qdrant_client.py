@@ -119,6 +119,8 @@ class QdrantStore(VectorStoreInterface):
 
     @time_response
     def rerank(self, query: str, search_result: list) -> List[models.ScoredPoint]:
+        MIN_SCORE = 4.5
+        DELTA = 2.0
 
         if not search_result:
             return []
@@ -139,17 +141,19 @@ class QdrantStore(VectorStoreInterface):
 
         filtered = [
             hit for hit in search_result
-            if hit.payload["rerank_score"] >= best_score - 2.0
+            if (
+                hit.payload["rerank_score"] >= best_score - DELTA
+                and hit.payload["rerank_score"] >= MIN_SCORE
+            )
         ]
+        
+        top_context = filtered[:3] if len(filtered) >= 3 else search_result[:3]
 
         print("BEST:", best_score)
         print("ALL:", [hit.payload["rerank_score"] for hit in search_result])
         print("FILTERED:", len(filtered))
 
-        if len(filtered) < 3:
-            filtered = search_result[:3]
-
-        return filtered[:7]
+        return top_context
 
     @time_response
     def delete_old_data(self, source: str, timestamp: int):
