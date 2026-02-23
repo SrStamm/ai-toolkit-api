@@ -18,6 +18,12 @@ class PDFCleaner(CleanerInterface):
 
         content = re.sub(r"\.{5,}\s*\d+$", "", content, flags=re.MULTILINE)
 
+        # Remove index-like lines
+        content = re.sub(r"^Index\s+\|\s+\d+.*$", "", content, flags=re.MULTILINE)
+
+        # Remove lines with many numbers separated by commas
+        content = re.sub(r"^[A-Za-z ,\-]+\s\d+(?:-\d+)?(?:,\s*\d+(?:-\d+)?)*$", "", content, flags=re.MULTILINE)
+
         content = re.sub(r"[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]", "", content)
         content = re.sub(r"[ \t]+", " ", content)
         content = re.sub(r"(\w+)-\s*\n\s*(\w+)", r"\1\2", content)
