@@ -118,20 +118,30 @@ class QdrantStore(VectorStoreInterface):
 
     @time_response
     def rerank(self, query: str, search_result: list) -> List[models.ScoredPoint]:
-        # create pairs (question, text of chunk)
-        pairs = [[query, hit.payload["text"]] for hit in search_result]
 
-        # model give us a relevant points for each pair
+        pairs = [[query, hit.payload["text"]] for hit in search_result]
         scores = self.rerank_model.predict(pairs)
 
-        # match the score with your result
         for i, hit in enumerate(search_result):
-            hit.payload["score"] = scores[i]
+            hit.payload["rerank_score"] = float(scores[i])
+            print(hit.payload["rerank_score"])
 
-        # sort from highest to lowest according to the new score
-        search_result.sort(key=lambda x: x.score, reverse=True)
+        # ordenar por el nuevo score
+        search_result.sort(
+            key=lambda x: x.payload["rerank_score"],
+            reverse=True
+        )
 
-        return search_result[:3]
+        # filtrar por threshold relativo
+        best_score = search_result[0].payload["rerank_score"]
+        threshold = best_score * 0.7
+
+        filtered = [
+            hit for hit in search_result
+            if hit.payload["rerank_score"] >= threshold
+        ]
+
+        return search_result[:7]
 
     @time_response
     def delete_old_data(self, source: str, timestamp: int):

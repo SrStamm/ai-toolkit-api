@@ -10,10 +10,29 @@ class PDFCleaner(CleanerInterface):
         if not raw_content:
             return ""
 
-        content = re.sub(r"[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]", "", raw_content)
+        content = re.sub(r"[\u2010-\u2015]", "-", raw_content)
+        content = re.sub(r"(\w+)-\n(\w+)", r"\1\2", content)
+        content = re.sub(r"\n(?=[a-z])", " ", content)
+        content = re.sub(r"\|\s*\d+\s*$", "", content)
+        content = re.sub(r"<s>\[INST\].*?\[/INST\]", "", content, flags=re.DOTALL)
+
+        content = re.sub(r"\.{5,}\s*\d+$", "", content, flags=re.MULTILINE)
+
+        # Remove index-like lines
+        content = re.sub(r"^Index\s+\|\s+\d+.*$", "", content, flags=re.MULTILINE)
+
+        # Remove lines with many numbers separated by commas
+        content = re.sub(r"^[A-Za-z ,\-]+\s\d+(?:-\d+)?(?:,\s*\d+(?:-\d+)?)*$", "", content, flags=re.MULTILINE)
+
+        content = re.sub(r"[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]", "", content)
         content = re.sub(r"[ \t]+", " ", content)
         content = re.sub(r"(\w+)-\s*\n\s*(\w+)", r"\1\2", content)
         content = re.sub(r"\n{3,}", "\n\n", content)
+
+        content = re.sub(r"^[A-Z][^\n]{0,80}\|\s*\d+\s*$", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*\d+\s*$", "", content, flags=re.MULTILINE)
+        content = re.sub(r"<s>\[INST\].*?\[/INST\]", "", content, flags=re.DOTALL)
+
 
         lines = [line.strip() for line in content.split("\n")]
 
@@ -69,46 +88,41 @@ class PDFCleaner(CleanerInterface):
 
         return chunks
 
-    def chunk(self, clean_text: str) -> list[str]:
+    def chunk(
+        self,
+        clean_text: str,
+        max_chars: int = 1500,
+        overlap: int = 250,
+    ) -> list[str]:
         if not clean_text.strip():
             return []
 
-        lines = clean_text.split("\n")
+        # 1. Normalize excessive newlines
+        text = re.sub(r"\n{2,}", "\n\n", clean_text)
+
+        # 2. Convert newlines inside paragraphs to spaces
+        text = re.sub(r"(?<!\n)\n(?!\n)", " ", text)
+
         chunks = []
+        start = 0
+        text_length = len(text)
 
-        current_heading = None
-        buffer = []
+        while start < text_length:
+            end = start + max_chars
+            chunk = text[start:end]
 
-        def flush():
-            if not buffer:
-                return
+            if end < text_length:
+                # Try to cut at sentence boundary
+                last_period = chunk.rfind(". ")
+                if last_period > max_chars * 0.6:
+                    end = start + last_period + 1
+                    chunk = text[start:end]
 
-            text = "\n".join(buffer).strip()
+            chunk = chunk.strip()
 
-            if len(text) < self.MIN_CHUNK_LEN:
-                buffer.clear()
-                return
+            if len(chunk) >= self.MIN_CHUNK_LEN:
+                chunks.append(chunk)
 
-            if current_heading:
-                text = f"{current_heading}\n{text}"
+            start = end - overlap
 
-            if len(text) > 1500:
-                chunks.extend(self._split_by_length(text))
-            else:
-                chunks.append(text)
-
-            buffer.clear()
-
-        for line in lines:
-            if not line:
-                buffer.append("")
-                continue
-
-            if self._is_heading(line):
-                flush()
-                current_heading = line
-            else:
-                buffer.append(line)
-
-        flush()
         return chunks
