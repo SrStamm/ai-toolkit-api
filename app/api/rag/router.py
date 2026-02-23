@@ -137,6 +137,18 @@ def retrieve_search(
 
     return {"status": "query", "Points": query_result}
 
+@router.post(
+    "/retrieve-v2",
+)
+def retrieve_and_rerank_search(
+    query: QueryRequest,
+    serv: RAGService = Depends(get_rag_service),
+):
+    query_result = serv.query(text=query.text, domain=query.domain, topic=query.topic)
+    rerank_result = serv.vector_store.rerank(query.text, query_result)
+
+    return {"status": "rerank", "Points": rerank_result}
+
 
 @router.post(
     "/ask",
