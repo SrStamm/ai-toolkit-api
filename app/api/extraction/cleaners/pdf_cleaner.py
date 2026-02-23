@@ -141,11 +141,9 @@ class PDFCleaner(CleanerInterface):
             if len(block) > max_chars:
                 if current_chunk:
                     chunks.append(current_chunk.strip())
-                    current_chunk = ""
-
                 sub_chunks = self._split_by_length(block, max_chars, overlap)
                 chunks.extend(sub_chunks)
-
+                current_chunk = chunks[-1][-overlap:] if chunks else ""
                 continue
 
             # if add block does not exceed the limit
@@ -157,11 +155,10 @@ class PDFCleaner(CleanerInterface):
             else:
                 if current_chunk:
                     chunks.append(current_chunk.strip())
+                current_chunk = chunks[-1][-overlap:] + "\n\n" + block if chunks else block
 
-                # new chunk start with current block
-                current_chunk = block
 
         if current_chunk:
             chunks.append(current_chunk.strip())
 
-        return self._apply_overlap(chunks, overlap)
+        return chunks
