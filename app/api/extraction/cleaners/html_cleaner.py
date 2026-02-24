@@ -1,4 +1,6 @@
 from bs4 import BeautifulSoup
+
+from ..schema import ChunkWithMetadata
 from ..interface import CleanerInterface
 
 
@@ -11,10 +13,9 @@ class HTMLCleaner(CleanerInterface):
 
         main = soup.find("main") or soup.find("article") or soup
 
-        lines = [line.strip() for line in main.get_text(separator="\n").splitlines()]
-        return "\n".join(line for line in lines if line)
+        return str(main)
 
-    def _split_by_length(self, clean_text: str, max_chars: int = 300):
+    def _split_by_length(self, clean_text: str, max_chars: int = 300) -> list[ChunkWithMetadata]:
         overlap = 100
         chunks = []
         start = 0
@@ -22,14 +23,14 @@ class HTMLCleaner(CleanerInterface):
         while start < len(clean_text):
             end = start + max_chars
             chunk = clean_text[start:end]
-            chunks.append(chunk)
+            chunks.append(ChunkWithMetadata(text=chunk, section=None))
             start = end - overlap
 
         return chunks
 
-    def chunk(self, clean_text: str) -> list[str]:
+    def chunk(self, clean_text: str) -> list[ChunkWithMetadata]:
         soup = BeautifulSoup(clean_text, "html.parser")
-        chunks = []
+        chunks: list[ChunkWithMetadata] = []
 
         # 1. Identificar encabezados como puntos de anclaje
         headers = soup.find_all(["h2", "h3"])
@@ -60,6 +61,6 @@ class HTMLCleaner(CleanerInterface):
             if len(full_section) > 1500:
                 chunks.extend(self._split_by_length(full_section, 1000))
             else:
-                chunks.append(full_section)
+                chunks.append(ChunkWithMetadata(text=full_section, section=header_text))
 
         return chunks
