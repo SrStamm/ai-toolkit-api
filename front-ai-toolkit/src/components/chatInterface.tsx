@@ -142,22 +142,31 @@ function ChatInterface() {
               <Markdown
                 components={{
                   p: ({ children }) => (
-                    <p className="mb-2 last:mb-0 text-left ">{children}</p>
+                    <p className="mb-2 last:mb-0 text-left">{children}</p>
+                  ),
+                  ul: ({ children }) => (
+                    <ul className="list-disc list-outside pl-5 mb-2 space-y-1 text-left">
+                      {children}
+                    </ul>
+                  ),
+                  ol: ({ children }) => (
+                    <ol className="list-decimal list-outside pl-5 mb-2 space-y-1 text-left">
+                      {children}
+                    </ol>
+                  ),
+                  li: ({ children }) => (
+                    <li className="text-left leading-relaxed">{children}</li>
+                  ),
+                  strong: ({ children }) => (
+                    <strong className="font-semibold">{children}</strong>
                   ),
                   code: ({ children, className, ...props }) => {
                     const isBlock = className?.includes("language");
-
-                    let textColor = "";
-
-                    if (isBlock) {
-                      textColor = "text-slate-300";
-                    } else {
-                      textColor =
-                        msg.role === "user"
-                          ? "text-white"
-                          : "text-black font-bold";
-                    }
-
+                    const textColor = isBlock
+                      ? "text-slate-300"
+                      : msg.role === "user"
+                        ? "text-white"
+                        : "text-black font-bold";
                     return (
                       <code
                         className={`${textColor} px-1.5 py-0.5 rounded-sm text-sm`}
@@ -168,7 +177,7 @@ function ChatInterface() {
                     );
                   },
                   pre: ({ children }) => (
-                    <pre className="bg-slate-900 p-4 rounded-md overflow-x-auto text-left">
+                    <pre className="bg-slate-900 p-4 rounded-md overflow-x-auto text-left my-2">
                       {children}
                     </pre>
                   ),
