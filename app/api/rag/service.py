@@ -9,6 +9,8 @@ import json
 import structlog
 from pydantic import ValidationError
 
+from ..extraction.schema import ChunkWithMetadata
+
 from .schemas import LLMAnswer, Metadata, QueryResponse
 from ...infrastructure.storage.qdrant_client import get_qdrant_store
 from ...infrastructure.storage.interfaces import FilterContext, VectorStoreInterface
@@ -45,19 +47,19 @@ class RAGService:
         self.embed_service = embed_service
         self.logger = structlog.get_logger()
 
-    def _generate_deterministic_ids(self, chunks: list[str], source: str) -> list[str]:
+    def _generate_deterministic_ids(self, chunks: list[ChunkWithMetadata], source: str) -> list[str]:
         """Generate deterministic UUIDs for chunks"""
         hash_ids = set()
 
         hash_ids = [
-            hashlib.sha256((chunk + source).encode()).hexdigest() for chunk in chunks
+            hashlib.sha256((chunk.text + source).encode()).hexdigest() for chunk in chunks
         ]
 
         return [str(uuid5(NAMESPACE_DNS, hash_id)) for hash_id in hash_ids]
 
     async def _process_ingestion(
         self,
-        chunks: list[str],
+        chunks: list[ChunkWithMetadata],
         source: str,
         domain: str,
         topic: str,
@@ -110,7 +112,7 @@ class RAGService:
             for i in range(0, len(news), BATCH_SIZE):
                 try:
                     batch = news[i:i+BATCH_SIZE]
-                    texts_to_process = [item[1] for item in batch]
+                    texts_to_process = [item[1].text for item in batch]
                     vectors = await asyncio.wait_for(
                         asyncio.to_thread(self.embed_service.batch_embed, texts_to_process),
                         timeout=timeout,
@@ -130,7 +132,7 @@ class RAGService:
                 new_points = []
 
                 # Create points
-                for (h_id, text, original_idx), vector in zip(batch, vectors):
+                for (h_id, chunk_metadata, original_idx), vector in zip(batch, vectors):
                     point = self.vector_store.create_point(
                         hash_id=h_id,
                         vector={
@@ -138,7 +140,8 @@ class RAGService:
                             "sparse": vector.sparse
                         },
                         payload={
-                            "text": text,
+                            "text": chunk_metadata.text,
+                            "section": chunk_metadata.section,
                             "source": source,
                             "domain": domain.lower(),
                             "topic": topic.lower(),
@@ -384,7 +387,7 @@ class RAGService:
         # Search
         start_search = time.perf_counter()
 
-        result = self.vector_store.query(vector_query, limit=50, filter_context=context)
+        result = self.vector_store.query(vector_query, limit=20, filter_context=context)
 
         finish_search = time.perf_counter() - start_search
         rag_vector_search_duration_seconds.labels(
