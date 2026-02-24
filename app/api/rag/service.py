@@ -275,7 +275,12 @@ class RAGService:
     # ================================
 
     async def ingest_document(
-        self, url: str, source: str, domain: str, topic: str, progress_callback: Optional[callable] =None
+        self,
+        url: str,
+        source: str,
+        domain: str,
+        topic: str,
+        progress_callback: Optional[callable] = None
     ):
         """Synchronous ingestion from URL"""
         # Get tools since factory
@@ -301,7 +306,11 @@ class RAGService:
 
         # Process (no progress callback)
         result = await self._process_ingestion(
-            chunks=chunks, source=source, domain=domain, topic=topic, progress_callback=progress_callback
+            chunks=chunks,
+            source=source,
+            domain=domain,
+            topic=topic,
+            progress_callback=progress_callback
         )
 
         self.logger.info(
