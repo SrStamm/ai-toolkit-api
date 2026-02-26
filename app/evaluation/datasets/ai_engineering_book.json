@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "question": "Cuál es la definición que da el autor sobre 'AI Engineering'?",
+    "domain": "libros",
+    "ground_truth": "El autor define AI Engineering como la disciplina que integra prácticas de ingeniería de software con el desarrollo, despliegue y mantenimiento de sistemas basados en modelos de aprendizaje automático."
+  },
+  {
+    "id": 2,
+    "question": "Qué tres pilares o componentes menciona el libro como fundamentales para el ciclo de vida de un modelo?",
+    "domain": "libros",
+    "ground_truth": "El libro menciona tres pilares fundamentales para el ciclo de vida de un modelo: (1) gestión de datos, (2) entrenamiento y evaluación del modelo, y (3) despliegue y monitoreo continuo en producción."
+  },
+  {
+    "id": 3,
+    "question": "Resume las principales diferencias entre ingeniería de software tradicional y AI Engineering.",
+    "domain": "libros",
+    "ground_truth": "El libro plantea que la ingeniería de software tradicional se basa en lógica determinística y especificaciones claras, mientras que la ingeniería de IA depende de datos, modelos probabilísticos y validación empírica. Además, en IA el comportamiento del sistema está determinado por el entrenamiento y puede degradarse con el tiempo debido a cambios en los datos."
+  },
+  {
+    "id": 4,
+    "question": "Haz una lista de los desafíos de despliegue mencionados a lo largo del texto.",
+    "domain": "libros",
+    "ground_truth": "Los desafíos de despliegue incluyen: (1) reproducibilidad del modelo, (2) versionado de datos y modelos, (3) escalabilidad de inferencia, (4) monitoreo de rendimiento, (5) manejo de data drift y model drift, y (6) gobernanza y cumplimiento normativo."
+  }
+]
