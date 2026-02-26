@@ -2,17 +2,12 @@ import json
 from pathlib import Path
 import httpx
 from ragas import evaluate
-from ragas.llms import llm_factory
-from ragas.embeddings.base import embedding_factory
 from ragas.metrics import Faithfulness, AnswerRelevancy, ContextPrecision
 from datasets import Dataset
 
 import os
 from mistralai import Mistral
-from openai import OpenAI
 from dotenv import load_dotenv
-from ragas.embeddings import LangchainEmbeddingsWrapper
-from langchain_mistralai import MistralAIEmbeddings
 from ragas.llms import LangchainLLMWrapper
 from langchain_mistralai import ChatMistralAI
 from ragas.embeddings import HuggingFaceEmbeddings
@@ -34,11 +29,15 @@ DATASET_PATH = Path("app/evaluation/datasets/fastapi_docs.json")
 with open(DATASET_PATH, "r") as f:
     dataset = json.load(f)
 
+DATASET_PATH2 = Path("app/evaluation/datasets/ai_engineering_book.json")
+with open(DATASET_PATH2, "r") as f:
+    dataset2 = json.load(f)
+
 questions, answers, contexts, ground_truths = [], [], [], []
 
 print("""
     ----------
-    Iniciando tests
+    Iniciando tests : FastAPI
     ----------
 """)
 
@@ -56,7 +55,31 @@ for item in dataset:
 
 print("""
     ----------
-    Terminando tests
+    Terminando tests : FastAPI
+    ----------
+""")
+
+print("""
+    ----------
+    Iniciando tests : AI Engineering
+    ----------
+""")
+
+for item in dataset2:
+    try:
+        response = client(item["question"], item["domain"])
+    except Exception as e:
+        print(f"Error on question {item['id']}: {e}")
+        continue
+
+    questions.append(item["question"])
+    answers.append(response["answer"])
+    contexts.append([c["text"] for c in response["citations"]])
+    ground_truths.append(item["ground_truth"])
+
+print("""
+    ----------
+    Terminando tests : AI Engineering
     ----------
 """)
 
@@ -75,13 +98,11 @@ mistral_client = Mistral(api_key=os.getenv("F_API_KEY"))
 evaluator_llm = LangchainLLMWrapper(
     ChatMistralAI(
         api_key=os.getenv("F_API_KEY"),
-        model="mistral-small-latest"
     )
 )
 
 evaluator_embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2",
-    model=""
+    model="sentence-transformers/all-MiniLM-L6-v2"
 )
 
 result = evaluate(
@@ -99,3 +120,7 @@ print(f"Contexts: {contexts}")
 print(f"ground_truths: {ground_truths}")
 
 print(result)
+
+save_path = Path("app/evaluation/results/results_v3_1_rerank_multilingual.json")
+with open(save_path, "w") as f:
+    f.write(str(result))
