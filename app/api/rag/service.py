@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from ..extraction.schema import ChunkWithMetadata
 
-from .schemas import LLMAnswer, Metadata, QueryResponse
+from .schemas import Citation, LLMAnswer, Metadata, QueryResponse
 from ...infrastructure.storage.qdrant_client import get_qdrant_store
 from ...infrastructure.storage.interfaces import FilterContext, VectorStoreInterface
 from ...infrastructure.storage.hybrid_ai import HybridEmbeddingService, get_hybrid_embeddign_service
@@ -411,7 +411,7 @@ class RAGService:
 
         return result
 
-    def _build_citations(self, query_result: list) -> list[dict]:
+    def _build_citations(self, query_result: list) -> list[Citation]:
         """Centralized LLM usage logging"""
         seen = set()
         citations = []
@@ -424,6 +424,7 @@ class RAGService:
                     {
                         "source": src,
                         "chunk_index": hit.payload["chunk_index"],
+                        "text": hit.payload["text"]
                     }
                 )
 
@@ -521,7 +522,7 @@ class RAGService:
             answer = response.content
 
         # Build citations
-        citations = self._build_citations(query_result)
+        citations = self._build_citations(rerank_result)
 
         # Log usage
         self._log_llm_usage(response, stream=False)
