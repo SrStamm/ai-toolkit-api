@@ -1,6 +1,7 @@
 from typing import List
 from qdrant_client import QdrantClient
 from qdrant_client import models
+import torch
 
 from ..embedding import get_rerank_model
 from ..logging import time_response
@@ -128,30 +129,28 @@ class QdrantStore(VectorStoreInterface):
         pairs = [[query, hit.payload["text"]] for hit in search_result]
         scores = self.rerank_model.predict(pairs)
 
+        scores = torch.sigmoid(torch.tensor(scores)).numpy()
+
         for i, hit in enumerate(search_result):
             hit.payload["rerank_score"] = float(scores[i])
 
-        # ordenar por el nuevo score
         search_result.sort(
             key=lambda x: x.payload["rerank_score"],
             reverse=True
         )
 
-        best_score = search_result[0].payload["rerank_score"]
-
         filtered = [
             hit for hit in search_result
-            if (
-                hit.payload["rerank_score"] >= best_score - DELTA
-                and hit.payload["rerank_score"] >= MIN_SCORE
-            )
+            if hit.payload["rerank_score"] > 0.6
         ]
         
-        top_context = filtered[:3] if len(filtered) >= 3 else search_result[:3]
+        top_context = filtered[:3]
 
-        print("BEST:", best_score)
         print("ALL:", [hit.payload["rerank_score"] for hit in search_result])
         print("FILTERED:", len(filtered))
+
+        print(self.rerank_model.predict([["What is middleware in FastAPI?", "Middleware are components executed before and after a request..."]]))
+        print(self.rerank_model.predict([["Qué es middleware en FastAPI?", "Middleware are components executed before and after a request..."]]))
 
         return top_context
 

@@ -10,6 +10,7 @@ def get_rerank_model():
     global _rerank_model
     if _rerank_model is None:
         _rerank_model = CrossEncoder(
-            "cross-encoder/ms-marco-MiniLM-L-4-v2", device="cpu"
+            # "cross-encoder/ms-marco-MiniLM-L-4-v2"
+            "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1", device="cpu"
         )
     return _rerank_model
