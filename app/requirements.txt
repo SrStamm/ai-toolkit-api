@@ -17,3 +17,5 @@ redis
 celery
 
 prometheus-client
+ragas==0.4.3
+datasets

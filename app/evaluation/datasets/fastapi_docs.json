@@ -1,0 +1,26 @@
+[
+  {
+    "id": "001",
+    "question": "Qué es Middleware?",
+    "domain": "fastapi",
+    "ground_truth": "Middleware en FastAPI son componentes que se ejecutan antes y después del procesamiento de una request. Permiten interceptar la request y la response para agregar lógica como logging, autenticación o manejo de headers."
+  },
+  {
+    "id": "002",
+    "question": "Como uso CORS en FastAPI?",
+    "domain": "fastapi",
+    "ground_truth": "En FastAPI, CORS se configura utilizando CORSMiddleware desde fastapi.middleware.cors. Se agrega al objeto FastAPI mediante add_middleware, especificando allow_origins, allow_methods, allow_headers y otros parámetros necesarios."
+  },
+  {
+    "id": "003",
+    "question": "Cómo se usa SQL en FastAPI?",
+    "domain": "fastapi",
+    "ground_truth": "FastAPI no incluye soporte SQL propio, pero se integra comúnmente con ORMs como SQLAlchemy o SQLModel. Se define un engine, se crean sesiones y se utilizan dependencias para inyectar la sesión en los endpoints."
+  },
+  {
+    "id": "004",
+    "question": "Quién ganó el mundial 2022?",
+    "domain": "fastapi",
+    "ground_truth": "The system should refuse to answer because the question is outside the indexed documentation."
+  }
+]

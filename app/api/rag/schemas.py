@@ -31,6 +31,7 @@ class QueryRequest(BaseModel):
 class Citation(BaseModel):
     source: str
     chunk_index: int = Field(ge=0)
+    text: str
 
 
 class Metadata(BaseModel):
