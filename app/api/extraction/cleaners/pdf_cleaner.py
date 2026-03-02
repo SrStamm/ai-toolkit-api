@@ -17,7 +17,7 @@ class PDFCleaner(CleanerInterface):
         # protect headers before hanging new lines
         content = re.sub(r"\n([A-Z][a-zA-Z ]{2,40})\n", r"\n\n\1\n\n", content)
 
-        content = re.sub(r"\n(?=[a-z])", " ", content)
+        # content = re.sub(r"\n(?=[a-z])", " ", content)
         content = re.sub(r"\|\s*\d+\s*$", "", content)
         content = re.sub(r"<s>\[INST\].*?\[/INST\]", "", content, flags=re.DOTALL)
 
@@ -118,7 +118,7 @@ class PDFCleaner(CleanerInterface):
             return []
 
         text = re.sub(r"\n{2,}", "\n\n", clean_text)
-        text = re.sub(r"(?<!\n)\n(?!\n)", " ", text)
+        # text = re.sub(r"(?<!\n)\n(?!\n)", " ", text)
 
 
         in_toc = False

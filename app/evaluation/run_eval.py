@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import httpx
 from ragas import evaluate
-from ragas.metrics import Faithfulness, AnswerRelevancy, ContextPrecision
+from ragas.metrics import Faithfulness, AnswerCorrectness, ContextPrecision
 from datasets import Dataset
 
 import os
@@ -65,6 +65,8 @@ print("""
     ----------
 """)
 
+questions_2, answers_2, contexts_2, ground_truths_2 = [], [], [], []
+
 for item in dataset2:
     try:
         response = client(item["question"], item["domain"])
@@ -72,10 +74,10 @@ for item in dataset2:
         print(f"Error on question {item['id']}: {e}")
         continue
 
-    questions.append(item["question"])
-    answers.append(response["answer"])
-    contexts.append([c["text"] for c in response["citations"]])
-    ground_truths.append(item["ground_truth"])
+    questions_2.append(item["question"])
+    answers_2.append(response["answer"])
+    contexts_2.append([c["text"] for c in response["citations"]])
+    ground_truths_2.append(item["ground_truth"])
 
 print("""
     ----------
@@ -84,20 +86,27 @@ print("""
 """)
 
 
-eval_dataset = Dataset.from_dict({
+eval_dataset_fastapi = Dataset.from_dict({
     "question": questions,
     "answer": answers,
     "contexts": contexts,
     "ground_truth": ground_truths
 })
 
+eval_dataset_book = Dataset.from_dict({
+    "question": questions_2,
+    "answer": answers_2,
+    "contexts": contexts_2,
+    "ground_truth": ground_truths_2
+})
 
-mistral_client = Mistral(api_key=os.getenv("F_API_KEY"))
+
+mistral_client = Mistral(api_key=os.getenv("P_API_KEY","F_API_KEY"))
 
 
 evaluator_llm = LangchainLLMWrapper(
     ChatMistralAI(
-        api_key=os.getenv("F_API_KEY"),
+        api_key=os.getenv("P_API_KEY","F_API_KEY"),
     )
 )
 
@@ -105,22 +114,47 @@ evaluator_embeddings = HuggingFaceEmbeddings(
     model="sentence-transformers/all-MiniLM-L6-v2"
 )
 
-result = evaluate(
-    eval_dataset,
+result_fastapi = evaluate(
+    eval_dataset_fastapi,
     metrics=[
         Faithfulness(),
-        AnswerRelevancy(),
+        AnswerCorrectness(),
         ContextPrecision(),
     ],
     llm=evaluator_llm,
     embeddings=evaluator_embeddings,
 )
 
-print(f"Contexts: {contexts}")
-print(f"ground_truths: {ground_truths}")
+result_book = evaluate(
+    eval_dataset_book,
+    metrics=[
+        Faithfulness(),
+        AnswerCorrectness(),
+        ContextPrecision(),
+    ],
+    llm=evaluator_llm,
+    embeddings=evaluator_embeddings,
+)
 
-print(result)
 
-save_path = Path("app/evaluation/results/results_v3_1_rerank_multilingual.json")
-with open(save_path, "w") as f:
-    f.write(str(result))
+print(f"Resultados FastAPI: {result_fastapi}")
+print(f"Resultados AI Engineering: {result_book}")
+
+results_to_save = {
+    "fastapi" : result_fastapi.to_pandas().mean(numeric_only=True).to_dict(),
+    "ai_engineering" : result_book.to_pandas().mean(numeric_only=True).to_dict()
+}
+
+import numpy as np
+
+def clean_nans(obj):
+    if isinstance(obj, dict):
+        return {k: clean_nans(v) for k, v in obj.items()}
+    elif isinstance(obj, float) and (np.isnan(obj)):
+        return None
+    return obj
+
+save_path = Path("app/evaluation/results/results_v3_1_change_book_dataset.json")
+
+with open(save_path, "w", encoding="utf-8") as f:
+    json.dump(clean_nans(results_to_save), f, indent=4, ensure_ascii=False)

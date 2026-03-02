@@ -82,11 +82,25 @@ class QdrantStore(VectorStoreInterface):
         search_result = self.client.query_points(
             collection_name=COLLECTION_NAME,
             prefetch=[
-                models.Prefetch(query=query_vector.dense, using="dense", limit=limit),
-                models.Prefetch(query=models.SparseVector(
-                    indices=query_vector.sparse["indices"],
-                    values=query_vector.sparse["values"]
-                ), using="sparse", limit=limit)
+                models.Prefetch(
+                    query=models.NearestQuery(
+                        nearest=query_vector.dense,
+                        mmr=models.Mmr(
+                            diversity=0.5,
+                            candidates_limit=limit * 2
+                        )
+                    ),
+                    using="dense",
+                    limit=limit
+                ),
+                models.Prefetch(
+                    query=models.SparseVector(
+                        indices=query_vector.sparse["indices"],
+                        values=query_vector.sparse["values"]
+                    ),
+                    using="sparse",
+                    limit=limit
+                )
             ],
             query=models.FusionQuery(fusion=models.Fusion.RRF),
             with_payload=True,
@@ -120,14 +134,19 @@ class QdrantStore(VectorStoreInterface):
 
     @time_response
     def rerank(self, query: str, search_result: list) -> List[models.ScoredPoint]:
-        MIN_SCORE = 4.5
-        DELTA = 2.0
-
         if not search_result:
             return []
 
+        print("------ chunk_index for query vectors -------")
+        for hit in search_result:
+            print(hit.payload["source"], hit.payload["chunk_index"])
+            print(hit.payload["text"])
+
         pairs = [[query, hit.payload["text"]] for hit in search_result]
         scores = self.rerank_model.predict(pairs)
+
+        print("RAW SCORES:", scores)
+
 
         scores = torch.sigmoid(torch.tensor(scores)).numpy()
 
@@ -143,14 +162,24 @@ class QdrantStore(VectorStoreInterface):
             hit for hit in search_result
             if hit.payload["rerank_score"] > 0.6
         ]
-        
-        top_context = filtered[:3]
+
+        if not filtered and len(search_result) > 0:
+            print("WARNING: No chunks passed the 0.6 threshold. Taking top 1 for debugging.")
+            filtered = [search_result[0]]
+
+        seen_texts = set()
+        unique_filtered = []
+
+        for hit in filtered:
+            text_content = hit.payload["text"].strip()
+            if text_content not in seen_texts:
+                unique_filtered.append(hit)
+                seen_texts.add(text_content)
+
+        top_context = unique_filtered[:5]
 
         print("ALL:", [hit.payload["rerank_score"] for hit in search_result])
-        print("FILTERED:", len(filtered))
-
-        print(self.rerank_model.predict([["What is middleware in FastAPI?", "Middleware are components executed before and after a request..."]]))
-        print(self.rerank_model.predict([["Qué es middleware en FastAPI?", "Middleware are components executed before and after a request..."]]))
+        print("FILTERED:", len(unique_filtered))
 
         return top_context
 
