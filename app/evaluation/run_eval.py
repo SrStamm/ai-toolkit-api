@@ -154,7 +154,7 @@ def clean_nans(obj):
         return None
     return obj
 
-save_path = Path("app/evaluation/results/results_v3_1_separate_dataset_2.json")
+save_path = Path("app/evaluation/results/results_v3_1_re_chunking_everithing.json")
 
 with open(save_path, "w", encoding="utf-8") as f:
     json.dump(clean_nans(results_to_save), f, indent=4, ensure_ascii=False)
