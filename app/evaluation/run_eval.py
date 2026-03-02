@@ -101,12 +101,12 @@ eval_dataset_book = Dataset.from_dict({
 })
 
 
-mistral_client = Mistral(api_key=os.getenv("F_API_KEY"))
+mistral_client = Mistral(api_key=os.getenv("P_API_KEY","F_API_KEY"))
 
 
 evaluator_llm = LangchainLLMWrapper(
     ChatMistralAI(
-        api_key=os.getenv("F_API_KEY"),
+        api_key=os.getenv("P_API_KEY","F_API_KEY"),
     )
 )
 
@@ -154,7 +154,7 @@ def clean_nans(obj):
         return None
     return obj
 
-save_path = Path("app/evaluation/results/results_v3_1_re_chunking_everithing.json")
+save_path = Path("app/evaluation/results/results_v3_1_change_book_dataset.json")
 
 with open(save_path, "w", encoding="utf-8") as f:
     json.dump(clean_nans(results_to_save), f, indent=4, ensure_ascii=False)
