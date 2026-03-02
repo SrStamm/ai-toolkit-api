@@ -139,10 +139,14 @@ class QdrantStore(VectorStoreInterface):
 
         print("------ chunk_index for query vectors -------")
         for hit in search_result:
-            print(hit.payload["chunk_index"])
+            print(hit.payload["source"], hit.payload["chunk_index"])
+            print(hit.payload["text"])
 
         pairs = [[query, hit.payload["text"]] for hit in search_result]
         scores = self.rerank_model.predict(pairs)
+
+        print("RAW SCORES:", scores)
+
 
         scores = torch.sigmoid(torch.tensor(scores)).numpy()
 
@@ -159,6 +163,10 @@ class QdrantStore(VectorStoreInterface):
             if hit.payload["rerank_score"] > 0.6
         ]
 
+        if not filtered and len(search_result) > 0:
+            print("WARNING: No chunks passed the 0.6 threshold. Taking top 1 for debugging.")
+            filtered = [search_result[0]]
+
         seen_texts = set()
         unique_filtered = []
 
@@ -168,11 +176,10 @@ class QdrantStore(VectorStoreInterface):
                 unique_filtered.append(hit)
                 seen_texts.add(text_content)
 
-        # Ahora sí, toma los 3 mejores que sean distintos
-        top_context = unique_filtered[:3]
+        top_context = unique_filtered[:5]
 
         print("ALL:", [hit.payload["rerank_score"] for hit in search_result])
-        print("FILTERED:", len(filtered))
+        print("FILTERED:", len(unique_filtered))
 
         return top_context
 
