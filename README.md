@@ -1,7 +1,7 @@
 # ai-toolkit
 
-> **Versión actual:** `v3.0`  
-> **Estado:** estable (educacional / experimental, con RAG avanzado)
+> **Versión actual:** `v3.1`  
+> **Estado:** estable (educacional / experimental, con evaluación RAG real)
 
 **Herramientas de IA para backend (FastAPI)**
 
@@ -19,32 +19,61 @@
 
 ---
 
-## Estado actual – v3.0 (RAG avanzado: Hybrid Search + Chunking semántico)
+## Estado actual – v3.1 (Evaluación RAG con RAGAS)
 
-La versión v3.0 extiende la base sólida de v2.2 hacia la mejora de **calidad del pipeline RAG**, introduciendo búsqueda híbrida real y una estrategia de chunking y metadata significativamente más precisa.
+La versión v3.1 incorpora evaluación formal del pipeline RAG usando **RAGAS**, con datasets curados para dos dominios distintos: documentación técnica (FastAPI) y texto de libro técnico (AI Engineering, O'Reilly).
+
+### Qué se midió
+
+Se evaluaron tres métricas sobre cada dataset:
+
+- **Faithfulness**: si la respuesta está soportada por el contexto recuperado
+- **Answer Correctness**: si la respuesta coincide con el ground truth
+- **Context Precision**: si los chunks recuperados son relevantes para la pregunta
+
+### Resultados
+
+| Métrica            | FastAPI Docs | AI Engineering |
+| ------------------ | ------------ | -------------- |
+| Faithfulness       | 0.93         | 0.58           |
+| Answer Correctness | 0.61         | 0.27           |
+| Context Precision  | 0.67         | 0.25           |
+
+### Análisis
+
+**FastAPI** obtiene resultados sólidos. La documentación técnica es directa y los chunks recuperados son precisos. El faithfulness alto (0.93) confirma que el LLM responde basándose en el contexto, no alucina.
+
+**AI Engineering** muestra métricas más bajas, lo cual es esperable por varias razones:
+
+- El libro es denso conceptualmente: las respuestas requieren síntesis de múltiples secciones, no hay una cita directa.
+- El contexto se recupera correctamente en varios casos, pero el reranker no siempre prioriza los chunks más relevantes para preguntas abstractas.
+- El `context_precision` de 0.25 indica que hay margen de mejora en la estrategia de retrieval para texto no estructurado.
+
+Dicho esto, en pruebas manuales el sistema responde correctamente la mayoría de las preguntas sobre el libro. Las métricas reflejan una dificultad inherente de evaluación automática sobre contenido abstracto, no necesariamente un fallo del pipeline.
+
+---
+
+## Estado anterior – v3.0 (RAG avanzado: Hybrid Search + Chunking semántico)
 
 ### Qué cambió respecto a v2.2
 
 **Hybrid Search (sparse + dense)**
 
-La búsqueda vectorial ahora combina dos vectores por chunk:
+La búsqueda vectorial combina dos vectores por chunk:
 
 - `dense`: embeddings semánticos vía Sentence Transformers
 - `sparse`: vectores TF-IDF/BM25 para matching léxico exacto
 
-La fusión se realiza con **RRF (Reciprocal Rank Fusion)** directamente en Qdrant, sin post-procesamiento manual. Esto mejora el recall en queries con términos técnicos específicos donde la búsqueda semántica sola falla.
+La fusión se realiza con RRF (Reciprocal Rank Fusion) directamente en Qdrant, sin post-procesamiento manual.
+En la búsqueda densa se aplica MMR (Maximal Marginal Relevance) para diversificar los candidatos y reducir chunks redundantes antes de la fusión.
 
 **Chunking semántico por tipo de documento**
-
-Cada tipo de documento tiene su propia estrategia de chunking, ahora con detección de estructura y metadata enriquecida:
 
 - `PDFCleaner`: limpieza profunda de artefactos (guiones rotos, líneas de índice, TOC), detección de headings por título case y numeración, overlap consistente entre chunks
 - `HTMLCleaner`: segmentación por `h2`/`h3`, sección como anchor semántico
 - `MarkdownCleaner`: split por `#`/`##`/`###`, heading preservado en texto y metadata
 
 **Metadata enriquecida por chunk**
-
-Todos los chunks ahora incluyen el campo `section`, que refleja el heading o sección del documento al que pertenece el chunk. Esto permite al LLM contextualizar mejor la respuesta y al reranker priorizar chunks con mayor relevancia estructural.
 
 ```json
 {
@@ -58,7 +87,7 @@ Todos los chunks ahora incluyen el campo `section`, que refleja el heading o sec
 }
 ```
 
-### Arquitectura v3.0
+### Arquitectura v3.1
 
 ```ascii
 Cliente / Frontend
@@ -90,8 +119,6 @@ Respuesta a Frontend vía streaming
 ---
 
 ## Benchmarks reales (V2.2)
-
-Se realizaron pruebas controladas para medir:
 
 ### LLM remoto (Mistral)
 
@@ -130,6 +157,7 @@ La arquitectura fue validada empíricamente mediante:
 - comparación de proveedores LLM
 - observabilidad completa con Prometheus + Grafana
 - separación real entre API y procesamiento pesado
+- evaluación formal del pipeline RAG con RAGAS
 
 Este proyecto demuestra:
 
@@ -151,10 +179,18 @@ Este proyecto demuestra:
 - Strategy Pattern para chunking
 - Embeddings híbridos (dense + sparse) con batching
 - Hybrid Search con RRF en Qdrant
+- MMR en búsqueda densa para diversidad de resultados
 - Re-ranking con Cross-Encoder
 - Metadata enriquecida por chunk (source, section, domain, topic, chunk_index)
 - Construcción de contexto explícito para el LLM
 - Streaming de respuesta
+
+### Evaluación RAG
+
+- Script de evaluación con RAGAS
+- Métricas: faithfulness, answer correctness, context precision
+- Datasets curados por dominio (FastAPI docs, AI Engineering book)
+- Resultados exportados a JSON por versión
 
 ### Observabilidad y métricas
 
@@ -199,14 +235,15 @@ Este proyecto demuestra:
 - Limpieza profunda de PDFs (TOC, artefactos, headings)
 - `ChunkWithMetadata` como contrato entre cleaner y vector store
 
-### V3.1 – Evaluación RAG (próximo)
+### V3.1 – Evaluación RAG (completado)
 
-- Integrar RAGAS
-- Medir faithfulness
-- Medir answer relevancy
-- Medir context precision
+- Integración de RAGAS
+- Métricas: faithfulness, answer correctness, context precision
+- Datasets curados por dominio con ground truths extraídos del texto real
+- Evaluación sobre dos dominios: documentación técnica y libro técnico
+- Resultados versionados en JSON
 
-### V3.2 – LlamaIndex (exploratorio)
+### V3.2 – LlamaIndex (próximo)
 
 - Implementar versión equivalente con LlamaIndex
 - Comparar latencia, recall, calidad y complejidad de código
@@ -226,7 +263,7 @@ Este proyecto demuestra:
 - Separación de responsabilidades: API, lógica de negocio y proveedores desacoplados
 - Control del riesgo: retries, errores y fallback explícitos
 - Intercambiabilidad de componentes: LLM, embeddings y vector stores reemplazables sin afectar el core
-- Mejora iterativa: cada versión mejora una dimensión distinta (infraestructura → observabilidad → calidad)
+- Mejora iterativa: cada versión mejora una dimensión distinta (infraestructura → observabilidad → calidad → evaluación)
 
 ---
 
