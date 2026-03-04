@@ -3,13 +3,11 @@
 # SentenceSplitter
 
 from pathlib import Path
-from llama_index.core import Settings, VectorStoreIndex
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.core import VectorStoreIndex
 from llama_index.readers.file import PDFReader
+from .config import setup_llamaindex
 
-Settings.embed_model = HuggingFaceEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+setup_llamaindex()
 
 class LlamaIngester:
     def ingest_pdf(self, pdf_path: str, storage_context):
