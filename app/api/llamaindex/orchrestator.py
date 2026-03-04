@@ -1,4 +1,5 @@
 from llama_index.core import VectorStoreIndex
+from llama_index.core.postprocessor import SentenceTransformerRerank
 from .ingestion import LlamaIngester
 from .indexing import LlamaIndexer
 from .config import setup_llamaindex
@@ -12,6 +13,10 @@ class LlamaIndexOrchestrator:
         self.index = VectorStoreIndex.from_vector_store(
             vector_store=self.indexer.vectore_store,
         )
+        self.rerank = SentenceTransformerRerank(
+            model="cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+            top_n=3
+        )
 
     def proccess_pdf(self, pdf_path: str):
         storage_context = self.indexer.get_storage_context()
@@ -24,7 +29,10 @@ class LlamaIndexOrchestrator:
         return response
 
     def query(self, query: str):
-        query_engine = self.index.as_query_engine()
+        query_engine = self.index.as_query_engine(
+            similarity_top_k=10,
+            node_postprocessors=[self.rerank]
+        )
 
         return query_engine.query(query)
 
