@@ -10,6 +10,7 @@ from .infrastructure.metrics import http_requests_total, registry
 from .api.extraction.router import router as extraction_router
 from .infrastructure.storage.qdrant_client import get_qdrant_store, QdrantStore
 from .api.rag.router import router as rag_router
+from .api.llamaindex.router import router as llama_router
 from prometheus_client import make_asgi_app
 
 
@@ -46,6 +47,7 @@ app.add_middleware(
 
 app.include_router(extraction_router)
 app.include_router(rag_router)
+app.include_router(llama_router)
 
 metrics_app = make_asgi_app(registry)
 
