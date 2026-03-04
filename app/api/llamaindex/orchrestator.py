@@ -37,6 +37,14 @@ class LlamaIndexOrchestrator:
         return query_engine.query(query)
 
 
+_orchestrator_instance = None
+
+def get_orchestrator():
+    global _orchestrator_instance
+    if _orchestrator_instance is None:
+        _orchestrator_instance = LlamaIndexOrchestrator()
+    return _orchestrator_instance
+
 if __name__ == "__main__":
     orchrestator = LlamaIndexOrchestrator()
     # result = orchrestator.proccess_pdf("api/llamaindex/data/AI Engineering.pdf")
