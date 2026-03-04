@@ -12,19 +12,19 @@ Settings.embed_model = HuggingFaceEmbedding(
 )
 
 class LlamaIngester:
-    def ingest_pdf(self, pdf_path: str):
+    def ingest_pdf(self, pdf_path: str, storage_context):
         # Load document
         reader = PDFReader()
         documents = reader.load_data(file=Path(pdf_path))
 
         # Create index
-        index = VectorStoreIndex.from_documents(documents)
+        VectorStoreIndex.from_documents(
+            documents,
+            storage_context=storage_context
+        )
 
-        return index
+        return {
+            "docuemtns": len(documents),
+            "status": "indexed"
+        }
 
-if __name__ == "__main__":
-    ingester = LlamaIngester()
-    index = ingester.ingest_pdf("/home/mirko/Documentos/proyectos/ai-toolkit-api/app/api/llamaindex/data/AI Engineering.pdf")
-
-    print("PDF indexado correctamente")
-    print(index)
