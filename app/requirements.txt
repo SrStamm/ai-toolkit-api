@@ -19,3 +19,9 @@ celery
 prometheus-client
 ragas==0.4.3
 datasets
+
+
+llama-index
+llama-index-vector-stores-qdrant 
+llama-index-embeddings-huggingface 
+llama-index-llms-mistralai
