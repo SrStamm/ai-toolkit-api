@@ -9,17 +9,22 @@ class LlamaIndexOrchestrator:
     def __init__(self):
         self.indexer = LlamaIndexer()
         self.ingester = LlamaIngester()
-
-    def proccess_pdf(self, pdf_path: str):
-        storage_context = self.indexer.get_storage_context()
-        return self.ingester.ingest_pdf(pdf_path, storage_context)
-
-    def query(self, query: str):
-        index = VectorStoreIndex.from_vector_store(
+        self.index = VectorStoreIndex.from_vector_store(
             vector_store=self.indexer.vectore_store,
         )
 
-        query_engine = index.as_query_engine()
+    def proccess_pdf(self, pdf_path: str):
+        storage_context = self.indexer.get_storage_context()
+        response = self.ingester.ingest_pdf(pdf_path, storage_context)
+
+        self.index = VectorStoreIndex.from_vector_store(
+            vector_store=self.indexer.vectore_store,
+        )
+
+        return response
+
+    def query(self, query: str):
+        query_engine = self.index.as_query_engine()
 
         return query_engine.query(query)
 
