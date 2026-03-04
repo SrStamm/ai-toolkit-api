@@ -7,7 +7,7 @@ from qdrant_client import QdrantClient
 
 
 class LlamaIndexer:
-    def __init__(self, host="localhost", port=6333, collection="documents_llama"):
+    def __init__(self, host="qdrant", port=6333, collection="documents_llama"):
         self.client = QdrantClient(host=host, port=port)
 
         self.vectore_store = QdrantVectorStore(
