@@ -15,7 +15,7 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copia e instala las dependencias
-COPY requirements.txt .
+COPY app/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
   && pip install --no-cache-dir \
        --extra-index-url https://download.pytorch.org/whl/cpu \
@@ -41,7 +41,7 @@ COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copiamos código
-COPY --chown=appuser:appuser . ./app/
+COPY --chown=appuser:appuser ./app ./app
 
 ENV PATH="/usr/local/bin:$PATH"
 
