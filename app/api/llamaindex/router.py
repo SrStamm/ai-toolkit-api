@@ -41,3 +41,11 @@ def query_llama(
 ):
     response = serv.query(text)
     return {"response": str(response)}
+
+
+@router.get("/ask-custom")
+def custom_query_llama(
+    text: str,
+    serv: LlamaIndexOrchestrator = Depends(get_orchestrator)
+):
+    return serv.custom_query(text)
