@@ -1,8 +1,13 @@
+import json
 from llama_index.core import VectorStoreIndex
 from llama_index.core.postprocessor import SentenceTransformerRerank
+
 from .ingestion import LlamaIngester
 from .indexing import LlamaIndexer
 from .config import setup_llamaindex
+from ..rag.prompt import PROMPT_TEMPLATE_CHAT
+from ..rag.schemas import Citation, Metadata, QueryResponse
+from ...application.llm.client import LLMClient, get_llm_client
 
 setup_llamaindex()
 
@@ -17,6 +22,7 @@ class LlamaIndexOrchestrator:
             model="cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
             top_n=3
         )
+        self.llm_client: LLMClient = get_llm_client()
 
     def proccess_pdf(self, pdf_path: str):
         storage_context = self.indexer.get_storage_context()
@@ -36,6 +42,52 @@ class LlamaIndexOrchestrator:
 
         return query_engine.query(query)
 
+    def custom_query(self, query: str) -> QueryResponse:
+        # 1. Retrieval + Rerank
+        retriever = self.index.as_retriever(similarity_top_k=5)
+        nodes = retriever.retrieve(query)
+        nodes = self.rerank.postprocess_nodes(nodes, query_str=query)
+
+        # 2. Create Context and call LLM
+        context_str = "\n\n".join([n.get_content() for n in nodes])
+        prompt = PROMPT_TEMPLATE_CHAT.format(context=context_str, question=query)
+
+        # Use chat to get response with metadata
+        llm_res = self.llm_client.generate_content(prompt)
+
+        # 3. Map citations
+        citations = []
+        for i, node in enumerate(nodes):
+            citations.append(
+                Citation(
+                    source=node.metadata.get("filename", "unknown"),
+                    chunk_index=i,
+                    text=node.get_content()
+                )
+            )
+
+        # 4. Extract Metadata
+        metadata = Metadata(
+            tokens=llm_res.usage.total_tokens,
+            cost=llm_res.cost.total_cost, 
+            model=llm_res.model,
+            provider=llm_res.provider
+        )
+
+        # 5. Format final response
+        try:
+            clean_res = llm_res.content.replace("```json", "").replace("```", "").strip()
+            answer_content = json.loads(clean_res).get("answer", llm_res.content)
+        except:
+            answer_content = llm_res.content
+
+        return QueryResponse(
+            answer=answer_content,
+            citations=citations,
+            metadata=metadata
+        )
+
+
 
 _orchestrator_instance = None
 
@@ -44,10 +96,3 @@ def get_orchestrator():
     if _orchestrator_instance is None:
         _orchestrator_instance = LlamaIndexOrchestrator()
     return _orchestrator_instance
-
-if __name__ == "__main__":
-    orchrestator = LlamaIndexOrchestrator()
-    # result = orchrestator.proccess_pdf("api/llamaindex/data/AI Engineering.pdf")
-    result2 = orchrestator.query("¿Qué es la ingeniería de IA?")
-
-    print(result2)
