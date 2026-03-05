@@ -118,7 +118,7 @@ marimo/_lsp/
 __marimo__/
 
 
-.qdrant_data/
+**/qdrant_data/
 
 __pycache__/
 *.pyc
@@ -130,5 +130,18 @@ tests/
 docs/
 *.md
 *.log
-venv/
-.env
+**/venv/
+**/.venv/
+**/.env
+**/evaluation/
+app/evaluation/
+
+front-ai-toolkit/
+
+api_data/
+ollama/
+prometheus/
+scripts/
+
+docker-compose*.yml
+.git/

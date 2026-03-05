@@ -23,7 +23,9 @@ services:
       - backend_net
 
   celery:
-    build: ./app
+    build:
+      context: .
+      dockerfile: app/Dockerfile
     command: >
       sh -c "
       mkdir -p /backend/prometheus &&
@@ -41,7 +43,9 @@ services:
       - backend_net
 
   api:
-    build: ./app
+    build:
+      context: .
+      dockerfile: app/Dockerfile
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/backend/prometheus
     volumes:
