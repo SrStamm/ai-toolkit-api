@@ -18,7 +18,7 @@ setup_llamaindex()
 class LlamaIngester:
     def __init__(self):
         self.pdf_cleaner: CleanerInterface = PDFCleaner()
-        self.parser = SentenceSplitter(chunk_size=512, chunk_overlap=50)
+        self.parser = SentenceSplitter(chunk_size=512, chunk_overlap=100)
 
     def _store_data(self, nodes, storage_context):
         VectorStoreIndex(
