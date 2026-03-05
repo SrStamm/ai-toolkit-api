@@ -8,19 +8,24 @@ from llama_index.core import VectorStoreIndex
 from llama_index.core.schema import TextNode
 from llama_index.readers.file import PDFReader
 from llama_index.core.node_parser import SentenceSplitter
+
 from .config import setup_llamaindex
 from ..extraction.cleaners.pdf_cleaner import PDFCleaner, CleanerInterface
-from ..extraction.cleaners.html_cleaner import HTMLCleaner
-from ..extraction.source.html_source import HTMLSource
+from ..extraction.factory import SourceFactory
 
 setup_llamaindex()
 
 class LlamaIngester:
     def __init__(self):
         self.pdf_cleaner: CleanerInterface = PDFCleaner()
-        self.html_cleaner = HTMLCleaner()
-        self.html_source = HTMLSource()
         self.parser = SentenceSplitter(chunk_size=512, chunk_overlap=50)
+
+    def _store_data(self, nodes, storage_context):
+        VectorStoreIndex(
+            nodes,
+            storage_context=storage_context
+        )
+        pass
 
     def ingest_pdf(
         self,
@@ -47,10 +52,7 @@ class LlamaIngester:
         nodes = self.parser.get_nodes_from_documents(documents)
 
         # Create index
-        VectorStoreIndex(
-            nodes,
-            storage_context=storage_context
-        )
+        self._store_data(nodes, storage_context)
 
         return {
             "docuemtns": len(documents),
@@ -65,11 +67,11 @@ class LlamaIngester:
         topic:str,
         storage_context
     ):
+        extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
 
-        content = await self.html_source.extract(url=url)
-        cleaned_text = self.html_cleaner.clean(content)
-
-        chunks = self.html_cleaner.chunk(cleaned_text)
+        content = await extractor.extract(url)
+        cleaned_text = cleaner.clean(content)
+        chunks = cleaner.chunk(cleaned_text)
 
         nodes = []
 
@@ -90,10 +92,7 @@ class LlamaIngester:
             )
             nodes.append(node)
 
-        VectorStoreIndex(
-            nodes,
-            storage_context=storage_context
-        )
+        self._store_data(nodes, storage_context)
 
         return {
             "source": url,
