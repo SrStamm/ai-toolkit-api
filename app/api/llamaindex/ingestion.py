@@ -16,7 +16,7 @@ class LlamaIngester:
         self.cleaner: CleanerInterface = PDFCleaner()
         self.parser = SentenceSplitter(chunk_size=512, chunk_overlap=50)
 
-    def ingest_pdf(self, pdf_path: str, domain: str, topic:str, storage_context):
+    def ingest_pdf(self, pdf_path: str, source: str, domain: str, topic:str, storage_context):
         reader = PDFReader()
         documents = reader.load_data(file=Path(pdf_path))
 
@@ -26,7 +26,8 @@ class LlamaIngester:
             doc.metadata.update({
                 "domain": domain,
                 "topic": topic,
-                "filename": Path(pdf_path).name
+                "filename": Path(pdf_path).name,
+                "source": source
                 }
             )
 

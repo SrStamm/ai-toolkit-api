@@ -24,9 +24,15 @@ class LlamaIndexOrchestrator:
         )
         self.llm_client: LLMClient = get_llm_client()
 
-    def proccess_pdf(self, pdf_path: str):
+    def proccess_pdf(self, pdf_path: str, source: str, domain: str, topic: str):
         storage_context = self.indexer.get_storage_context()
-        response = self.ingester.ingest_pdf(pdf_path, storage_context)
+        response = self.ingester.ingest_pdf(
+            pdf_path=pdf_path,
+            source=source,
+            domain=domain,
+            topic=topic,
+            storage_context=storage_context
+        )
 
         self.index = VectorStoreIndex.from_vector_store(
             vector_store=self.indexer.vectore_store,

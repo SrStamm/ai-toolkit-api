@@ -29,7 +29,12 @@ def ingest_document(
     with upload_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    serv.proccess_pdf(pdf_path=str(upload_path))
+    serv.proccess_pdf(
+        pdf_path=str(upload_path),
+        source=file.filename,
+        domain=domain,
+        topic=topic
+    )
 
     return {"status": "ingested", "filename": file.filename, "source": source}
 
