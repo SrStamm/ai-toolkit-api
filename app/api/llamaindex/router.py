@@ -5,6 +5,7 @@ import shutil
 import uuid
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
+from ..rag.schemas import IngestRequest
 from .orchrestator import LlamaIndexOrchestrator, get_orchestrator
 
 router = APIRouter(prefix="/llama", tags=["Llama"])
@@ -38,6 +39,19 @@ def ingest_document(
 
     return {"status": "ingested", "filename": file.filename, "source": source}
 
+
+@router.post("/ingest-html")
+async def ingest_html(
+    ing_req: IngestRequest,
+    serv: LlamaIndexOrchestrator = Depends(get_orchestrator),
+):
+    await serv.proccess_html(
+        url=ing_req.url,
+        domain=ing_req.domain,
+        topic=ing_req.topic
+    )
+
+    return {"status": "ingested", "url": ing_req.url}
 
 @router.get("/ask")
 def query_llama(

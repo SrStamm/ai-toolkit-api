@@ -40,6 +40,27 @@ class LlamaIndexOrchestrator:
 
         return response
 
+    def proccess_html(
+        self,
+        url: str,
+        domain: str,
+        topic: str
+    ):
+        storage_context = self.indexer.get_storage_context()
+
+        response = self.ingester.ingest_html(
+            url=url,
+            domain=domain,
+            topic=topic,
+            storage_context=storage_context
+        )
+
+        self.index = VectorStoreIndex.from_vector_store(
+            vector_store=self.indexer.vectore_store,
+        )
+
+        return response
+
     def query(self, query: str):
         query_engine = self.index.as_query_engine(
             similarity_top_k=10,
