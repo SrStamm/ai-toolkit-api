@@ -66,6 +66,7 @@ class LlamaIndexOrchestrator:
     def query(self, query: str):
         query_engine = self.index.as_query_engine(
             similarity_top_k=10,
+            vector_store_query_mode="hybrid",
             node_postprocessors=[self.rerank]
         )
 
@@ -73,7 +74,10 @@ class LlamaIndexOrchestrator:
 
     def custom_query(self, query: str) -> QueryResponse:
         # 1. Retrieval + Rerank
-        retriever = self.index.as_retriever(similarity_top_k=5)
+        retriever = self.index.as_retriever(
+            similarity_top_k=5,
+            vector_store_query_mode="hybrid",
+        )
         nodes = retriever.retrieve(query)
         nodes = self.rerank.postprocess_nodes(nodes, query_str=query)
 
