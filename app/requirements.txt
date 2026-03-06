@@ -24,3 +24,5 @@ prometheus-client
 llama-index
 llama-index-vector-stores-qdrant 
 llama-index-embeddings-huggingface 
+
+fastembed
