@@ -90,7 +90,7 @@ class LlamaIndexOrchestrator:
 
         # 1. Retrieval + Rerank
         retriever = self.index.as_retriever(
-            similarity_top_k=8,
+            similarity_top_k=6,
             vector_store_query_mode="hybrid",
             filters=query_filters
         )
