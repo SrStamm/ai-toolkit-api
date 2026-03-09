@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 from llama_index.core import VectorStoreIndex
 from llama_index.core.postprocessor import SentenceTransformerRerank
 
@@ -72,10 +73,10 @@ class LlamaIndexOrchestrator:
 
         return query_engine.query(query)
 
-    def custom_query(self, query: str) -> QueryResponse:
+    def custom_query(self, query: str, domain: Optional[str], topic: Optional[str]) -> QueryResponse:
         # 1. Retrieval + Rerank
         retriever = self.index.as_retriever(
-            similarity_top_k=5,
+            similarity_top_k=8,
             vector_store_query_mode="hybrid",
         )
         nodes = retriever.retrieve(query)
