@@ -2,6 +2,7 @@ import json
 from typing import Optional
 from llama_index.core import VectorStoreIndex
 from llama_index.core.postprocessor import SentenceTransformerRerank
+from llama_index.core.vector_stores.types import MetadataFilter, MetadataFilters
 
 from .ingestion import LlamaIngester
 from .indexing import LlamaIndexer
@@ -74,10 +75,24 @@ class LlamaIndexOrchestrator:
         return query_engine.query(query)
 
     def custom_query(self, query: str, domain: Optional[str], topic: Optional[str]) -> QueryResponse:
+        filters = []
+
+        if domain:
+            filters.append(
+                MetadataFilter(key="domain", value=domain)
+            )
+        if topic:
+            filters.append(
+                MetadataFilter(key="topic", value=topic)
+            )
+
+        query_filters = MetadataFilters(filters=filters) if filters else None
+
         # 1. Retrieval + Rerank
         retriever = self.index.as_retriever(
             similarity_top_k=8,
             vector_store_query_mode="hybrid",
+            filters=query_filters
         )
         nodes = retriever.retrieve(query)
         nodes = self.rerank.postprocess_nodes(nodes, query_str=query)
