@@ -5,7 +5,7 @@ import shutil
 import uuid
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
-from ..rag.schemas import IngestRequest
+from ..rag.schemas import IngestRequest, QueryRequest, QueryResponse
 from .orchrestator import LlamaIndexOrchestrator, get_orchestrator
 
 router = APIRouter(prefix="/llama", tags=["Llama"])
@@ -62,9 +62,13 @@ def query_llama(
     return {"response": str(response)}
 
 
-@router.get("/ask-custom")
+@router.post("/ask-custom")
 def custom_query_llama(
-    text: str,
+    query: QueryRequest,
     serv: LlamaIndexOrchestrator = Depends(get_orchestrator)
-):
-    return serv.custom_query(text)
+) -> QueryResponse:
+    return serv.custom_query(
+        query=query.text,
+        domain=query.domain,
+        topic=query.topic
+    )

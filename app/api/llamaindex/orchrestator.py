@@ -1,6 +1,8 @@
 import json
+from typing import Optional
 from llama_index.core import VectorStoreIndex
 from llama_index.core.postprocessor import SentenceTransformerRerank
+from llama_index.core.vector_stores.types import MetadataFilter, MetadataFilters
 
 from .ingestion import LlamaIngester
 from .indexing import LlamaIndexer
@@ -28,6 +30,21 @@ class LlamaIndexOrchestrator:
         self.index = VectorStoreIndex.from_vector_store(
             vector_store=self.indexer.vectore_store,
         )
+
+    def _query_filters(self, domain: Optional[str], topic: Optional[str]) -> Optional[MetadataFilters]:
+        filters = []
+
+        if domain:
+            filters.append(
+                MetadataFilter(key="domain", value=domain)
+            )
+
+        if topic:
+            filters.append(
+                MetadataFilter(key="topic", value=topic)
+            )
+
+        return MetadataFilters(filters=filters) if filters else None
 
 
     def proccess_pdf(self, pdf_path: str, source: str, domain: str, topic: str):
@@ -72,11 +89,14 @@ class LlamaIndexOrchestrator:
 
         return query_engine.query(query)
 
-    def custom_query(self, query: str) -> QueryResponse:
+    def custom_query(self, query: str, domain: Optional[str], topic: Optional[str]) -> QueryResponse:
+        query_filters = self._query_filters(domain, topic)
+
         # 1. Retrieval + Rerank
         retriever = self.index.as_retriever(
-            similarity_top_k=5,
+            similarity_top_k=6,
             vector_store_query_mode="hybrid",
+            filters=query_filters
         )
         nodes = retriever.retrieve(query)
         nodes = self.rerank.postprocess_nodes(nodes, query_str=query)
