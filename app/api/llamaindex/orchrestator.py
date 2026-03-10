@@ -22,7 +22,7 @@ class LlamaIndexOrchestrator:
         )
         self.rerank = SentenceTransformerRerank(
             model="cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
-            top_n=3
+            top_n=4
         )
         self.llm_client: LLMClient = get_llm_client()
 
@@ -94,7 +94,7 @@ class LlamaIndexOrchestrator:
 
         # 1. Retrieval + Rerank
         retriever = self.index.as_retriever(
-            similarity_top_k=6,
+            similarity_top_k=8,
             vector_store_query_mode="hybrid",
             filters=query_filters
         )
