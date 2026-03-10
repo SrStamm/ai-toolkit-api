@@ -31,6 +31,21 @@ class LlamaIndexOrchestrator:
             vector_store=self.indexer.vectore_store,
         )
 
+    def _query_filters(self, domain: Optional[str], topic: Optional[str]) -> Optional[MetadataFilters]:
+        filters = []
+
+        if domain:
+            filters.append(
+                MetadataFilter(key="domain", value=domain)
+            )
+
+        if topic:
+            filters.append(
+                MetadataFilter(key="topic", value=topic)
+            )
+
+        return MetadataFilters(filters=filters) if filters else None
+
 
     def proccess_pdf(self, pdf_path: str, source: str, domain: str, topic: str):
         storage_context = self.indexer.get_storage_context()
@@ -75,18 +90,7 @@ class LlamaIndexOrchestrator:
         return query_engine.query(query)
 
     def custom_query(self, query: str, domain: Optional[str], topic: Optional[str]) -> QueryResponse:
-        filters = []
-
-        if domain:
-            filters.append(
-                MetadataFilter(key="domain", value=domain)
-            )
-        if topic:
-            filters.append(
-                MetadataFilter(key="topic", value=topic)
-            )
-
-        query_filters = MetadataFilters(filters=filters) if filters else None
+        query_filters = self._query_filters(domain, topic)
 
         # 1. Retrieval + Rerank
         retriever = self.index.as_retriever(
