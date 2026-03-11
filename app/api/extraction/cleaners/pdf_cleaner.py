@@ -124,11 +124,6 @@ class PDFCleaner(CleanerInterface):
         in_toc = False
         blocks = text.split("\n\n")
 
-        for b in blocks[:30]:
-            print(repr(b))
-            print("IS HEADING:", self._is_heading(b))
-            print("---")
-
         result: list[ChunkWithMetadata] = []
         current_text = ""
         current_section = None
