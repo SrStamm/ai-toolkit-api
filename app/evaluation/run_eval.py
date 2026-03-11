@@ -15,14 +15,22 @@ from ragas.embeddings import HuggingFaceEmbeddings
 
 load_dotenv()
 
-def client(question: str, domain: str):
-    with httpx.Client() as client:
+client = httpx.Client(timeout=90.0)
+
+# url = "http://localhost:8000/rag/ask"
+url = "http://localhost:8000/llama/ask-custom"
+
+def query(question: str, domain: str):
+    try:
         response = client.post(
-            "http://localhost:8000/rag/ask",
+            url,
             json={"text": question, "domain": domain},
             timeout=90.0
         )
         return response.json()
+    except:
+        print(f"Error on question: {question}")
+        raise
 
 
 DATASET_PATH = Path("app/evaluation/datasets/fastapi_docs.json")
@@ -43,7 +51,7 @@ print("""
 
 for item in dataset:
     try:
-        response = client(item["question"], item["domain"])
+        response = query(item["question"], item["domain"])
     except Exception as e:
         print(f"Error on question {item['id']}: {e}")
         continue
@@ -69,15 +77,24 @@ questions_2, answers_2, contexts_2, ground_truths_2 = [], [], [], []
 
 for item in dataset2:
     try:
-        response = client(item["question"], item["domain"])
+        response = query(item["question"], item["domain"])
+
+        answer = response["answer"]
+        context = [c["text"] for c in response["citations"]]
+
     except Exception as e:
         print(f"Error on question {item['id']}: {e}")
         continue
 
+    print(f"\n--- Q: {item['question']}")
+    print(f"A: {answer}")
+    print(f"GT: {item['ground_truth']}")
+
     questions_2.append(item["question"])
-    answers_2.append(response["answer"])
-    contexts_2.append([c["text"] for c in response["citations"]])
+    answers_2.append(answer)
+    contexts_2.append(context)
     ground_truths_2.append(item["ground_truth"])
+
 
 print("""
     ----------
@@ -154,7 +171,7 @@ def clean_nans(obj):
         return None
     return obj
 
-save_path = Path("app/evaluation/results/results_v3_1_change_book_dataset.json")
+save_path = Path("app/evaluation/results/version/results_v3_2_llama_index.json")
 
 with open(save_path, "w", encoding="utf-8") as f:
     json.dump(clean_nans(results_to_save), f, indent=4, ensure_ascii=False)
