@@ -1,0 +1,12 @@
+{
+    "fastapi": {
+        "faithfulness": 1.0,
+        "answer_correctness": 0.5414266690710541,
+        "context_precision": 0.49999999995
+    },
+    "ai_engineering": {
+        "faithfulness": 0.9583333333333334,
+        "answer_correctness": 0.4233413639592944,
+        "context_precision": 0.249999999975
+    }
+}
