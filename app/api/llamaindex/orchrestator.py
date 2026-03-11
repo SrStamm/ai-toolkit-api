@@ -22,7 +22,7 @@ class LlamaIndexOrchestrator:
         )
         self.rerank = SentenceTransformerRerank(
             model="cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
-            top_n=3
+            top_n=4
         )
         self.llm_client: LLMClient = get_llm_client()
 
@@ -46,6 +46,11 @@ class LlamaIndexOrchestrator:
 
         return MetadataFilters(filters=filters) if filters else None
 
+    def _translate_to_english(self, text: str) -> str:
+        response = self.llm_client.generate_content(
+            f"Translate the following question to English. Return only the translated question, nothing else:\n\n{text}"
+        )
+        return response.content.strip()
 
     def proccess_pdf(self, pdf_path: str, source: str, domain: str, topic: str):
         storage_context = self.indexer.get_storage_context()
@@ -92,13 +97,15 @@ class LlamaIndexOrchestrator:
     def custom_query(self, query: str, domain: Optional[str], topic: Optional[str]) -> QueryResponse:
         query_filters = self._query_filters(domain, topic)
 
+        retrieval_query = self._translate_to_english(query) if domain == "libros" else query
+
         # 1. Retrieval + Rerank
         retriever = self.index.as_retriever(
-            similarity_top_k=6,
+            similarity_top_k=8,
             vector_store_query_mode="hybrid",
             filters=query_filters
         )
-        nodes = retriever.retrieve(query)
+        nodes = retriever.retrieve(retrieval_query)
         nodes = self.rerank.postprocess_nodes(nodes, query_str=query)
 
         # 2. Create Context and call LLM

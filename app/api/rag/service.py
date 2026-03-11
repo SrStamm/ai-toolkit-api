@@ -563,11 +563,6 @@ class RAGService:
         rerank_result = self.vector_store.rerank(user_question, query_result)
         self.logger.info("chunks_reranked", quantity=len(rerank_result))
 
-        for i, chunk in enumerate(rerank_result[:3]):
-            print("----", i)
-            print(chunk.payload["text"][:500])
-
-
         # Build context
         context = "\n\n".join(
             f"[{i + 1}]\n{chunk.payload['text']}"

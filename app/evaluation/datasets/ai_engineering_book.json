@@ -3,24 +3,24 @@
     "id": 1,
     "question": "Cuál es la definición que da el autor sobre 'AI Engineering'?",
     "domain": "libros",
-    "ground_truth": "Según el autor, la 'Ingeniería de IA' se refiere al proceso de construir aplicaciones sobre modelos fundacionales ya disponibles. Es una disciplina de ingeniería de rápido crecimiento que aprovecha modelos existentes, a diferencia de la ingeniería de ML tradicional que se enfoca en desarrollar modelos desde cero. Implica la construcción de aplicaciones de IA sobre modelos pre-entrenados."
+    "ground_truth": "AI Engineering es la disciplina de construir aplicaciones sobre modelos fundacionales ya disponibles, a diferencia de la ingeniería de ML tradicional que desarrolla modelos desde cero."
   },
   {
     "id": 2,
-    "question": "Qué tres pilares o componentes menciona el libro como fundamentales para el ciclo de vida de un modelo?",
+    "question": "Qué tres capas menciona el libro como fundamentales en la pila de aplicaciones de IA?",
     "domain": "libros",
-    "ground_truth": "El libro menciona tres capas fundamentales en la pila de aplicaciones de IA: (1) Desarrollo de aplicaciones, que implica proporcionar al modelo prompts y contexto adecuados, así como una evaluación rigurosa y buenas interfaces. (2) Desarrollo de modelos, que incluye el modelado, entrenamiento, finetuning, optimización de inferencia y la ingeniería de datasets. (3) Infraestructura, que abarca el servicio de modelos, la gestión de datos y cómputo, y la monitorización."
+    "ground_truth": "Las tres capas son: desarrollo de aplicaciones (prompts, evaluación e interfaces), desarrollo de modelos (entrenamiento, finetuning y optimización de inferencia), e infraestructura (servicio de modelos, gestión de datos y monitorización)."
   },
   {
     "id": 3,
-    "question": "Resume las principales diferencias entre ingeniería de software tradicional y AI Engineering.",
+    "question": "Cuál es la diferencia principal entre ingeniería de software tradicional y AI Engineering según el libro?",
     "domain": "libros",
-    "ground_truth": "El libro destaca tres diferencias principales entre la ingeniería de software tradicional y la ingeniería de IA: (1) En la ingeniería de IA, se utilizan modelos fundacionales pre-entrenados por otros, lo que desplaza el enfoque de modelado y entrenamiento hacia la adaptación del modelo. (2) Los modelos de IA son más grandes, consumen más recursos computacionales y tienen mayor latencia, lo que exige una mayor optimización de la inferencia y el entrenamiento. (3) Los modelos de IA producen salidas abiertas, lo que las hace más difíciles de evaluar en comparación con las salidas cerradas del ML tradicional. Además, la IA es probabilística, no determinística."
+    "ground_truth": "La diferencia principal es que AI Engineering usa modelos fundacionales pre-entrenados por otros, desplazando el foco hacia la adaptación del modelo. Además, los modelos de IA producen salidas abiertas y son probabilísticos, lo que los hace más difíciles de evaluar que el software tradicional."
   },
   {
     "id": 4,
-    "question": "Haz una lista de los desafíos de despliegue mencionados a lo largo del texto.",
+    "question": "Cuáles son los principales desafíos de despliegue que menciona el libro?",
     "domain": "libros",
-    "ground_truth": "El libro menciona varios desafíos de despliegue para sistemas de IA, incluyendo: (1) La rápida evolución de la IA, que requiere adaptación constante y puede causar fricción en los flujos de trabajo. (2) La necesidad de ajustar flujos de trabajo, prompts y datos debido a las particularidades y cambios de los modelos. (3) Las regulaciones y leyes de propiedad intelectual en evolución, que pueden afectar el uso de recursos y la protección de IPs. (4) La dependencia de proveedores de modelos, con el riesgo de cambios inesperados o interrupciones del servicio. (5) La optimización de la inferencia para reducir la latencia y el costo, que son cruciales para la experiencia del usuario y el retorno de la inversión. (6) La monitorización y observabilidad para detectar fallos, ataques de seguridad y 'drift' de datos o modelos. (7) La complejidad de la orquestación de pipelines de IA con múltiples componentes. (8) La implementación de 'guardrails' para mitigar riesgos, lo que puede introducir latencia. (9) La recopilación y el uso de feedback de usuario de alta calidad para mejorar los modelos, considerando los sesgos inherentes al feedback."
+    "ground_truth": "Los principales desafíos son: la optimización de inferencia para reducir latencia y costo, la monitorización para detectar fallos y data drift, la dependencia de proveedores externos de modelos, y la implementación de guardrails para mitigar riesgos."
   }
 ]

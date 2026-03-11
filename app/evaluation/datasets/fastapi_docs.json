@@ -1,20 +1,20 @@
 [
   {
     "id": "001",
-    "question": "Qué es Middleware?",
+    "question": "Qué es Middleware en FastAPI?",
     "domain": "fastapi",
-    "ground_truth": "Middleware es una función que: (1) Se ejecuta antes de cada petición (request). (2) Se ejecuta después de cada respuesta (response). (3) Permite interceptar y modificar datos como headers, autenticación o logging."
+    "ground_truth": "Middleware es una función que se ejecuta antes de cada request y después de cada response, permitiendo interceptar y modificar datos como headers, autenticación o logging."
   },
   {
     "id": "002",
-    "question": "Como uso CORS en FastAPI?",
+    "question": "Cómo se configura CORS en FastAPI?",
     "domain": "fastapi",
-    "ground_truth": "Para usar CORS se debe: (1) Importar CORSMiddleware de fastapi.middleware.cors. (2) Añadirlo mediante app.add_middleware(). (3) Configurar parámetros como allow_origins, allow_methods y allow_headers."
+    "ground_truth": "Se debe importar CORSMiddleware desde fastapi.middleware.cors y añadirlo con app.add_middleware(), configurando parámetros como allow_origins, allow_methods y allow_headers."
   },
   {
     "id": "003",
-    "question": "Cómo se usa SQL en FastAPI?",
+    "question": "Cómo se integra una base de datos SQL en FastAPI?",
     "domain": "fastapi",
-    "ground_truth": "Integración SQL: (1) FastAPI no tiene ORM nativo, usa externos como SQLAlchemy o SQLModel. (2) Se requiere configurar un Engine y SessionLocal. (3) Se inyecta la sesión en los endpoints usando el sistema de dependencias (Depends)."
+    "ground_truth": "FastAPI no tiene ORM nativo. Se usa un ORM externo como SQLAlchemy, configurando un Engine y SessionLocal, e inyectando la sesión en los endpoints mediante el sistema de dependencias con Depends."
   }
 ]

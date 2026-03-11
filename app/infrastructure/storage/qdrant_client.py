@@ -137,16 +137,8 @@ class QdrantStore(VectorStoreInterface):
         if not search_result:
             return []
 
-        print("------ chunk_index for query vectors -------")
-        for hit in search_result:
-            print(hit.payload["source"], hit.payload["chunk_index"])
-            print(hit.payload["text"])
-
         pairs = [[query, hit.payload["text"]] for hit in search_result]
         scores = self.rerank_model.predict(pairs)
-
-        print("RAW SCORES:", scores)
-
 
         scores = torch.sigmoid(torch.tensor(scores)).numpy()
 
@@ -177,9 +169,6 @@ class QdrantStore(VectorStoreInterface):
                 seen_texts.add(text_content)
 
         top_context = unique_filtered[:5]
-
-        print("ALL:", [hit.payload["rerank_score"] for hit in search_result])
-        print("FILTERED:", len(unique_filtered))
 
         return top_context
 
