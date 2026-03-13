@@ -1,3 +1,5 @@
+from pydantic import ValidationError
+from ..rag.schemas import LLMAnswer
 from ..llamaindex.orchrestator import (
     LLMClient,
     LlamaIndexOrchestrator,
@@ -5,10 +7,25 @@ from ..llamaindex.orchrestator import (
     get_llm_client,
 )
 import structlog
-import json
 
 
 logger = structlog.get_logger()
+
+
+PROMPT = """
+    You are an expert assistant that answers questions.
+
+    Question: {question}
+
+    Instructions:
+    - Answer in the same language as the question
+    - Be concise and direct
+    - Return ONLY valid JSON in this exact format:
+
+    {{"answer": "your answer here"}}
+
+    Do not include markdown formatting, explanations, or any text outside the JSON object.
+"""
 
 class Agent:
     def __init__(
@@ -23,21 +40,29 @@ class Agent:
         prompt = f"""
         You are a routing system.
 
-        Decide how the question should be answered.
+        Decide how the query should be answered.
 
-        Options:
-        rag -> if the answer should come from the knowledge base
-        direct -> if the LLM can answer using general knowledge
+        Use RAG if the question refers to documentation or books.
+        Use DIRECT if it is general knowledge.
 
-        Knowledge base contains:
-        - technical documentation
-        - books
-        - internal content
+        Examples:
+
+        Query: What is Python?
+        Answer: direct
+
+        Query: According to the documentation, how does middleware work in FastAPI?
+        Answer: rag
+
+        Query: What does the book AI Engineering say about evaluation?
+        Answer: rag
+
+        Query: What is HTTP?
+        Answer: direct
 
         Query:
         {query}
 
-        Answer ONLY with:
+        Answer with:
         rag
         or
         direct
@@ -56,7 +81,17 @@ class Agent:
         if decision == "rag":
             return self.rag.custom_query(query=query)
 
-        return self.llm.generate_content(query)
+        prompt = PROMPT.format(question=query)
+
+        response = self.llm.generate_content(prompt)
+
+        try:
+            parsed = LLMAnswer.model_validate_json(response.content)
+            answer = parsed.answer
+        except ValidationError:
+            answer = response.content
+
+        return answer
 
     def agent(self, query: str):
         decision = self.router(query)
