@@ -9,6 +9,4 @@ def custom_query_llama(
     query: QueryRequest,
     serv: Agent = Depends(get_agent)
 ):
-    return serv.agent(
-        query=query.text,
-    )
+    return serv.agent(query=query.text)
