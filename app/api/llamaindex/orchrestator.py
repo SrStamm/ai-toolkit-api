@@ -94,7 +94,7 @@ class LlamaIndexOrchestrator:
 
         return query_engine.query(query)
 
-    def custom_query(self, query: str, domain: Optional[str], topic: Optional[str]) -> QueryResponse:
+    def custom_query(self, query: str, domain: Optional[str] = None, topic: Optional[str] = None) -> QueryResponse:
         query_filters = self._query_filters(domain, topic)
 
         retrieval_query = self._translate_to_english(query) if domain == "libros" else query
