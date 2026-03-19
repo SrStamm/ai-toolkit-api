@@ -3,11 +3,10 @@ from typing import Any
 from pydantic import BaseModel
 
 from .prompt import PROMP_DIRECT
+from ..rag.schemas import LLMAnswer
 from ..llamaindex.orchrestator import (
     LlamaIndexOrchestrator,
     LLMClient,
-    get_orchestrator,
-    get_llm_client
 )
 
 class ToolResponse(BaseModel):
@@ -39,10 +38,6 @@ class RagTool(Tool):
             }
         )
 
-def rag_instance() -> RagTool:
-    rag=get_orchestrator()
-    return RagTool(rag)
-
 class DirectTool(Tool):
     name = "direct"
 
@@ -53,17 +48,9 @@ class DirectTool(Tool):
         prompt = PROMP_DIRECT.format(question=input)
         res = self.llm.generate_content(prompt)
 
+        parsed = LLMAnswer.model_validate_json(res.content)
+
         return ToolResponse(
-            output=res.content
+            output=parsed.answer
         )
 
-
-def direct_instance() -> DirectTool:
-    llm=get_llm_client()
-    return DirectTool(llm)
-
-def build_tool_registry():
-    return {
-        "rag": rag_instance(),
-        "direct": direct_instance()
-    }
