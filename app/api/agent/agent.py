@@ -1,3 +1,5 @@
+import structlog
+
 from .prompt import PROMPT_ROUTING_SYSTEM
 from .model import DirectTool, RagTool
 from ..llamaindex.orchrestator import (
@@ -6,7 +8,6 @@ from ..llamaindex.orchrestator import (
     get_orchestrator,
     get_llm_client,
 )
-import structlog
 
 
 logger = structlog.get_logger()
@@ -34,7 +35,15 @@ class Agent:
 
         logger.info("Router raw output", output=decision)
 
-        return decision
+        decision = decision.strip().lower()
+
+        if "rag" in decision:
+            return "rag"
+
+        elif "direct" in decision:
+            return "direct"
+
+        raise ValueError(f"Invalid router output: {decision}")
 
     def execute(self, decision: str, query: str):
         if decision not in self.tools:
