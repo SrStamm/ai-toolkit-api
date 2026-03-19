@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
 from pydantic import BaseModel
+
+from .prompt import PROMP_DIRECT
 from ..llamaindex.orchrestator import (
     LlamaIndexOrchestrator,
     LLMClient,
@@ -48,7 +50,8 @@ class DirectTool(Tool):
         self.llm = llm
 
     def execute(self, input: str) -> ToolResponse:
-        res = self.llm.generate_content(input)
+        prompt = PROMP_DIRECT.format(question=input)
+        res = self.llm.generate_content(prompt)
 
         return ToolResponse(
             output=res.content
