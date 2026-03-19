@@ -1,101 +1,68 @@
-from pydantic import ValidationError
-from ..rag.schemas import LLMAnswer
+import structlog
+
+from .prompt import PROMPT_ROUTING_SYSTEM
+from .model import DirectTool, RagTool, ToolResponse
 from ..llamaindex.orchrestator import (
     LLMClient,
     LlamaIndexOrchestrator,
     get_orchestrator,
     get_llm_client,
 )
-import structlog
 
 
 logger = structlog.get_logger()
 
-
-PROMPT = """
-    You are an expert assistant that answers questions.
-
-    Question: {question}
-
-    Instructions:
-    - Answer in the same language as the question
-    - Be concise and direct
-    - Return ONLY valid JSON in this exact format:
-
-    {{"answer": "your answer here"}}
-
-    Do not include markdown formatting, explanations, or any text outside the JSON object.
-"""
-
 class Agent:
     def __init__(
-            self,
-            llm: LLMClient,
-            rag: LlamaIndexOrchestrator
+        self,
+        llm: LLMClient,
+        rag: LlamaIndexOrchestrator
     ):
         self.llm = llm
         self.rag = rag
+        self.tools = self._build_tools()
+
+    def _build_tools(self):
+        return {
+            "rag": RagTool(self.rag),
+            "direct": DirectTool(self.llm)
+        }
 
     def router(self, query: str) -> str:
-        prompt = f"""
-        You are a routing system.
-
-        Decide how the query should be answered.
-
-        Use RAG if the question refers to documentation or books.
-        Use DIRECT if it is general knowledge.
-
-        Examples:
-
-        Query: What is Python?
-        Answer: direct
-
-        Query: According to the documentation, how does middleware work in FastAPI?
-        Answer: rag
-
-        Query: What does the book AI Engineering say about evaluation?
-        Answer: rag
-
-        Query: What is HTTP?
-        Answer: direct
-
-        Query:
-        {query}
-
-        Answer with:
-        rag
-        or
-        direct
-        """
+        prompt = PROMPT_ROUTING_SYSTEM.format(query=query)
 
         decision = self.llm.generate_content(prompt).content
-
-        logger.info("Router raw output", output=decision)
+        decision = decision.strip().lower()
 
         if "rag" in decision:
             return "rag"
+        elif "direct" in decision:
+            return "direct"
 
-        return "direct"
+        raise ValueError(f"Invalid router output: {decision}")
 
     def execute(self, decision: str, query: str):
-        if decision == "rag":
-            return self.rag.custom_query(query=query)
+        tool = self.tools.get(decision)
 
-        prompt = PROMPT.format(question=query)
-
-        response = self.llm.generate_content(prompt)
+        if not tool:
+            raise ValueError(f"Tool '{decision}' doesn't exist")
 
         try:
-            parsed = LLMAnswer.model_validate_json(response.content)
-            answer = parsed.answer
-        except ValidationError:
-            answer = response.content
-
-        return answer
+            return tool.execute(query)
+        except Exception as e:
+            logger.error("Tool execution failed", error=str(e))
+            return ToolResponse(
+                output="Something went wrong",
+                metadata={"error":str(e)}
+            )
 
     def agent(self, query: str):
         decision = self.router(query)
-        logger.info("Agent decision", query=query, decision=decision)
+        logger.info(
+            "Tool execution",
+            tool=decision,
+            query=query
+        )
 
         return self.execute(decision, query)
 

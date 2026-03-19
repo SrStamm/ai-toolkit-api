@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
-from ...api.rag.schemas import QueryRequest
 from .agent import get_agent, Agent
+from ...api.rag.schemas import QueryRequest
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
