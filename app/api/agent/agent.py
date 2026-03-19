@@ -1,7 +1,7 @@
 import structlog
 
 from .prompt import PROMPT_ROUTING_SYSTEM
-from .model import DirectTool, RagTool
+from .model import DirectTool, RagTool, ToolResponse
 from ..llamaindex.orchrestator import (
     LLMClient,
     LlamaIndexOrchestrator,
@@ -50,7 +50,15 @@ class Agent:
             raise ValueError(f"Tool '{decision}' dosn't exist")
 
         tool = self.tools[decision]
-        return tool.execute(query)
+
+        try:
+            return tool.execute(query)
+        except Exception as e:
+            logger.error("Tool execution failed", error=str(e))
+            return ToolResponse(
+                output="Something went wrong",
+                metadata={"error":str(e)}
+            )
 
     def agent(self, query: str):
         decision = self.router(query)
