@@ -3,7 +3,9 @@ from typing import Any
 from pydantic import BaseModel
 from ..llamaindex.orchrestator import (
     LlamaIndexOrchestrator,
+    LLMClient,
     get_orchestrator,
+    get_llm_client
 )
 
 class ToolResponse(BaseModel):
@@ -39,7 +41,26 @@ def rag_instance() -> RagTool:
     rag=get_orchestrator()
     return RagTool(rag)
 
+class DirectTool(Tool):
+    name = "direct"
+
+    def __init__(self, llm: LLMClient) -> None:
+        self.llm = llm
+
+    def execute(self, input: str) -> ToolResponse:
+        res = self.llm.generate_content(input)
+
+        return ToolResponse(
+            output=res.content
+        )
+
+
+def direct_instance() -> DirectTool:
+    llm=get_llm_client()
+    return DirectTool(llm)
+
 def build_tool_registry():
     return {
         "rag": rag_instance(),
+        "direct": direct_instance()
     }
