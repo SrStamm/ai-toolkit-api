@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .prompt import PROMP_DIRECT
 from ..rag.schemas import LLMAnswer
@@ -11,7 +11,7 @@ from ..llamaindex.orchrestator import (
 
 class ToolResponse(BaseModel):
     output: str
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 class Tool(ABC):
     name: str
