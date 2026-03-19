@@ -1,5 +1,5 @@
 from .prompt import PROMPT_ROUTING_SYSTEM
-from .model import build_tool_registry
+from .model import DirectTool, RagTool
 from ..llamaindex.orchrestator import (
     LLMClient,
     LlamaIndexOrchestrator,
@@ -13,12 +13,19 @@ logger = structlog.get_logger()
 
 class Agent:
     def __init__(
-            self,
-            llm: LLMClient,
-            rag: LlamaIndexOrchestrator
+        self,
+        llm: LLMClient,
+        rag: LlamaIndexOrchestrator
     ):
         self.llm = llm
         self.rag = rag
+        self.tools = self._build_tools()
+
+    def _build_tools(self):
+        return {
+            "rag": RagTool(self.rag),
+            "direct": DirectTool(self.llm)
+        }
 
     def router(self, query: str) -> str:
         prompt = PROMPT_ROUTING_SYSTEM.format(query=query)
@@ -30,12 +37,10 @@ class Agent:
         return decision
 
     def execute(self, decision: str, query: str):
-        tools = build_tool_registry()
-
-        if decision not in tools:
+        if decision not in self.tools:
             raise ValueError(f"Tool '{decision}' dosn't exist")
 
-        tool = tools[decision]
+        tool = self.tools[decision]
         return tool.execute(query)
 
     def agent(self, query: str):
