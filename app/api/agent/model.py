@@ -1,9 +1,11 @@
-class Tool:
-    def __init__(self, name: str, description: str, fn):
-        self.name = name
-        self.description = description
-        self.fn = fn
+from abc import ABC, abstractmethod
 
+class Tool(ABC):
+    name: str
+    description: str
+
+    @abstractmethod
     def execute(self, input: str) -> str:
-        return self.fn(input)
+        pass
+
 
