@@ -32,24 +32,20 @@ class Agent:
         prompt = PROMPT_ROUTING_SYSTEM.format(query=query)
 
         decision = self.llm.generate_content(prompt).content
-
-        logger.info("Router raw output", output=decision)
-
         decision = decision.strip().lower()
 
         if "rag" in decision:
             return "rag"
-
         elif "direct" in decision:
             return "direct"
 
         raise ValueError(f"Invalid router output: {decision}")
 
     def execute(self, decision: str, query: str):
-        if decision not in self.tools:
-            raise ValueError(f"Tool '{decision}' dosn't exist")
+        tool = self.tools.get(decision)
 
-        tool = self.tools[decision]
+        if not tool:
+            raise ValueError(f"Tool '{decision}' doesn't exist")
 
         try:
             return tool.execute(query)
