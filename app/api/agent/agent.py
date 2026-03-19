@@ -62,7 +62,11 @@ class Agent:
 
     def agent(self, query: str):
         decision = self.router(query)
-        logger.info("Agent decision", query=query, decision=decision)
+        logger.info(
+            "Tool execution",
+            tool=decision,
+            query=query
+        )
 
         return self.execute(decision, query)
 
