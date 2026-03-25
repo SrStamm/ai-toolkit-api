@@ -1,7 +1,6 @@
 import structlog
 
-from api.agent.tools.tools_registry import TOOL_REGISTRY
-
+from .tools.tools_registry import TOOL_REGISTRY
 from .prompt import PROMPT_ROUTING_SYSTEM
 from ..llamaindex.orchrestator import (
     LLMClient,
@@ -21,7 +20,7 @@ class Agent:
     ):
         self.tools = TOOL_REGISTRY.copy()
         self.deps = {
-            "rag_orchrestator": rag,
+            "rag_orchestrator": rag,
             "llm_client": llm
         }
         self.llm = llm
@@ -32,13 +31,18 @@ class Agent:
             for name, defn in TOOL_REGISTRY.items()
         ])
 
-    def execute(self, tool_name: str, parameters: str):
+    def execute(self, tool_name: str, query: str):
         tool_def = self.tools.get(tool_name)
 
         if not tool_def:
             raise ValueError(f"Tool '{tool_name}' not found")
 
-        kwargs = {**parameters, **self.deps}
+        relevant_deps = {
+            k: v for k, v in self.deps.items()
+            if k in tool_def.dependencies
+        }
+
+        kwargs = {"query": query, **relevant_deps}
 
         return tool_def.handler(**kwargs)
 
@@ -65,7 +69,7 @@ class Agent:
             query=query
         )
 
-        return self.execute(decision, query)
+        return self.execute(tool_name=decision, query=query)
 
 
 def create_agent() -> Agent:
