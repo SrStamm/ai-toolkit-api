@@ -1,7 +1,8 @@
 import structlog
 
+from api.agent.tools.tools_registry import TOOL_REGISTRY
+
 from .prompt import PROMPT_ROUTING_SYSTEM
-from .model import DirectTool, RagTool, ToolResponse
 from ..llamaindex.orchrestator import (
     LLMClient,
     LlamaIndexOrchestrator,
@@ -18,18 +19,33 @@ class Agent:
         llm: LLMClient,
         rag: LlamaIndexOrchestrator
     ):
-        self.llm = llm
-        self.rag = rag
-        self.tools = self._build_tools()
-
-    def _build_tools(self):
-        return {
-            "rag": RagTool(self.rag),
-            "direct": DirectTool(self.llm)
+        self.tools = TOOL_REGISTRY.copy()
+        self.deps = {
+            "rag_orchrestator": rag,
+            "llm_client": llm
         }
+        self.llm = llm
+
+    def build_tool_list(self) -> str:
+        return "\n".join([
+            f"- {name}: {defn.description} (params: {list(defn.parameters['properties'].keys())})"
+            for name, defn in TOOL_REGISTRY.items()
+        ])
+
+    def execute(self, tool_name: str, parameters: str):
+        tool_def = self.tools.get(tool_name)
+
+        if not tool_def:
+            raise ValueError(f"Tool '{tool_name}' not found")
+
+        kwargs = {**parameters, **self.deps}
+
+        return tool_def.handler(**kwargs)
 
     def router(self, query: str) -> str:
-        prompt = PROMPT_ROUTING_SYSTEM.format(query=query)
+        tools = self.build_tool_list()
+
+        prompt = PROMPT_ROUTING_SYSTEM.format(query=query, tool_list=tools)
 
         decision = self.llm.generate_content(prompt).content
         decision = decision.strip().lower()
@@ -40,21 +56,6 @@ class Agent:
             return "direct"
 
         raise ValueError(f"Invalid router output: {decision}")
-
-    def execute(self, decision: str, query: str):
-        tool = self.tools.get(decision)
-
-        if not tool:
-            raise ValueError(f"Tool '{decision}' doesn't exist")
-
-        try:
-            return tool.execute(query)
-        except Exception as e:
-            logger.error("Tool execution failed", error=str(e))
-            return ToolResponse(
-                output="Something went wrong",
-                metadata={"error":str(e)}
-            )
 
     def agent(self, query: str):
         decision = self.router(query)
