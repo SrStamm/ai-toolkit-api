@@ -1,4 +1,4 @@
-from .tools_registry import register_tool
+from .tools_registry import ToolResponse, register_tool
 
 @register_tool(
     name="rag",
@@ -10,9 +10,10 @@ from .tools_registry import register_tool
             "top_k": {"type": "integer", "description": "Quantity of results", "default": 5}
         },
         "required": ["query"]
-    }
+    },
+    dependencies=["rag_orchestrator"]
 )
-def rag_tool(query: str, top_k: int = 5, rag_orchestrator=None):
+def rag_tool(query: str, top_k: int = 5, rag_orchestrator=None, **kweargs):
     res = rag_orchestrator.custom_query(query=query)
     return ToolResponse(
         output=res.answer,
