@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import field, dataclass
 from typing import Callable, Optional
 
 @dataclass
@@ -7,6 +7,7 @@ class ToolDefinition:
     description: str
     parameters: dict 
     handler: Callable
+    dependencies: list[str] = field(default_factory=list)
 
 @dataclass
 class ToolResponse:
@@ -16,14 +17,15 @@ class ToolResponse:
 
 TOOL_REGISTRY: dict[str, ToolDefinition] = {}
 
-def register_tool(name: str, description: str, parameters: dict):
+def register_tool(name: str, description: str, parameters: dict, dependencies: list):
     """Decorador para registrar tools"""
     def decorator(func: Callable):
         TOOL_REGISTRY[name] = ToolDefinition(
             name=name,
             description=description,
             parameters=parameters,
-            handler=func
+            handler=func,
+            dependencies=dependencies
         )
         return func
     return decorator
