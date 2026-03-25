@@ -13,10 +13,14 @@ Do not include markdown formatting, explanations, or any text outside the JSON o
 """
 
 PROMPT_ROUTING_SYSTEM = """You are a routing system.
-Decide how the query should be answered.
 
-Use RAG if the question refers to documentation or books.
-Use DIRECT if it is general knowledge.
+Available tools:
+{tool_list}
+
+Return JSON with tool name and parameters.
+
+Example output:
+{{"tool": "rag", "parameters": {{"query": "how does middleware work", "top_k": 3}}}}
 
 Examples:
 
