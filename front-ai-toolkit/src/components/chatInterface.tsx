@@ -2,37 +2,39 @@ import React, { useState } from "react";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
-import { askStreamFetch } from "@/services/ragServices";
-import type { Citation, QueryRequest } from "@/types/rag";
+import { agentAsk } from "@/services/agentServices";
+import type { AgentQuestion } from "@/types/agent";
 import CustomizedToast from "./toast";
 import Markdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+
+// Code block style - preserves line breaks
+const codeBlockStyle: React.CSSProperties = {
+  background: '#1e1e1e',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  borderRadius: '0.375rem',
+  padding: '1rem',
+  margin: '0.5rem 0',
+};
 
 interface Message {
   role: "user" | "ai";
   content: string;
-  citations?: Citation[];
 }
 
 function ChatInterface() {
   const [query, setQuery] = useState("");
-  const [domain, setDomain] = useState("");
-  const [topic, setTopic] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   const onChangeQuery = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
   };
 
-  const onChangeDomain = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDomain(e.target.value);
-  };
-
-  const onChangeTopic = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTopic(e.target.value);
-  };
-
-  const handleQueryStream = async () => {
+  const handleQuery = async () => {
     setIsLoading(true);
 
     const userMessage: Message = {
@@ -45,79 +47,36 @@ function ChatInterface() {
     const aiMessage: Message = {
       role: "ai",
       content: "",
-      citations: [],
     };
 
     setMessages((prev) => [...prev, aiMessage]);
 
-    const body: QueryRequest = {
+    const body: AgentQuestion = {
       text: query,
-      domain: typeof domain === "string" ? domain : undefined,
-      topic: typeof topic === "string" ? topic : undefined,
+      session_id: sessionId || undefined,
     };
 
     setQuery("");
 
     try {
-      const response = await askStreamFetch(body);
+      const response = await agentAsk(body);
 
-      const reader = response.body!.getReader();
-      const decoder = new TextDecoder();
+      // Update session ID for future requests
+      if (response.session_id) {
+        setSessionId(response.session_id);
+      }
 
-      let buffer = "";
+      // Add the response content
+      aiMessage.content = response.output;
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        newMessages[newMessages.length - 1] = { ...aiMessage };
+        return newMessages;
+      });
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-
-        buffer = parts.pop() || "";
-
-        for (const line of parts) {
-          const trimmedLine = line.trim();
-          if (!trimmedLine || !trimmedLine.startsWith("data: ")) continue;
-
-          try {
-            const data = JSON.parse(line.slice(6));
-
-            switch (data.type) {
-              case "content":
-                aiMessage.content += data.content;
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  newMessages[newMessages.length - 1] = { ...aiMessage };
-                  return newMessages;
-                });
-                break;
-
-              case "citations":
-                aiMessage.citations = data.citations;
-                setMessages((prev) => {
-                  const newMessages = [...prev];
-                  newMessages[newMessages.length - 1] = { ...aiMessage };
-                  return newMessages;
-                });
-                break;
-
-              case "metadata":
-                <span className="text-xs text-gray-500">
-                  {data.tokens} tokens · ${data.cost.toFixed(4)}
-                </span>;
-                break;
-
-              case "error":
-                CustomizedToast({ type: "error", msg: data.content });
-                break;
-
-              case "done":
-                break;
-            }
-          } catch {
-            console.error("Error parseando JSON incompleto:", trimmedLine);
-          }
-        }
+      // Show metadata if available
+      if (response.metadata && Object.keys(response.metadata).length > 0) {
+        console.log("Agent metadata:", response.metadata);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
@@ -160,41 +119,38 @@ function ChatInterface() {
                   strong: ({ children }) => (
                     <strong className="font-semibold">{children}</strong>
                   ),
-                  code: ({ children, className, ...props }) => {
-                    const isBlock = className?.includes("language");
-                    const textColor = isBlock
-                      ? "text-slate-300"
-                      : msg.role === "user"
-                        ? "text-white"
-                        : "text-black font-bold";
+                  code: ({ node, className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || "");
+                    const isInline = !match && !className?.includes("language");
+
+                    if (isInline) {
+                      return (
+                        <code
+                          className="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-sm font-mono"
+                          {...props}
+                        >
+                          {children}
+                        </code>
+                      );
+                    }
+
                     return (
-                      <code
-                        className={`${textColor} px-1.5 py-0.5 rounded-sm text-sm`}
+                      <SyntaxHighlighter
+                        style={vscDarkPlus}
+                        language={match ? match[1] : "text"}
+                        PreTag="div"
+                        customStyle={codeBlockStyle}
                         {...props}
                       >
-                        {children}
-                      </code>
+                        {String(children).replace(/\n$/, "")}
+                      </SyntaxHighlighter>
                     );
                   },
-                  pre: ({ children }) => (
-                    <pre className="bg-slate-900 p-4 rounded-md overflow-x-auto text-left my-2">
-                      {children}
-                    </pre>
-                  ),
+                  pre: ({ children }) => <>{children}</>,
                 }}
               >
                 {msg.content}
               </Markdown>
-              {msg.citations &&
-                msg.citations.length > 0 &&
-                msg.citations.map((c) => (
-                  <div
-                    key={c.chunk_index}
-                    className="mt-2 pt-2 border-t text-xs text-blue-500"
-                  >
-                    {c.source}
-                  </div>
-                ))}
             </Card>
           </div>
         ))}
@@ -202,29 +158,15 @@ function ChatInterface() {
 
       {/* Input de Pregunta */}
       <div className="flex gap-2 shrink-0 bg-background pt-2">
-        <div className="flex-col flex-1 space-y-2">
-          <Input
-            placeholder="Haz una pregunta sobre los documentos..."
-            value={query}
-            onChange={onChangeQuery}
-          />
+        <Input
+          className="flex-1"
+          placeholder="Haz una pregunta al agente..."
+          value={query}
+          onChange={onChangeQuery}
+          disabled={isLoading}
+        />
 
-          <div className="flex gap-2 ">
-            <Input
-              placeholder="Dominio..."
-              value={domain}
-              onChange={onChangeDomain}
-            />
-
-            <Input
-              placeholder="Topico..."
-              value={topic}
-              onChange={onChangeTopic}
-            />
-          </div>
-        </div>
-
-        <Button onClick={handleQueryStream} disabled={isLoading}>
+        <Button onClick={handleQuery} disabled={isLoading || !query.trim()}>
           Enviar
         </Button>
       </div>
