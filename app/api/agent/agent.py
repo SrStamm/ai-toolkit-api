@@ -1,5 +1,8 @@
 import structlog
+import uuid
+from typing import Optional
 
+from .schemas import AgentResponse
 from .tools.tools_registry import TOOL_REGISTRY
 from .prompt import PROMPT_ROUTING_SYSTEM
 from ..llamaindex.orchrestator import (
@@ -8,7 +11,6 @@ from ..llamaindex.orchrestator import (
     get_orchestrator,
     get_llm_client,
 )
-
 
 logger = structlog.get_logger()
 
@@ -24,6 +26,10 @@ class Agent:
             "llm_client": llm
         }
         self.llm = llm
+
+    def _create_session_id(self) -> str:
+        id = str(uuid.uuid4())
+        return id
 
     def build_tool_list(self) -> str:
         return "\n".join([
@@ -61,15 +67,26 @@ class Agent:
 
         raise ValueError(f"Invalid router output: {decision}")
 
-    def agent(self, query: str):
+    def agent(self, query: str, session_id: Optional[str] = None):
+        # Create a session_id if not exists
+        if not session_id:
+            session_id = self._create_session_id()
+
         decision = self.router(query)
+
         logger.info(
             "Tool execution",
             tool=decision,
             query=query
         )
 
-        return self.execute(tool_name=decision, query=query)
+        result = self.execute(tool_name=decision, query=query)
+
+        return AgentResponse(
+            output=result.output,
+            session_id=session_id,
+            metadata=result.metadata or {}
+        )
 
 
 def create_agent() -> Agent:
