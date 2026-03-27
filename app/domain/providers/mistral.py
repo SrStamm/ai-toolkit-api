@@ -2,7 +2,7 @@ from typing import AsyncIterator, Optional
 import random
 import time
 import structlog
-from mistralai import Mistral
+from mistralai.client import Mistral
 from httpx import ConnectError, NetworkError, TimeoutException
 
 from ..models import LLMResponse, TokenUsage
