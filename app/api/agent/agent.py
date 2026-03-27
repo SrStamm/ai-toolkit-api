@@ -2,6 +2,7 @@ import structlog
 import uuid
 from typing import Optional
 
+from .session_memory import get_session_memory, Message, SessionMemory
 from .schemas import AgentResponse
 from .tools.tools_registry import TOOL_REGISTRY
 from .prompt import PROMPT_ROUTING_SYSTEM
@@ -26,10 +27,25 @@ class Agent:
             "llm_client": llm
         }
         self.llm = llm
+        self.session_memory: SessionMemory = get_session_memory()
 
+    # Create a session_id
     def _create_session_id(self) -> str:
         id = str(uuid.uuid4())
         return id
+
+    def _build_context(self, query: str, history: list[Message]) -> str:
+        if not history:
+            return query
+        
+        history_str = "\n".join([
+            f"{msg.role}: {msg.content}"
+            for msg in history
+        ])
+
+        return f"""Last conversation:
+        {history_str}
+        Query: {query}"""
 
     def build_tool_list(self) -> str:
         return "\n".join([
@@ -37,7 +53,7 @@ class Agent:
             for name, defn in TOOL_REGISTRY.items()
         ])
 
-    def execute(self, tool_name: str, query: str):
+    def execute(self, tool_name: str, query: str, context_str: str = ""):
         tool_def = self.tools.get(tool_name)
 
         if not tool_def:
@@ -48,7 +64,7 @@ class Agent:
             if k in tool_def.dependencies
         }
 
-        kwargs = {"query": query, **relevant_deps}
+        kwargs = {"query": query, "context": context_str, **relevant_deps}
 
         return tool_def.handler(**kwargs)
 
@@ -72,15 +88,27 @@ class Agent:
         if not session_id:
             session_id = self._create_session_id()
 
-        decision = self.router(query)
+        # Get history for session
+        history = self.session_memory.get_history(session_id)
+
+        # Build query with the context
+        enriched_query = self._build_context(query, history)
+
+        # Add user message
+        self.session_memory.add(session_id, "user", query)
+
+        # Router 
+        decision = self.router(enriched_query)
+        result = self.execute(tool_name=decision, query=enriched_query)
+
+        # Add ai message
+        self.session_memory.add(session_id, "assistant", result.output)
 
         logger.info(
             "Tool execution",
             tool=decision,
-            query=query
+            query=enriched_query
         )
-
-        result = self.execute(tool_name=decision, query=query)
 
         return AgentResponse(
             output=result.output,
