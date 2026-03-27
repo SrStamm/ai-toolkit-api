@@ -1,12 +1,12 @@
 const url = import.meta.env.VITE_URL;
 
-type FetchProps = {
+type FetchProps<T = unknown> = {
   path: string;
   method: string;
   body?: object;
 };
 
-const Fetch = async ({ path, method, body }: FetchProps) => {
+const Fetch = async <T = unknown>({ path, method, body }: FetchProps<T>): Promise<T> => {
   const Body = body !== undefined ? JSON.stringify(body) : undefined;
 
   const fetchOptions: RequestInit = {
@@ -31,7 +31,7 @@ const Fetch = async ({ path, method, body }: FetchProps) => {
     }
 
     const data = await response.json();
-    return data;
+    return data as T;
   } catch (error) {
     console.error("🔥 Error en Fetch:", error);
     throw error;
