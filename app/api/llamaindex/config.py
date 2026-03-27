@@ -1,11 +1,13 @@
-from dotenv import load_dotenv
 from llama_index.core import Settings
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from ...infrastructure.storage.hybrid_ai import get_hybrid_embeddign_service
+from ...infrastructure.adapters import LlamaIndexHybridAdapter
 
 def setup_llamaindex():
-    load_dotenv()
+    # Obtain manual service
+    my_hybrid_service = get_hybrid_embeddign_service()
 
-    # Configuración del Modelo de Embedding 
-    Settings.embed_model = HuggingFaceEmbedding(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
+    # wrap with adapter
+    adapter = LlamaIndexHybridAdapter(hybrid_service=my_hybrid_service)
+
+    # its assigned to llama_index
+    Settings.embed_model = adapter

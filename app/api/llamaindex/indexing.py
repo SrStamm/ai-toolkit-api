@@ -3,21 +3,22 @@
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from llama_index.core import StorageContext
 from qdrant_client import QdrantClient
-from fastembed import SparseTextEmbedding
+from ...infrastructure.storage.hybrid_ai import get_hybrid_embeddign_service
 
-_sparse_model = SparseTextEmbedding(model_name="prithivida/Splade_PP_en_v1")
+_hybrid_service = get_hybrid_embeddign_service()
 
 def sparse_doc_fn(texts: list[str]):
-    embeddings = list(_sparse_model.embed(texts))
-    indices = [list(e.indices) for e in embeddings]
-    values = [list(e.values) for e in embeddings]
+    results = _hybrid_service.batch_embed(texts)
+    indices = [list(r.sparse["indices"]) for r in results]
+    values = [list(r.sparse["values"]) for r in results]
     return indices, values
 
 def sparse_query_fn(query):
     query_str = query.query_str if hasattr(query, "query_str") else str(query)
-    embedding = list(_sparse_model.embed([query_str]))[0]
 
-    return [embedding.indices.tolist()], [embedding.values.tolist()]
+    result = _hybrid_service.embed(query_str)
+
+    return [result.sparse["indices"]], [result.sparse["values"]]
 
 class LlamaIndexer:
     def __init__(self, host="qdrant", port=6333, collection="documents_llama"):
