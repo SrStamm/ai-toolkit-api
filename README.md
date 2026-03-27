@@ -1,7 +1,7 @@
 # ai-toolkit
 
-> **Versión actual:** `v3.2`  
-> **Estado:** estable (educacional / experimental, con evaluación RAGAS y comparación LlamaIndex)
+> **Versión actual:** `v4.0`  
+> **Estado:** estable (educacional / experimental, con agente determinístico)
 
 **Herramientas de IA para backend (FastAPI)**
 
@@ -12,138 +12,147 @@
 - manejo consciente de errores y retries
 - arquitectura desacoplada y extensible
 - observabilidad y métricas
+- orquestación de herramientas con agente determinístico
 
-> 🎯 Objetivo del proyecto  
+> 🎯 Objetivo del proyecto
 > No es un producto final, sino un laboratorio backend para demostrar criterio arquitectónico real en sistemas con IA: cómo se diseñan, cómo evolucionan y cómo se preparan para un entorno enterprise-like.
 
 ---
 
-## Estado actual – v3.2 (LlamaIndex + Evaluación RAGAS)
+## Estado actual – v4.0 (Agente determinístico + Orquestación)
 
-La versión v3.2 introduce una implementación paralela del pipeline RAG usando LlamaIndex, evaluada empíricamente contra el pipeline manual con RAGAS. El objetivo no fue reemplazar el pipeline existente, sino comparar ambos enfoques con métricas reales y extraer conclusiones concretas.
+La versión v4.0 extiende el sistema RAG hacia un agente determinístico capaz de decidir qué herramienta usar según la naturaleza de la consulta. Se mantiene toda la infraestructura de v2.2 (Celery, Redis, Prometheus, Grafana) y se agrega una capa de orquestación sobre el pipeline existente.
 
-### Qué se implementó
+### Objetivos alcanzados en v4.0
 
-- Pipeline RAG completo con LlamaIndex (ingesta, indexing, retrieval, reranking)
-- Hybrid search con SPLADE (sparse + dense vectors) sobre Qdrant
-- Reranking con `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`
-- Integración con el `LLMClient` existente (mantiene circuit breaker y cost tracking)
-- Traducción automática de queries al inglés antes del retrieval para documentos en inglés
-- Evaluación con RAGAS sobre dos datasets: FastAPI docs y un libro técnico en inglés
+- Tool registry centralizado con decorador `@register_tool`
+- Abstracción de herramientas mediante `ToolDefinition` y `ToolResponse`
+- Router LLM que decide entre herramientas disponibles según la query
+- Memoria de sesión con ventana deslizante (window size configurable)
+- Inyección de dependencias por tool (cada tool declara qué deps necesita)
+- Agente expuesto vía endpoint `/agent/ask-custom`
+- Frontend actualizado para consumir el endpoint del agente
 
-### Arquitectura v3.2 (LlamaIndex)
+### Arquitectura v4.0
 
 ```ascii
 Cliente / Frontend
 ↓
-FastAPI — /llama/ask-custom
+FastAPI – /agent/ask-custom
+  - Validación de request
+  - Gestión de session_id
 ↓
-LlamaIndexOrchestrator
-  - Traducción de query (español → inglés)
-  - Retrieval hybrid (SPLADE + dense, top_k=10)
-  - Reranking (cross-encoder, top_n=5)
-  - Construcción de contexto
-  - LLMClient.generate_content()
+Agent
+  - SessionMemory (historial por sesión)
+  - Router LLM (decide qué tool usar)
+  - Tool Executor (inyecta dependencias y ejecuta)
 ↓
-QueryResponse (answer + citations + metadata)
+Tools
+  ├── direct  → LLM sin contexto documental
+  └── rag     → LlamaIndex Orchestrator → Qdrant
+↓
+AgentResponse (output + session_id + metadata)
 ```
 
-### Resultados RAGAS — Pipeline manual vs LlamaIndex
+### Tools disponibles
 
-| Métrica            | FastAPI (manual) | FastAPI (LlamaIndex) | AI Eng (manual) | AI Eng (LlamaIndex) |
-| ------------------ | ---------------- | -------------------- | --------------- | ------------------- |
-| Faithfulness       | 0.933            | **1.000**            | 0.575           | **1.000**           |
-| Answer Correctness | 0.612            | **0.627**            | 0.273           | **0.489**           |
-| Context Precision  | **0.666**        | 0.500                | 0.249           | 0.250               |
-
-### Conclusiones de la comparación
-
-**LlamaIndex supera al pipeline manual en faithfulness y answer correctness** en ambos datasets. La mejora es especialmente notable en el libro técnico en inglés, donde answer correctness casi se duplicó (0.27 → 0.49).
-
-**Context precision se mantiene similar**, con ligera ventaja del pipeline manual en FastAPI. Esto se debe a que las preguntas del dataset del libro son conceptuales y transversales — la información relevante está distribuida en múltiples chunks, lo que limita estructuralmente esta métrica independientemente del sistema de retrieval.
-
-**El problema de cross-lingual retrieval fue determinante.** El libro está en inglés y las queries en español. Agregar una etapa de traducción automática antes del retrieval fue el cambio con mayor impacto: answer correctness del libro pasó de 0.26 a 0.49. Sin esto, el embedding model (`all-MiniLM-L6-v2`) no matcheaba correctamente queries en español con chunks en inglés.
-
-### Limitaciones del dataset de evaluación
-
-El dataset de evaluación del libro tiene preguntas conceptuales amplias ("lista los desafíos de despliegue") cuyas respuestas están distribuidas a lo largo de 500+ páginas. Ningún sistema RAG con top_k razonable puede cubrir exhaustivamente este tipo de preguntas. Para una evaluación más justa se recomienda usar preguntas localizadas, con respuesta contenida en uno o dos chunks.
+| Tool     | Descripción                                                   | Dependencias       |
+| -------- | ------------------------------------------------------------- | ------------------ |
+| `direct` | Responde conocimiento general sin consultar documentos        | `llm_client`       |
+| `rag`    | Busca en la base vectorial y construye respuesta con contexto | `rag_orchestrator` |
 
 ---
 
-## Estado anterior – v2.2 (RAG asincrónico + Observabilidad + Profiling)
+## Benchmarks reales (V2.2)
 
-La versión v2.2 consolida el sistema como un backend RAG asincrónico instrumentado profesionalmente, con:
+Se realizaron pruebas controladas para medir:
 
-- procesamiento desacoplado vía Celery
-- métricas Prometheus completas
-- dashboard Grafana operativo
-- fallback entre LLM remoto y local
-- circuit breaker funcional
-- benchmarks comparativos reales
-- profiling de throughput y latencia
+### LLM remoto (Mistral)
 
-### Arquitectura v2.2
+- Latencia promedio: ~2–3s
+- Sin errores
+- Sin activación de circuit breaker
 
-```ascii
-Cliente / Frontend
-↓
-FastAPI (API layer)
-  - Validación
-  - Creación de job_id
-  - Dispatch de tareas a Celery
-↓
-Broker / Backend (Redis)
-↓
-Celery Worker
-  - Extracción
-  - Limpieza
-  - Chunking
-  - Embeddings
-  - Inserción en Vector Store
-  - Actualización de estado en Redis
-↓
-Respuesta a Frontend vía job_id
-```
+### LLM local (Ollama)
 
-### Benchmarks reales (V2.2)
+- Latencia promedio: 20–40s
+- CPU-bound
+- Validación de fallback automático
 
-**LLM remoto (Mistral):** latencia promedio ~2–3s, sin errores, sin activación de circuit breaker.
+### Ingestión masiva (Celery)
 
-**LLM local (Ollama):** latencia promedio 20–40s, CPU-bound, validación de fallback automático.
+- 40+ URLs técnicas
+- 4096 puntos vectoriales generados
+- Duración promedio de tasks: ~37–44s
+- 0 errores
+- Sistema estable bajo carga
 
-**Ingestión masiva (Celery):** 40+ URLs técnicas, 4096 puntos vectoriales generados, duración promedio de tasks ~37–44s, 0 errores, sistema estable bajo carga.
+### Observaciones técnicas
+
+- El sistema se comporta como CPU-bound durante generación de embeddings (Sentence Transformers).
+- El aumento de latencia bajo carga es consistente con saturación controlada de CPU.
+- No se detectaron:
+  - deadlocks
+  - pérdida de tasks
+  - corrupción de vector store
+  - memory leaks evidentes
+
+---
+
+## Validación arquitectónica
+
+La arquitectura fue validada empíricamente mediante:
+
+- tests de carga concurrentes
+- profiling de latencia real
+- comparación de proveedores LLM
+- observabilidad completa con Prometheus + Grafana
+- separación real entre API y procesamiento pesado
+
+Este proyecto demuestra:
+
+- diseño desacoplado
+- tolerancia a fallos (fallback + circuit breaker)
+- instrumentación profesional
+- capacidad de escalar horizontalmente (Celery workers)
+- orquestación determinística con routing LLM
 
 ---
 
 ## Funcionalidades del sistema
 
-### Core RAG (pipeline manual)
+### Core RAG
 
 - Ingesta de documentos vía URL o archivos
-- Chunking específico por tipo de documento con Strategy Pattern
+- Chunking específico por tipo de documento
+- Strategy Pattern para chunking
 - Embeddings locales y remotos con batching
-- Hybrid search (sparse + dense)
-- Re-ranking con cross-encoder
+- Re-ranking simple
 - Construcción de contexto explícito para el LLM
 - Streaming de respuesta
 - Metadata por chunk (source, domain, topic, chunk_index)
 
-### Pipeline LlamaIndex (v3.2)
+### Agente
 
-- Ingesta de PDFs y HTML vía LlamaIndex
-- Hybrid search con SPLADE sobre Qdrant
-- Reranking con SentenceTransformerRerank
-- Traducción automática de queries para documentos en inglés
-- Integración con LLMClient existente (mantiene circuit breaker y cost tracking)
-- Evaluación con RAGAS (faithfulness, answer correctness, context precision)
+- Tool registry centralizado con decorador `@register_tool`
+- Routing LLM hacia la tool adecuada
+- Memoria de sesión con ventana deslizante
+- Inyección de dependencias declarativa por tool
+- Respuesta estructurada con `AgentResponse`
 
 ### Observabilidad y métricas
 
 - Logs estructurados
 - Decoradores de latencia por LLM y RAG
-- Métricas Prometheus: histogram de latencia por etapa, tokens consumidos, errores, fallbacks y circuit breaker
-- Métricas Celery: duración de tasks, status
-- Dashboard Grafana con percentiles P50, P95, P99
+- Métricas Prometheus:
+  - Histogram de latencia por etapa
+  - Tokens consumidos
+  - Errores por etapa
+  - Fallbacks y circuit breaker
+- Métricas específicas para Celery:
+  - Duración de tasks
+  - Status (success/error)
+- Panel básico de estado en Frontend
 
 ### Frontend
 
@@ -152,34 +161,64 @@ Respuesta a Frontend vía job_id
 - Estado de carga y errores
 - Citations por chunk
 - Visualización parcial del progreso de tasks
+- Integración con endpoint del agente
 
 ---
 
-## Roadmap
+## Roadmap de versiones
 
-### Completado
+### V2.1 – Observabilidad avanzada (completado)
 
-- v2.1 — Observabilidad avanzada (histograms, Grafana, percentiles)
-- v2.2 — Performance profiling (benchmark LLM remoto vs local, throughput Celery)
-- v3.0 — RAG avanzado (hybrid search BM25 + vector, metadata strategy)
-- v3.1 — Evaluación con RAGAS (faithfulness, answer correctness, context precision)
-- v3.2 — Implementación con LlamaIndex y comparación empírica contra pipeline manual
+- Histogram por etapa del RAG
+- Métricas específicas para Celery
+- Dashboard Grafana operativo
+- Percentiles P50, P95, P99
 
-### Próximo
+### V2.2 – Performance profiling (completado)
 
-### V4.0 — Agentes y orquestación
+- Benchmark LLM remoto vs local
+- Validación empírica de circuit breaker
+- Medición de throughput Celery
+- Inserción masiva en Qdrant
+- Análisis CPU-bound vs I/O-bound
 
-> Objetivo: introducir razonamiento y uso de herramientas
+### V3.0 – RAG avanzado y evaluación (completado)
 
-- Tool registry
-- Skill abstraction
-- Agente determinístico con policy simple
-- Router entre RAG, Tool y Direct LLM
+- Hybrid search (sparse + dense vectors)
+- Mejor estrategia de metadata
+- Mejora de filtros semánticos
 
-### V4.1 — Planner
+### V3.1
 
-- Planner básico
-- Orquestación multi-step
+- Integrar RAGAS
+- Medir faithfulness
+- Medir answer relevancy
+- Medir context precision
+
+### V3.2
+
+- Implementar versión con LlamaIndex
+- Comparar:
+  - Latencia
+  - Recall
+  - Calidad
+  - Complejidad de código
+
+### V4.0 – Agente determinístico (completado)
+
+- Tool registry con decorador `@register_tool`
+- Abstracción de herramientas (`ToolDefinition`, `ToolResponse`)
+- Agente con router LLM
+- Memoria de sesión por ventana deslizante
+- Tools: `direct` y `rag`
+- Endpoint `/agent/ask-custom`
+
+### V4.1 – Planner + mejoras del agente (próximo)
+
+- Memoria de sesión con Redis
+- Output estructurado del router (JSON + validación Pydantic)
+- Planner básico (por definir)
+- Router entre: RAG, Tool, Direct LLM
 
 ---
 
