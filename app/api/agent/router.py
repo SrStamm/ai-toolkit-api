@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends
+from .schemas import QueryAgentRequest
 from .agent import get_agent, Agent
-from ...api.rag.schemas import QueryRequest
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
 @router.post("/ask-custom")
 def custom_query_llama(
-    query: QueryRequest,
+    query: QueryAgentRequest,
     serv: Agent = Depends(get_agent)
 ):
-    return serv.agent(query=query.text)
+    return serv.agent(query=query.text, session_id=query.session_id)

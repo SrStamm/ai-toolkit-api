@@ -6,7 +6,7 @@ from ragas.metrics import Faithfulness, AnswerCorrectness, ContextPrecision
 from datasets import Dataset
 
 import os
-from mistralai import Mistral
+from mistralai.client import Mistral
 from dotenv import load_dotenv
 from ragas.llms import LangchainLLMWrapper
 from langchain_mistralai import ChatMistralAI
