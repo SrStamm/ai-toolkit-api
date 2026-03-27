@@ -1,7 +1,9 @@
 import json
 from typing import Optional
-from llama_index.core import VectorStoreIndex
+from llama_index.core import QueryBundle, VectorStoreIndex
 from llama_index.core.postprocessor import SentenceTransformerRerank
+from llama_index.core.postprocessor.types import BaseNodePostprocessor
+from llama_index.core.schema import NodeWithScore
 from llama_index.core.vector_stores.types import MetadataFilter, MetadataFilters
 
 from .ingestion import LlamaIngester
@@ -9,9 +11,36 @@ from .indexing import LlamaIndexer
 from .config import setup_llamaindex
 from ..rag.prompt import PROMPT_TEMPLATE_CHAT
 from ..rag.schemas import Citation, Metadata, QueryResponse
+from ...infrastructure.embedding import get_rerank_model
 from ...application.llm.client import LLMClient, get_llm_client
 
 setup_llamaindex()
+
+class CustomReranker(BaseNodePostprocessor):
+    def _postprocess_nodes(
+        self, nodes: list[NodeWithScore], query_bundle: Optional[QueryBundle] = None
+    ) -> list[NodeWithScore]:
+        if query_bundle is None or not nodes:
+            return nodes
+
+        # 1. Obtener el modelo singleton
+        model = get_rerank_model()
+
+        # 2. Preparar pares para el CrossEncoder
+        query = query_bundle.query_str
+        pairs = [[query, node.get_content()] for node in nodes]
+
+        # 3. Predecir scores
+        scores = model.predict(pairs)
+
+        # 4. Actualizar scores en los nodos
+        for i, node in enumerate(nodes):
+            node.score = float(scores[i])
+
+        # 5. Ordenar y devolver (puedes hacer el top_n aquí o dejar que LlamaIndex lo maneje)
+        nodes.sort(key=lambda x: x.score or 0.0, reverse=True)
+        return nodes[:4] # Tu top_n
+
 
 class LlamaIndexOrchestrator:
     def __init__(self):
@@ -20,10 +49,7 @@ class LlamaIndexOrchestrator:
         self.index = VectorStoreIndex.from_vector_store(
             vector_store=self.indexer.vectore_store,
         )
-        self.rerank = SentenceTransformerRerank(
-            model="cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
-            top_n=4
-        )
+        self.rerank = CustomReranker()
         self.llm_client: LLMClient = get_llm_client()
 
     def _update_index(self):
@@ -106,7 +132,7 @@ class LlamaIndexOrchestrator:
             filters=query_filters
         )
         nodes = retriever.retrieve(retrieval_query)
-        nodes = self.rerank.postprocess_nodes(nodes, query_str=query)
+        nodes = self.rerank._postprocess_nodes(nodes, query_bundle=QueryBundle(query))
 
         # 2. Create Context and call LLM
         context_str = "\n\n".join([n.get_content() for n in nodes])

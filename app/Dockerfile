@@ -28,8 +28,9 @@ WORKDIR /backend
 
 # Crea el usuario y directorio primero
 RUN useradd -m appuser && \
+    mkdir -p /home/appuser/.cache/huggingface && \
     mkdir -p /backend/api_data && \
-    chown -R appuser:appuser /backend/api_data
+    chown -R appuser:appuser /home/appuser /backend/api_data
 
 # Evita warnings
 ENV PYTHONDONTWRITEBYTECODE=1 \

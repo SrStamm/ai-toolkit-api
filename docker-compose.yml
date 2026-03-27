@@ -49,7 +49,7 @@ services:
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/backend/prometheus
     volumes:
-      - hf_cache:/root/.cache
+      - hf_cache:/home/appuser/.cache/huggingface
       - .:/backend
       - shared_data:/backend/api_data
     env_file:
