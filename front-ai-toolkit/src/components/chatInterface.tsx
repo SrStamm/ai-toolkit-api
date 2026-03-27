@@ -6,6 +6,18 @@ import { agentAsk } from "@/services/agentServices";
 import type { AgentQuestion } from "@/types/agent";
 import CustomizedToast from "./toast";
 import Markdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+
+// Code block style - preserves line breaks
+const codeBlockStyle: React.CSSProperties = {
+  background: '#1e1e1e',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  borderRadius: '0.375rem',
+  padding: '1rem',
+  margin: '0.5rem 0',
+};
 
 interface Message {
   role: "user" | "ai";
@@ -107,27 +119,34 @@ function ChatInterface() {
                   strong: ({ children }) => (
                     <strong className="font-semibold">{children}</strong>
                   ),
-                  code: ({ children, className, ...props }) => {
-                    const isBlock = className?.includes("language");
-                    const textColor = isBlock
-                      ? "text-slate-300"
-                      : msg.role === "user"
-                        ? "text-white"
-                        : "text-black font-bold";
+                  code: ({ node, className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || "");
+                    const isInline = !match && !className?.includes("language");
+
+                    if (isInline) {
+                      return (
+                        <code
+                          className="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-sm font-mono"
+                          {...props}
+                        >
+                          {children}
+                        </code>
+                      );
+                    }
+
                     return (
-                      <code
-                        className={`${textColor} px-1.5 py-0.5 rounded-sm text-sm`}
+                      <SyntaxHighlighter
+                        style={vscDarkPlus}
+                        language={match ? match[1] : "text"}
+                        PreTag="div"
+                        customStyle={codeBlockStyle}
                         {...props}
                       >
-                        {children}
-                      </code>
+                        {String(children).replace(/\n$/, "")}
+                      </SyntaxHighlighter>
                     );
                   },
-                  pre: ({ children }) => (
-                    <pre className="bg-slate-900 p-4 rounded-md overflow-x-auto text-left my-2">
-                      {children}
-                    </pre>
-                  ),
+                  pre: ({ children }) => <>{children}</>,
                 }}
               >
                 {msg.content}
