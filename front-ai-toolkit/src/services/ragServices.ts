@@ -1,4 +1,9 @@
-import type { IngestFile, Ingestrequest, QueryRequest } from "@/types/rag";
+import type {
+  Ingestrequest,
+  QueryRequest,
+  JobStatusResponse,
+  JobResponse,
+} from "@/types/rag";
 import Fetch from "@/utils/api";
 
 const url = import.meta.env.VITE_URL;
@@ -50,12 +55,12 @@ export const ingestFile = async (body: FormData) => {
   });
 };
 
-export const getJobStatus = async (jobId: string) => {
-  return await Fetch({ path: `/rag/job/${jobId}`, method: "GET" });
+export const getJobStatus = async (jobId: string): Promise<JobStatusResponse> => {
+  return await Fetch<JobStatusResponse>({ path: `/rag/job/${jobId}`, method: "GET" });
 };
 
-export const ingestURLJob = async (body: Ingestrequest) => {
-  return await Fetch({ path: "/rag/ingest/job", method: "POST", body: body });
+export const ingestURLJob = async (body: Ingestrequest): Promise<JobResponse> => {
+  return await Fetch<JobResponse>({ path: "/rag/ingest/job", method: "POST", body: body });
 };
 
 export const ingestFileJob = async (body: FormData) => {

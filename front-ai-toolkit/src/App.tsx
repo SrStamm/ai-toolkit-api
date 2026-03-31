@@ -1,8 +1,7 @@
-import { Toaster } from "sonner";
-import "./App.css";
-import Home from "./pages/Home";
+import { Toaster } from "@/components/ui/sonner";
+import { Home } from "./pages/Home";
 
-function App() {
+export function App() {
   return (
     <div className="h-screen">
       <Toaster />
