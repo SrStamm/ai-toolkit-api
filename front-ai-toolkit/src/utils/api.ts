@@ -1,12 +1,12 @@
 const url = import.meta.env.VITE_URL;
 
-type FetchProps<T = unknown> = {
+interface FetchProps {
   path: string;
   method: string;
   body?: object;
-};
+}
 
-const Fetch = async <T = unknown>({ path, method, body }: FetchProps<T>): Promise<T> => {
+const Fetch = async <T = unknown>({ path, method, body }: FetchProps): Promise<T> => {
   const Body = body !== undefined ? JSON.stringify(body) : undefined;
 
   const fetchOptions: RequestInit = {
@@ -24,7 +24,7 @@ const Fetch = async <T = unknown>({ path, method, body }: FetchProps<T>): Promis
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("❌ Response not OK:", errorText);
+      console.error("Response not OK:", errorText);
       throw new Error(
         `HTTP ${response.status}: ${errorText.substring(0, 100)}`,
       );
@@ -33,7 +33,7 @@ const Fetch = async <T = unknown>({ path, method, body }: FetchProps<T>): Promis
     const data = await response.json();
     return data as T;
   } catch (error) {
-    console.error("🔥 Error en Fetch:", error);
+    console.error("Error en Fetch:", error);
     throw error;
   }
 };
