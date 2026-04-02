@@ -1,4 +1,3 @@
-from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -16,12 +15,12 @@ class IngestRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     text: str = Field(min_length=5, max_length=1000)
-    domain: Optional[str] = Field(None, max_length=50)
-    topic: Optional[str] = Field(None, max_length=50)
+    domain: str | None = Field(None, max_length=50)
+    topic: str | None = Field(None, max_length=50)
 
     @field_validator("domain", "topic")
     @classmethod
-    def normalize_lowercase(cls, v: Optional[str]) -> Optional[str]:
+    def normalize_lowercase(cls, v: str | None) -> str | None:
         """Normalize to lowercase"""
         if v:
             return v.lower().strip()
@@ -37,8 +36,8 @@ class Citation(BaseModel):
 class Metadata(BaseModel):
     tokens: int = Field(ge=0)
     cost: float = Field(ge=0.0)
-    model: Optional[str] = None
-    provider: Optional[str] = None
+    model: str | None = None
+    provider: str | None = None
 
 
 class QueryResponse(BaseModel):

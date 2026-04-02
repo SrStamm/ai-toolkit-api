@@ -1,8 +1,6 @@
-# celery schemas
 from enum import Enum
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
 
 
 class JobStatus(str, Enum):
@@ -20,7 +18,7 @@ class JobState(BaseModel):
     job_id: str
     status: JobStatus
     step: str
-    progress: Optional[int] = None
-    error: Optional[str] = None
+    progress: int | None = None
+    error: str | None = None
     created_at: datetime
     updated_at: datetime

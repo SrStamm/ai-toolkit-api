@@ -1,231 +1,102 @@
-# LLM Local
+"""
+Ollama local LLM provider implementation.
+"""
 
-import random
-import time
-import asyncio
-import httpx
-import structlog
 import json
-from typing import AsyncIterator, Optional
+from typing import Callable
+import httpx
 
-from ..models import LLMResponse, TokenUsage
-from ...domain.services.pricing import ModelPricing
-from ...core.settings import LLMConfig
-from .base import BaseLLMProvider
-
-
-class OllamaProvider(BaseLLMProvider):
-    def __init__(self, config: LLMConfig):
-        self.config = config
-        self.name = 'ollama'
-        self.model = config.model
-        self.logger = structlog.get_logger()
+from app.core.settings import LLMConfig
+from app.domain.models import LLMResponse, TokenUsage
+from app.domain.services.pricing import ModelPricing
+from app.domain.providers.retryable_provider import RetryableProvider
 
 
+class OllamaProvider(RetryableProvider):
+    """
+    Ollama local LLM provider using the RetryableProvider base.
+    """
 
-    def _is_retryable_error(self, e: Exception) -> bool:
-        return isinstance(
-            e,
-            (
-                httpx.TimeoutException,
-                httpx.ConnectError,
-                httpx.ConnectError,
-                httpx.TimeoutException,
-                httpx.NetworkError,
-            ),
+    def _setup_provider(self) -> None:
+        """Setup Ollama-specific attributes."""
+        self.name = "ollama"
+        self.model = self.config.model
+        self.url = self.config.url or "http://localhost:11434"
+        self._timeout = httpx.Timeout(timeout=60.0, connect=10.0, read=None)
+
+    def _get_retryable_exceptions(self) -> tuple[type[Exception], ...]:
+        """Ollama-specific retryable exceptions."""
+        return (
+            httpx.TimeoutException,
+            httpx.ConnectError,
+            httpx.NetworkError,
         )
 
-    def _with_retry(self, operation, *, model: str):
-        for attempt in range(self.config.max_retries):
-            try:
-                return operation()
-            except Exception as e:
-                if not self._is_retryable_error(e):
-                    raise
+    async def _execute_chat_stream(
+        self,
+        prompt: str,
+        on_chunk: Callable[[str], None],
+    ) -> tuple[str, int, int]:
+        """
+        Execute streaming chat with Ollama.
 
-                if attempt == self.config.max_retries - 1:
-                    raise
-
-                base = 2**attempt
-                jitter = random.uniform(0, 1)
-
-                self.logger.info(
-                    "llm_retry",
-                    model=model,
-                    attempt=attempt,
-                    error=str(e),
-                    sleep=base + jitter,
-                )
-
-                time.sleep(base + jitter)
-
-    def chat(self, prompt: str) -> LLMResponse:
-        def operation():
-            data = {
-                "model": self.model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "stream": False,
-            }
-
-            estimated_prompt_tokens = 0
-            estimated_completion_tokens = 0
-
-            timeout = httpx.Timeout(timeout=10.0, connect=10.0, read=None)
-
-            with httpx.Client() as client:
-                url = self.config.url + "/api/chat"
-                chat_response = client.post(url, json=data, timeout=timeout)
-
-                data = chat_response.json()
-
-                estimated_prompt_tokens = data.get("prompt_eval_count")
-                estimated_completion_tokens = data.get("eval_count")
-
-                delta = data.get("message", {}).get("content", "")
-
-                usage = TokenUsage(
-                    prompt_tokens=estimated_prompt_tokens,
-                    completion_tokens=estimated_completion_tokens,
-                    total_tokens=estimated_completion_tokens + estimated_prompt_tokens,
-                )
-
-                cost = ModelPricing.calculate_cost(
-                    model="ollama",
-                    prompt_tokens=usage.prompt_tokens,
-                    completion_tokens=usage.completion_tokens,
-                )
-
-                return LLMResponse(
-                    content=delta,
-                    usage=usage,
-                    cost=cost,
-                    model=self.config.model,
-                    provider="ollama",
-                )
-
-        return self._with_retry(operation, model=self.config.model)
-
-    async def chat_stream(self, prompt: str) -> AsyncIterator[tuple[str, Optional[LLMResponse]]]:
-        last_exception = None
+        Returns:
+            tuple of (accumulated_content, prompt_tokens, completion_tokens)
+        """
+        accumulated_content = ""
+        prompt_tokens = 0
+        completion_tokens = 0
 
         data = {
             "model": self.model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
+            "messages": [{"role": "user", "content": prompt}],
         }
 
-        estimated_prompt_tokens = 0
-        estimated_completion_tokens = 0
+        url = f"{self.url}/api/chat"
 
-        timeout = httpx.Timeout(timeout=10.0, connect=10.0, read=None)
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with client.stream("POST", url, json=data) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
 
-        async with httpx.AsyncClient() as client:
-            for attempt in range(self.config.max_retries):
-                accumulated_content = ""
-                try:
-                    url = self.config.url + "/api/chat"
-                    async with client.stream("POST", url, json=data, timeout=timeout) as r:
-                        async for line in r.aiter_lines():
-                            if not line:
-                                continue
+                    chunk_data = json.loads(line)
 
-                            chunk_data = json.loads(line)
+                    if chunk_data.get("done"):
+                        prompt_tokens = chunk_data.get("prompt_eval_count", 0)
+                        completion_tokens = chunk_data.get("eval_count", 0)
+                        break
 
-                            if chunk_data.get("done"):
-                                estimated_prompt_tokens = chunk_data.get("prompt_eval_count")
-                                estimated_completion_tokens = chunk_data.get("eval_count")
-                                break
+                    delta = chunk_data.get("message", {}).get("content", "")
 
-                            delta = chunk_data.get("message", {}).get("content", "")
+                    if delta:
+                        accumulated_content += delta
+                        on_chunk(delta)
 
-                            if delta:
-                                accumulated_content += delta
-                                yield (delta, None)
+        return (accumulated_content, prompt_tokens, completion_tokens)
 
-                except Exception as e:
-                    if not self._is_retryable_error(e):
-                        self.logger.error(
-                            "non_retryable_error",
-                            model=self.config.model,
-                            error=str(e),
-                            error_type=type(e).__name__,
-                        )
-                        raise
+    def _execute_chat_sync(self, prompt: str) -> LLMResponse:
+        """Execute synchronous chat with Ollama."""
+        data = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+        }
 
-                    # Fail but have partial output
-                    if accumulated_content:
-                        self.logger.error(
-                            "stream_failed_after_partial_output",
-                            model=self.config.model,
-                            attempt=attempt + 1,
-                            error=str(e),
-                            partial_length=len(accumulated_content),
-                        )
-                        raise
+        url = f"{self.url}/api/chat"
 
-                    # Fail
-                    self.logger.warning(
-                        "stream_attempt_failed",
-                        model=self.config.model,
-                        attempt=attempt + 1,
-                        max_retires=self.config.max_retries,
-                        error=str(e),
-                        error_type=type(e).__name__,
-                    )
+        with httpx.Client(timeout=self._timeout) as client:
+            response = client.post(url, json=data)
+            response.raise_for_status()
+            data = response.json()
 
-                    last_exception = e
+        prompt_tokens = data.get("prompt_eval_count", 0)
+        completion_tokens = data.get("eval_count", 0)
+        content = data.get("message", {}).get("content", "")
 
-
-                    # If not retryable or last attempt, raise
-                    if attempt >= self.config.max_retries - 1:
-                        self.logger.error(
-                            "all attempts failed",
-                            model=self.config.model,
-                            total_attempts=self.config.max_retries,
-                        )
-                        raise last_exception
-
-                    # Waiting before retrying
-                    base = 2**attempt
-                    jitter = random.uniform(0, 1)
-                    sleep_time = base + jitter
-
-                    self.logger.info(
-                        "retrying attempt",
-                        model=self.config.model,
-                        attempt=attempt,
-                        seconds=sleep_time,
-                    )
-
-                    await asyncio.sleep(sleep_time)
-
-
-            usage = TokenUsage(
-                prompt_tokens=estimated_prompt_tokens,
-                completion_tokens=estimated_completion_tokens,
-                total_tokens=estimated_prompt_tokens + estimated_completion_tokens,
-            )
-
-            cost = ModelPricing.calculate_cost(
-                'ollama', usage.prompt_tokens, usage.completion_tokens
-            )
-
-            final_response = LLMResponse(
-                content=accumulated_content,
-                usage=usage,
-                cost=cost,
-                model=self.config.model,
-                provider="ollama",
-            )
-
-            # Yield final con metadata completa
-            yield ("", final_response)
+        return self._build_usage_response(
+            content=content,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )

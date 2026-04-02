@@ -1,9 +1,9 @@
-from ....application.llm.client import LLMClient
-from ..prompts import (
+from app.application.llm.client import LLMClient
+from app.api.extraction.prompts import (
     EXTRACTION_FILE_PDF_PROMPT,
     EXTRACTION_FILE_PROMPT,
 )
-from ..schema import InvoiceList, InvoiceSchema
+from app.api.extraction.schema import InvoiceList, InvoiceSchema
 
 
 class InvoiceExtractor:

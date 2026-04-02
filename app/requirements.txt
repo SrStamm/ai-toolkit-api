@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 python-dotenv
+pydantic-settings
 
 requests
 beautifulsoup4

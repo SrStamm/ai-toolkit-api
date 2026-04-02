@@ -1,10 +1,8 @@
-# state and lifecycle of jobs
 from datetime import datetime
-from typing import Optional
 from uuid import uuid4
 
-from .schemas import JobState, JobStatus
-from ....core.redis import redis_client
+from app.api.rag.jobs.schemas import JobState, JobStatus
+from app.core.redis import redis_client
 
 
 class JobService:
@@ -31,7 +29,7 @@ class JobService:
             progress=0,
             created_at=datetime.now(),
             updated_at=datetime.now(),
-            step="queued"
+            step="queued",
         )
         self._set_state(job_id, state.model_dump_json())
         return job_id

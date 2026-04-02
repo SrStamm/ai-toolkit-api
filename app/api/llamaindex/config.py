@@ -1,6 +1,7 @@
 from llama_index.core import Settings
-from ...infrastructure.storage.hybrid_ai import get_hybrid_embeddign_service
-from ...infrastructure.adapters import LlamaIndexHybridAdapter
+from app.infrastructure.storage.hybrid_ai import get_hybrid_embeddign_service
+from app.infrastructure.adapters import LlamaIndexHybridAdapter
+
 
 def setup_llamaindex():
     # Obtain manual service

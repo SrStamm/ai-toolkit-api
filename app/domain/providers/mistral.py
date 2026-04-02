@@ -1,211 +1,113 @@
-from typing import AsyncIterator, Optional
-import random
-import time
-import structlog
+"""
+Mistral AI provider implementation.
+"""
+
+from collections.abc import AsyncIterator
+from typing import Callable
+
 from mistralai.client import Mistral
 from httpx import ConnectError, NetworkError, TimeoutException
 
-from ..models import LLMResponse, TokenUsage
-from ...domain.services.pricing import ModelPricing
-from ...core.settings import LLMConfig
-from .base import BaseLLMProvider
+from app.core.settings import LLMConfig
+from app.domain.models import LLMResponse, TokenUsage
+from app.domain.services.pricing import ModelPricing
+from app.domain.providers.retryable_provider import RetryableProvider
 
 
-class MistralProvider(BaseLLMProvider):
-    def __init__(self, config: LLMConfig):
-        self.config = config
+class MistralProvider(RetryableProvider):
+    """
+    Mistral AI provider using the RetryableProvider base.
+    """
+
+    def _setup_provider(self) -> None:
+        """Setup Mistral-specific attributes."""
         self.client = Mistral(api_key=self.config.api_key)
-        self.name = 'mistral'
-        self.model = config.model
-        self.logger = structlog.get_logger()
+        self.name = "mistral"
+        self.model = self.config.model
 
-    def _is_retryable_error(self, e: Exception) -> bool:
-        return isinstance(
-            e,
-            (
-                TimeoutError,
-                ConnectionError,
-                ConnectError,
-                TimeoutException,
-                NetworkError,
-            ),
+    def _get_retryable_exceptions(self) -> tuple[type[Exception], ...]:
+        """Mistral-specific retryable exceptions."""
+        return (
+            TimeoutError,
+            ConnectionError,
+            ConnectError,
+            TimeoutException,
+            NetworkError,
         )
 
-    def _with_retry(self, operation, *, model: str):
-        for attempt in range(self.config.max_retries):
-            try:
-                return operation()
-            except Exception as e:
-                if not self._is_retryable_error(e):
-                    raise
-
-                if attempt == self.config.max_retries - 1:
-                    raise
-
-                base = 2**attempt
-                jitter = random.uniform(0, 1)
-
-                self.logger.info(
-                    "llm_retry",
-                    model=model,
-                    attempt=attempt,
-                    error=str(e),
-                    sleep=base + jitter,
-                )
-
-                time.sleep(base + jitter)
-
-    # Send a chat prompt with data and receive a JSON object response
-    def chat(self, prompt: str) -> LLMResponse:
-        def operation():
-            chat_response = self.client.chat.complete(
-                model=self.config.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=self.config.temperature,
-                response_format={"type": "json_object"},
-            )
-
-            usage = TokenUsage(
-                prompt_tokens=chat_response.usage.prompt_tokens,
-                completion_tokens=chat_response.usage.completion_tokens,
-                total_tokens=chat_response.usage.total_tokens,
-            )
-
-            cost = ModelPricing.calculate_cost(
-                model=self.config.model,
-                prompt_tokens=usage.prompt_tokens,
-                completion_tokens=usage.completion_tokens,
-            )
-
-            return LLMResponse(
-                content=chat_response.choices[0].message.content,
-                usage=usage,
-                cost=cost,
-                model=self.config.model,
-                provider="mistral",
-            )
-
-        return self._with_retry(operation, model=self.config.model)
-
-    async def chat_stream(
-        self, prompt: str
-    ) -> AsyncIterator[tuple[str, Optional[LLMResponse]]]:
-        last_exception = None
-
-        for attempt in range(self.config.max_retries):
-            accumulated_content = ""
-            try:
-                response = self.client.chat.stream(
-                    model=self.config.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are a helpful assistant.",
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=self.config.temperature,
-                )
-
-                # Stream chunks
-                for event in response:
-                    if hasattr(event, "data") and event.data:
-                        chunk_data = event.data
-
-                        if (
-                            hasattr(chunk_data, "choices")
-                            and chunk_data.choices
-                            and len(chunk_data.choices) > 0
-                        ):
-                            delta = chunk_data.choices[0].delta
-
-                            if hasattr(delta, "content") and delta.content:
-                                content = delta.content
-                                accumulated_content += content
-                                yield (content, None)
-                break
-            except Exception as e:
-                if not self._is_retryable_error(e):
-                    self.logger.error(
-                        "non_retryable_error",
-                        model=self.config.model,
-                        error=str(e),
-                        error_type=type(e).__name__,
-                    )
-                    raise
-
-                # Fail but have partial output
-                if accumulated_content:
-                    self.logger.error(
-                        "stream_failed_after_partial_output",
-                        model=self.config.model,
-                        attempt=attempt + 1,
-                        error=str(e),
-                        partial_length=len(accumulated_content),
-                    )
-                    raise
-
-                # Fail
-                self.logger.warning(
-                    "stream_attempt_failed",
-                    model=self.config.model,
-                    attempt=attempt + 1,
-                    max_retires=self.config.max_retries,
-                    error=str(e),
-                    error_type=type(e).__name__,
-                )
-
-                last_exception = e
-
-                # If not retryable or last attempt, raise
-                if attempt >= self.config.max_retries - 1:
-                    self.logger.error(
-                        "all attempts failed",
-                        model=self.config.model,
-                        total_attempts=self.config.max_retries,
-                    )
-                    raise last_exception
-
-                # Waiting before retrying
-                base = 2**attempt
-                jitter = random.uniform(0, 1)
-                sleep_time = base + jitter
-
-                self.logger.info(
-                    "retrying attempt",
-                    model=self.config.model,
-                    attempt=attempt,
-                    seconds=sleep_time,
-                )
-
-                time.sleep(sleep_time)
-
-        estimated_prompt_tokens = len(prompt) // 4
-        estimated_completion_tokens = len(accumulated_content) // 4
+    def _execute_chat_sync(self, prompt: str) -> LLMResponse:
+        """Execute synchronous chat with Mistral."""
+        chat_response = self.client.chat.complete(
+            model=self.config.model,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=self.config.temperature,
+            response_format={"type": "json_object"},
+        )
 
         usage = TokenUsage(
-            prompt_tokens=estimated_prompt_tokens,
-            completion_tokens=estimated_completion_tokens,
-            total_tokens=estimated_prompt_tokens + estimated_completion_tokens,
+            prompt_tokens=chat_response.usage.prompt_tokens,
+            completion_tokens=chat_response.usage.completion_tokens,
+            total_tokens=chat_response.usage.total_tokens,
         )
 
         cost = ModelPricing.calculate_cost(
-            self.config.model, usage.prompt_tokens, usage.completion_tokens
+            model=self.config.model,
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
         )
 
-        final_response = LLMResponse(
-            content=accumulated_content,
+        return LLMResponse(
+            content=chat_response.choices[0].message.content,
             usage=usage,
             cost=cost,
             model=self.config.model,
-            provider="mistral",
+            provider=self.name,
         )
 
-        # Yield final con metadata completa
-        yield ("", final_response)
+    def _execute_chat_stream(
+        self,
+        prompt: str,
+        on_chunk: Callable[[str], None] | None = None,
+    ) -> AsyncIterator[tuple[str, int, int]]:
+        """
+        Execute streaming chat with Mistral.
+
+        Yields:
+            (content, prompt_tokens, completion_tokens)
+            - content is empty string for final yield with token counts
+        """
+        response = self.client.chat.stream(
+            model=self.config.model,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=self.config.temperature,
+        )
+
+        prompt_tokens = 0
+        completion_tokens = 0
+
+        for event in response:
+            if hasattr(event, "data") and event.data:
+                chunk_data = event.data
+
+                if (
+                    hasattr(chunk_data, "choices")
+                    and chunk_data.choices
+                    and len(chunk_data.choices) > 0
+                ):
+                    delta = chunk_data.choices[0].delta
+
+                    if hasattr(delta, "content") and delta.content:
+                        content = delta.content
+                        if on_chunk:
+                            on_chunk(content)
+                        yield (content, 0, 0)
+
+        # Mistral doesn't provide token counts in stream response
+        # Estimate based on content length
+        yield ("", 0, 0)

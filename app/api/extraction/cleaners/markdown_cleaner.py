@@ -1,6 +1,6 @@
 import re
-from ..interface import CleanerInterface
-from ..schema import ChunkWithMetadata
+from app.api.extraction.interface import CleanerInterface
+from app.api.extraction.schema import ChunkWithMetadata
 
 
 class MarkdownCleaner(CleanerInterface):
@@ -39,10 +39,16 @@ class MarkdownCleaner(CleanerInterface):
                     if len(current) + len(para) + 2 <= self.MAX_CHARS:
                         current = current + "\n\n" + para
                     else:
-                        result.append(ChunkWithMetadata(text=current.strip(), section=section_name))
-                        overlap_seed = current[-self.OVERLAP:]
+                        result.append(
+                            ChunkWithMetadata(
+                                text=current.strip(), section=section_name
+                            )
+                        )
+                        overlap_seed = current[-self.OVERLAP :]
                         current = overlap_seed + "\n\n" + para
                 if current:
-                    result.append(ChunkWithMetadata(text=current.strip(), section=section_name))
+                    result.append(
+                        ChunkWithMetadata(text=current.strip(), section=section_name)
+                    )
 
         return result

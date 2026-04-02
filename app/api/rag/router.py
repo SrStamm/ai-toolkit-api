@@ -6,12 +6,12 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import StreamingResponse
 import structlog
 
-from .jobs.celery_tasks import ingest_file_job, ingest_html_job
-from .jobs.job_service import JobService
-from ..extraction.exceptions import EmptySourceContentError
-from ..rag.exceptions import ChunkingError, EmbeddingError, error_event
-from .schemas import IngestRequest, QueryRequest, QueryResponse
-from .service import RAGService, get_rag_service
+from app.api.rag.jobs.celery_tasks import ingest_file_job, ingest_html_job
+from app.api.rag.jobs.job_service import JobService
+from app.api.extraction.exceptions import EmptySourceContentError
+from app.api.rag.exceptions import ChunkingError, EmbeddingError, error_event
+from app.api.rag.schemas import IngestRequest, QueryRequest, QueryResponse
+from app.api.rag.service import RAGService, get_rag_service
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
@@ -137,6 +137,7 @@ def retrieve_search(
 
     return {"status": "query", "Points": query_result}
 
+
 @router.post(
     "/retrieve-v2",
 )
@@ -194,6 +195,7 @@ async def ingest_document_job(
 
     return {"status": "queued", "url": ingest.url, "job_id": job_id}
 
+
 @router.post(
     "/ingest-file/job",
 )
@@ -202,17 +204,16 @@ async def ingest_file_job_endpoint(
     source: str = Form(...),
     domain: str = Form(...),
     topic: str = Form(...),
-    job_serv: JobService = Depends(JobService)
+    job_serv: JobService = Depends(JobService),
 ):
     if not file.filename.lower().endswith(".pdf"):
         return {"status": "error", "message": "File must be a PDF"}
-
 
     # create job_id
     job_id = job_serv.create()
 
     # Define route in shared volume
-    upload_path = Path('/backend/api_data') / f"{job_id}.pdf"
+    upload_path = Path("/backend/api_data") / f"{job_id}.pdf"
     upload_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Save file

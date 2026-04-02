@@ -1,24 +1,25 @@
 import json
-from typing import Optional
+
 from llama_index.core import QueryBundle, VectorStoreIndex
 from llama_index.core.postprocessor import SentenceTransformerRerank
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import NodeWithScore
 from llama_index.core.vector_stores.types import MetadataFilter, MetadataFilters
 
-from .ingestion import LlamaIngester
-from .indexing import LlamaIndexer
-from .config import setup_llamaindex
-from ..rag.prompt import PROMPT_TEMPLATE_CHAT
-from ..rag.schemas import Citation, Metadata, QueryResponse
-from ...infrastructure.embedding import get_rerank_model
-from ...application.llm.client import LLMClient, get_llm_client
+from app.api.llamaindex.ingestion import LlamaIngester
+from app.api.llamaindex.indexing import LlamaIndexer
+from app.api.llamaindex.config import setup_llamaindex
+from app.api.rag.prompt import PROMPT_TEMPLATE_CHAT
+from app.api.rag.schemas import Citation, Metadata, QueryResponse
+from app.infrastructure.embedding import get_rerank_model
+from app.application.llm.client import LLMClient, get_llm_client
 
 setup_llamaindex()
 
+
 class CustomReranker(BaseNodePostprocessor):
     def _postprocess_nodes(
-        self, nodes: list[NodeWithScore], query_bundle: Optional[QueryBundle] = None
+        self, nodes: list[NodeWithScore], query_bundle: QueryBundle | None = None
     ) -> list[NodeWithScore]:
         if query_bundle is None or not nodes:
             return nodes
@@ -39,7 +40,7 @@ class CustomReranker(BaseNodePostprocessor):
 
         # 5. Ordenar y devolver (puedes hacer el top_n aquí o dejar que LlamaIndex lo maneje)
         nodes.sort(key=lambda x: x.score or 0.0, reverse=True)
-        return nodes[:4] # Tu top_n
+        return nodes[:4]  # Tu top_n
 
 
 class LlamaIndexOrchestrator:
@@ -57,18 +58,16 @@ class LlamaIndexOrchestrator:
             vector_store=self.indexer.vectore_store,
         )
 
-    def _query_filters(self, domain: Optional[str], topic: Optional[str]) -> Optional[MetadataFilters]:
+    def _query_filters(
+        self, domain: str | None, topic: str | None
+    ) -> MetadataFilters | None:
         filters = []
 
         if domain:
-            filters.append(
-                MetadataFilter(key="domain", value=domain)
-            )
+            filters.append(MetadataFilter(key="domain", value=domain))
 
         if topic:
-            filters.append(
-                MetadataFilter(key="topic", value=topic)
-            )
+            filters.append(MetadataFilter(key="topic", value=topic))
 
         return MetadataFilters(filters=filters) if filters else None
 
@@ -85,26 +84,18 @@ class LlamaIndexOrchestrator:
             source=source,
             domain=domain,
             topic=topic,
-            storage_context=storage_context
+            storage_context=storage_context,
         )
 
         self._update_index()
 
         return response
 
-    def proccess_html(
-        self,
-        url: str,
-        domain: str,
-        topic: str
-    ):
+    def proccess_html(self, url: str, domain: str, topic: str):
         storage_context = self.indexer.get_storage_context()
 
         response = self.ingester.ingest_html(
-            url=url,
-            domain=domain,
-            topic=topic,
-            storage_context=storage_context
+            url=url, domain=domain, topic=topic, storage_context=storage_context
         )
 
         self._update_index()
@@ -115,21 +106,23 @@ class LlamaIndexOrchestrator:
         query_engine = self.index.as_query_engine(
             similarity_top_k=10,
             vector_store_query_mode="hybrid",
-            node_postprocessors=[self.rerank]
+            node_postprocessors=[self.rerank],
         )
 
         return query_engine.query(query)
 
-    def custom_query(self, query: str, domain: Optional[str] = None, topic: Optional[str] = None) -> QueryResponse:
+    def custom_query(
+        self, query: str, domain: str | None = None, topic: str | None = None
+    ) -> QueryResponse:
         query_filters = self._query_filters(domain, topic)
 
-        retrieval_query = self._translate_to_english(query) if domain == "libros" else query
+        retrieval_query = (
+            self._translate_to_english(query) if domain == "libros" else query
+        )
 
         # 1. Retrieval + Rerank
         retriever = self.index.as_retriever(
-            similarity_top_k=8,
-            vector_store_query_mode="hybrid",
-            filters=query_filters
+            similarity_top_k=8, vector_store_query_mode="hybrid", filters=query_filters
         )
         nodes = retriever.retrieve(retrieval_query)
         nodes = self.rerank._postprocess_nodes(nodes, query_bundle=QueryBundle(query))
@@ -148,34 +141,34 @@ class LlamaIndexOrchestrator:
                 Citation(
                     source=node.metadata.get("filename", "unknown"),
                     chunk_index=i,
-                    text=node.get_content()
+                    text=node.get_content(),
                 )
             )
 
         # 4. Extract Metadata
         metadata = Metadata(
             tokens=llm_res.usage.total_tokens,
-            cost=llm_res.cost.total_cost, 
+            cost=llm_res.cost.total_cost,
             model=llm_res.model,
-            provider=llm_res.provider
+            provider=llm_res.provider,
         )
 
         # 5. Format final response
         try:
-            clean_res = llm_res.content.replace("```json", "").replace("```", "").strip()
+            clean_res = (
+                llm_res.content.replace("```json", "").replace("```", "").strip()
+            )
             answer_content = json.loads(clean_res).get("answer", llm_res.content)
         except:
             answer_content = llm_res.content
 
         return QueryResponse(
-            answer=answer_content,
-            citations=citations,
-            metadata=metadata
+            answer=answer_content, citations=citations, metadata=metadata
         )
 
 
-
 _orchestrator_instance = None
+
 
 def get_orchestrator():
     global _orchestrator_instance

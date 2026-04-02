@@ -1,20 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 from fastapi import UploadFile
 from .schema import ChunkWithMetadata
 
 
 class SourceInterface(ABC):
     @abstractmethod
-    async def extract(self, url: Optional[str], file: Optional[UploadFile]) -> str:
-        pass
+    async def extract(self, url: str | None, file: UploadFile | None) -> str: ...
 
 
 class CleanerInterface(ABC):
     @abstractmethod
-    def clean(self, raw_content: str) -> str:
-        pass
+    def clean(self, raw_content: str) -> str: ...
 
     @abstractmethod
-    def chunk(self, clean_text: str) -> list[ChunkWithMetadata]:
-        pass
+    def chunk(self, clean_text: str) -> list[ChunkWithMetadata]: ...

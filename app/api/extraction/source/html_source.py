@@ -1,9 +1,9 @@
-from ..exceptions import (
+from app.api.extraction.exceptions import (
     SourceFetchError,
     SourceInvalidURLError,
     SourceTimeoutError,
 )
-from ..interface import SourceInterface
+from app.api.extraction.interface import SourceInterface
 import httpx
 
 

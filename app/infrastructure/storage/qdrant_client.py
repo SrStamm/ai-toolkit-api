@@ -3,9 +3,9 @@ from qdrant_client import QdrantClient
 from qdrant_client import models
 import torch
 
-from ..embedding import get_rerank_model
-from ..logging import time_response
-from ...api.rag.exceptions import VectorStoreError
+from app.infrastructure.embedding import get_rerank_model
+from app.infrastructure.logging import time_response
+from app.api.rag.exceptions import VectorStoreError
 from .interfaces import HybridVector, VectorStoreInterface
 import structlog
 
@@ -41,9 +41,7 @@ class QdrantStore(VectorStoreInterface):
                 },
                 sparse_vectors_config={
                     "sparse": models.SparseVectorParams(
-                        index=models.SparseIndexParams(
-                            on_disk=True
-                        )
+                        index=models.SparseIndexParams(on_disk=True)
                     )
                 },
                 quantization_config=models.ScalarQuantization(
@@ -85,37 +83,30 @@ class QdrantStore(VectorStoreInterface):
                 models.Prefetch(
                     query=models.NearestQuery(
                         nearest=query_vector.dense,
-                        mmr=models.Mmr(
-                            diversity=0.5,
-                            candidates_limit=limit * 2
-                        )
+                        mmr=models.Mmr(diversity=0.5, candidates_limit=limit * 2),
                     ),
                     using="dense",
-                    limit=limit
+                    limit=limit,
                 ),
                 models.Prefetch(
                     query=models.SparseVector(
                         indices=query_vector.sparse["indices"],
-                        values=query_vector.sparse["values"]
+                        values=query_vector.sparse["values"],
                     ),
                     using="sparse",
-                    limit=limit
-                )
+                    limit=limit,
+                ),
             ],
             query=models.FusionQuery(fusion=models.Fusion.RRF),
             with_payload=True,
             query_filter=query_filter,
-            limit=limit
+            limit=limit,
         ).points
 
         return search_result
 
     def create_point(self, hash_id, vector, payload) -> models.PointStruct:
-        return models.PointStruct(
-            id=hash_id,
-            vector=vector,
-            payload=payload
-        )
+        return models.PointStruct(id=hash_id, vector=vector, payload=payload)
 
     @time_response
     def retrieve(self, hash_ids: List[str]) -> List[models.Record]:
@@ -145,18 +136,14 @@ class QdrantStore(VectorStoreInterface):
         for i, hit in enumerate(search_result):
             hit.payload["rerank_score"] = float(scores[i])
 
-        search_result.sort(
-            key=lambda x: x.payload["rerank_score"],
-            reverse=True
-        )
+        search_result.sort(key=lambda x: x.payload["rerank_score"], reverse=True)
 
-        filtered = [
-            hit for hit in search_result
-            if hit.payload["rerank_score"] > 0.6
-        ]
+        filtered = [hit for hit in search_result if hit.payload["rerank_score"] > 0.6]
 
         if not filtered and len(search_result) > 0:
-            print("WARNING: No chunks passed the 0.6 threshold. Taking top 1 for debugging.")
+            print(
+                "WARNING: No chunks passed the 0.6 threshold. Taking top 1 for debugging."
+            )
             filtered = [search_result[0]]
 
         seen_texts = set()
@@ -183,8 +170,12 @@ class QdrantStore(VectorStoreInterface):
             points_selector=models.FilterSelector(
                 filter=models.Filter(
                     must=[
-                        models.FieldCondition(key="source", match=models.MatchValue(value=source)),
-                        models.FieldCondition(key="ingested_at", range=models.Range(lt=timestamp))
+                        models.FieldCondition(
+                            key="source", match=models.MatchValue(value=source)
+                        ),
+                        models.FieldCondition(
+                            key="ingested_at", range=models.Range(lt=timestamp)
+                        ),
                     ]
                 )
             ),
