@@ -1,6 +1,6 @@
 import re
-from ..schema import ChunkWithMetadata
-from ..interface import CleanerInterface
+from app.api.extraction.schema import ChunkWithMetadata
+from app.api.extraction.interface import CleanerInterface
 
 
 class PDFCleaner(CleanerInterface):
@@ -27,17 +27,23 @@ class PDFCleaner(CleanerInterface):
         content = re.sub(r"^Index\s+\|\s+\d+.*$", "", content, flags=re.MULTILINE)
 
         # Remove lines with many numbers separated by commas
-        content = re.sub(r"^[A-Za-z ,\-]+\s\d+(?:-\d+)?(?:,\s*\d+(?:-\d+)?)*$", "", content, flags=re.MULTILINE)
+        content = re.sub(
+            r"^[A-Za-z ,\-]+\s\d+(?:-\d+)?(?:,\s*\d+(?:-\d+)?)*$",
+            "",
+            content,
+            flags=re.MULTILINE,
+        )
 
         content = re.sub(r"[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]", "", content)
         content = re.sub(r"[ \t]+", " ", content)
         content = re.sub(r"(\w+)-\s*\n\s*(\w+)", r"\1\2", content)
         content = re.sub(r"\n{3,}", "\n\n", content)
 
-        content = re.sub(r"^[A-Z][^\n]{0,80}\|\s*\d+\s*$", "", content, flags=re.MULTILINE)
+        content = re.sub(
+            r"^[A-Z][^\n]{0,80}\|\s*\d+\s*$", "", content, flags=re.MULTILINE
+        )
         content = re.sub(r"^\s*\d+\s*$", "", content, flags=re.MULTILINE)
         content = re.sub(r"<s>\[INST\].*?\[/INST\]", "", content, flags=re.DOTALL)
-
 
         lines = [line.strip() for line in content.split("\n")]
 
@@ -73,11 +79,13 @@ class PDFCleaner(CleanerInterface):
             return True
 
         # Title case estricto: todas las palabras principales capitalizadas, sin punto final
-        if (len(line) < 60 
+        if (
+            len(line) < 60
             and not line.endswith(".")
             and not re.search(r"\d", line)  # sin números
             and len(words) >= 2
-            and all(w[0].isupper() for w in words if len(w) > 3)):
+            and all(w[0].isupper() for w in words if len(w) > 3)
+        ):
             return True
 
         return False
@@ -107,10 +115,7 @@ class PDFCleaner(CleanerInterface):
         return chunks
 
     def chunk(
-        self,
-        clean_text: str,
-        max_chars: int = 1500,
-        overlap: int = 250
+        self, clean_text: str, max_chars: int = 1500, overlap: int = 250
     ) -> list[ChunkWithMetadata]:
         if overlap >= max_chars:
             raise ValueError("overlap must be smaller than max_chars")
@@ -119,7 +124,6 @@ class PDFCleaner(CleanerInterface):
 
         text = re.sub(r"\n{2,}", "\n\n", clean_text)
         # text = re.sub(r"(?<!\n)\n(?!\n)", " ", text)
-
 
         in_toc = False
         blocks = text.split("\n\n")
@@ -133,7 +137,9 @@ class PDFCleaner(CleanerInterface):
             if not block:
                 continue
 
-            if "Table of Contents" in block or re.match(r"^(Table of Contents|Contents)$", block):
+            if "Table of Contents" in block or re.match(
+                r"^(Table of Contents|Contents)$", block
+            ):
                 in_toc = True
                 continue
 
@@ -149,7 +155,11 @@ class PDFCleaner(CleanerInterface):
 
             if len(block) > max_chars:
                 if current_text:
-                    result.append(ChunkWithMetadata(text=current_text.strip(), section=current_section))
+                    result.append(
+                        ChunkWithMetadata(
+                            text=current_text.strip(), section=current_section
+                        )
+                    )
                 sub_chunks = self._split_by_length(block, max_chars, overlap)
                 for sc in sub_chunks:
                     result.append(ChunkWithMetadata(text=sc, section=current_section))
@@ -160,11 +170,17 @@ class PDFCleaner(CleanerInterface):
                 current_text = current_text + "\n\n" + block if current_text else block
             else:
                 if current_text:
-                    result.append(ChunkWithMetadata(text=current_text.strip(), section=current_section))
+                    result.append(
+                        ChunkWithMetadata(
+                            text=current_text.strip(), section=current_section
+                        )
+                    )
                 overlap_seed = result[-1].text[-overlap:] if result else ""
                 current_text = overlap_seed + "\n\n" + block if overlap_seed else block
 
         if current_text:
-            result.append(ChunkWithMetadata(text=current_text.strip(), section=current_section))
+            result.append(
+                ChunkWithMetadata(text=current_text.strip(), section=current_section)
+            )
 
         return result

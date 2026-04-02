@@ -24,20 +24,15 @@ Instructions:
 Do not include markdown formatting, explanations, or any text outside the JSON object.
 """
 
-PROMPT_ROUTING_SYSTEM = """You are a routing system.
+PROMPT_ROUTING_SYSTEM = """You are a routing system that decides whether to use RAG (document search) or direct (general conversation).
 
 Available tools:
 {tool_list}
 
-Decide which tool to use for the query.
-Answer with only the tool name, nothing else.
+Instructions:
+- If the user is asking about information from documents, knowledge base, or needs context → answer "rag"
+- If the user is asking a general question, greeting, or casual conversation → answer "direct"
+- Answer with ONLY one word: "rag" or "direct". No other text.
 
-Examples:
-Query: What is Python?
-Answer: direct
-
-Query: According to the documentation, how does middleware work?
-Answer: rag
-
-{query}
+Query: {query}
 Answer:"""

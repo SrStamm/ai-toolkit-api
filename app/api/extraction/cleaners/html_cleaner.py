@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
 
-from ..schema import ChunkWithMetadata
-from ..interface import CleanerInterface
+from app.api.extraction.schema import ChunkWithMetadata
+from app.api.extraction.interface import CleanerInterface
 
 
 class HTMLCleaner(CleanerInterface):
@@ -15,7 +15,9 @@ class HTMLCleaner(CleanerInterface):
 
         return str(main)
 
-    def _split_by_length(self, clean_text: str, max_chars: int = 300) -> list[ChunkWithMetadata]:
+    def _split_by_length(
+        self, clean_text: str, max_chars: int = 300
+    ) -> list[ChunkWithMetadata]:
         overlap = 100
         chunks = []
         start = 0

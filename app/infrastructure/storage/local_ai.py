@@ -4,9 +4,12 @@ import numpy as np
 import structlog
 from sentence_transformers import SentenceTransformer
 
-from ...infrastructure.logging import time_response
-from ...infrastructure.metrics import embedding_duration_seconds, embedding_requests_total
-from ...api.rag.exceptions import EmbeddingError
+from app.infrastructure.logging import time_response
+from app.infrastructure.metrics import (
+    embedding_duration_seconds,
+    embedding_requests_total,
+)
+from app.api.rag.exceptions import EmbeddingError
 from .interfaces import EmbeddingInterface
 
 logger = structlog.get_logger()
@@ -19,8 +22,12 @@ class EmbeddingService(EmbeddingInterface):
     @time_response
     def embed(self, text: str, query: bool = False) -> List[float]:
         start = time.perf_counter()
-        model_name = self.embed_model.model_id if hasattr(self.embed_model, 'model_id') else 'default'
-        
+        model_name = (
+            self.embed_model.model_id
+            if hasattr(self.embed_model, "model_id")
+            else "default"
+        )
+
         try:
             if query:
                 embedding = self.embed_model.encode(
@@ -32,12 +39,14 @@ class EmbeddingService(EmbeddingInterface):
                 )
 
             duration = time.perf_counter() - start
-            embedding_duration_seconds.labels(model=model_name, batch_size='1').observe(duration)
-            embedding_requests_total.labels(model=model_name, status='success').inc()
-            
+            embedding_duration_seconds.labels(model=model_name, batch_size="1").observe(
+                duration
+            )
+            embedding_requests_total.labels(model=model_name, status="success").inc()
+
             return embedding.tolist()
         except Exception as e:
-            embedding_requests_total.labels(model=model_name, status='error').inc()
+            embedding_requests_total.labels(model=model_name, status="error").inc()
             raise EmbeddingError(str(e)) from e
 
     @time_response
@@ -48,15 +57,23 @@ class EmbeddingService(EmbeddingInterface):
             raise EmbeddingError("Chunk list is empty")
 
         start = time.perf_counter()
-        model_name = self.embed_model.model_id if hasattr(self.embed_model, 'model_id') else 'default'
+        model_name = (
+            self.embed_model.model_id
+            if hasattr(self.embed_model, "model_id")
+            else "default"
+        )
 
         try:
             all_batches = []
 
-            for batch_enum, start_idx in enumerate(range(0, len(chunk_list), batch_size)):
+            for batch_enum, start_idx in enumerate(
+                range(0, len(chunk_list), batch_size)
+            ):
                 end = min(start_idx + batch_size, len(chunk_list))
 
-                logger.debug(f"Proccessing batch {batch_enum + 1}: {start_idx} to {end}")
+                logger.debug(
+                    f"Proccessing batch {batch_enum + 1}: {start_idx} to {end}"
+                )
 
                 # Slice batchs
                 batchs = chunk_list[start_idx:end]
@@ -86,22 +103,22 @@ class EmbeddingService(EmbeddingInterface):
                 raise EmbeddingError("One or more vectors contain NaN or Inf values")
 
             duration = time.perf_counter() - start
-            embedding_duration_seconds.labels(model=model_name, batch_size=str(batch_size)).observe(duration)
-            embedding_requests_total.labels(model=model_name, status='success').inc()
+            embedding_duration_seconds.labels(
+                model=model_name, batch_size=str(batch_size)
+            ).observe(duration)
+            embedding_requests_total.labels(model=model_name, status="success").inc()
 
             return final.tolist()
         except Exception as e:
-            embedding_requests_total.labels(model=model_name, status='error').inc()
+            embedding_requests_total.labels(model=model_name, status="error").inc()
             raise EmbeddingError(str(e)) from e
 
 
 # "intfloat/multilingual-e5-small"
 
 embedding = EmbeddingService(
-    model=SentenceTransformer(
-            "sentence-transformers/all-MiniLM-L6-v2", device="cpu"
-        )
-    )
+    model=SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu")
+)
 
 
 def get_embeddign_service() -> EmbeddingService:

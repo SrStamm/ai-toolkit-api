@@ -1,12 +1,10 @@
-from .mistral import MistralProvider
-from .ollama import OllamaProvider
-from ...core.settings import LLMConfig
+from app.domain.providers.mistral import MistralProvider
+from app.domain.providers.ollama import OllamaProvider
+from app.core.settings import LLMConfig
+
 
 class LLMFactory:
-    _providers = {
-        "ollama": OllamaProvider,
-        "mistral": MistralProvider
-    }
+    _providers = {"ollama": OllamaProvider, "mistral": MistralProvider}
 
     @staticmethod
     def create_provider(config: LLMConfig):

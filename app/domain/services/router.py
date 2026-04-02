@@ -1,14 +1,13 @@
 # Retry Orchestra and circuit breaker
 
-import os
 import time
 import structlog
 import threading
 
-from ..providers.factory_provider import LLMFactory
-from ..providers.base import BaseLLMProvider
-from ...core.settings import AppConfig
-from ...infrastructure.metrics import (
+from app.domain.providers.factory_provider import LLMFactory
+from app.domain.providers.base import BaseLLMProvider
+from app.core.settings import get_primary_config, get_fallback_config
+from app.infrastructure.metrics import (
     llm_requests_total,
     llm_request_duration_seconds,
     llm_fallback_total,
@@ -57,9 +56,9 @@ class LLMRouter:
             self._update_circuit_gauge("OPEN")
             circuit_state_changes_total.labels("OPEN").inc()
             self.logger.warning(
-                    "circuit_opened",
-                    failure_count=self.failure_count,
-                    timeout=self.open_timeout,
+                "circuit_opened",
+                failure_count=self.failure_count,
+                timeout=self.open_timeout,
             )
 
     def chat(self, prompt: str):
@@ -74,15 +73,10 @@ class LLMRouter:
                 circuit_state_changes_total.labels("HALF-OPEN").inc()
                 self.logger.info("circuit_half_open")
             else:
-                llm_fallback_total.labels(
-                    provider_name,
-                    self.fallback.name
-                ).inc()
+                llm_fallback_total.labels(provider_name, self.fallback.name).inc()
 
                 llm_requests_total.labels(
-                    self.fallback.name,
-                    self.fallback.model,
-                    "fallback"
+                    self.fallback.name, self.fallback.model, "fallback"
                 ).inc()
 
                 self.logger.info("llm_fallback_used", state=self.state, reason="OPEN")
@@ -95,16 +89,11 @@ class LLMRouter:
 
             duration = time.perf_counter() - start
 
-            llm_request_duration_seconds.labels(
-                provider_name,
-                model_name
-            ).observe(duration)
+            llm_request_duration_seconds.labels(provider_name, model_name).observe(
+                duration
+            )
 
-            llm_requests_total.labels(
-                provider_name,
-                model_name,
-                "success"
-            ).inc()
+            llm_requests_total.labels(provider_name, model_name, "success").inc()
 
             with self._lock:
                 if self.state == "HALF-OPEN":
@@ -123,16 +112,11 @@ class LLMRouter:
 
         except Exception:
             duration = time.perf_counter() - start
-            llm_request_duration_seconds.labels(
-                provider_name,
-                model_name
-            ).observe(duration)
+            llm_request_duration_seconds.labels(provider_name, model_name).observe(
+                duration
+            )
 
-            llm_requests_total.labels(
-                provider_name,
-                model_name,
-                "error"
-            ).inc()
+            llm_requests_total.labels(provider_name, model_name, "error").inc()
 
             self._on_failure()
 
@@ -150,14 +134,11 @@ class LLMRouter:
             duration_fb = time.perf_counter() - start_fb
 
             llm_request_duration_seconds.labels(
-                self.fallback.name,
-                self.fallback.model
+                self.fallback.name, self.fallback.model
             ).observe(duration_fb)
 
             llm_requests_total.labels(
-                self.fallback.name,
-                self.fallback.model,
-                "fallback"
+                self.fallback.name, self.fallback.model, "fallback"
             ).inc()
 
             return response
@@ -175,16 +156,11 @@ class LLMRouter:
 
                 duration = time.perf_counter() - start
 
-                llm_request_duration_seconds.labels(
-                    provider_name,
-                    model_name
-                ).observe(duration)
+                llm_request_duration_seconds.labels(provider_name, model_name).observe(
+                    duration
+                )
 
-                llm_requests_total.labels(
-                    provider_name,
-                    model_name,
-                    "success"
-                ).inc()
+                llm_requests_total.labels(provider_name, model_name, "success").inc()
 
                 with self._lock:
                     if self.state == "HALF-OPEN":
@@ -196,17 +172,9 @@ class LLMRouter:
             except Exception:
                 self._on_failure()
 
-                llm_requests_total.labels(
-                    provider_name,
-                    model_name,
-                    "error"
-                ).inc()
+                llm_requests_total.labels(provider_name, model_name, "error").inc()
 
-                llm_fallback_total.labels(
-                    provider_name,
-                    self.fallback.name
-                ).inc()
-
+                llm_fallback_total.labels(provider_name, self.fallback.name).inc()
 
                 async for chunk in self.fallback.chat_stream(prompt):
                     yield chunk
@@ -214,15 +182,11 @@ class LLMRouter:
         return _stream()
 
 
-
 def get_llm_router() -> LLMRouter:
-    config_primary = AppConfig.get_primary_config()
-    config_fallback =AppConfig.get_fallback_config()
+    config_primary = get_primary_config()
+    config_fallback = get_fallback_config()
 
     primary = LLMFactory.create_provider(config_primary)
-    fallback= LLMFactory.create_provider(config_fallback)
+    fallback = LLMFactory.create_provider(config_fallback)
 
-    return LLMRouter(
-        primary=primary,
-        fallback=fallback
-    )
+    return LLMRouter(primary=primary, fallback=fallback)

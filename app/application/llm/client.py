@@ -1,14 +1,17 @@
 # Provider for LLM
 
-from typing import AsyncIterator, Optional
+from collections.abc import AsyncIterator
 
-from ...domain.services.router import LLMRouter, get_llm_router
-from ...domain.models import LLMResponse
-from ...infrastructure.logging import time_response
+from app.domain.services.router import LLMRouter, get_llm_router
+from app.domain.models import LLMResponse
+from app.infrastructure.logging import time_response
 from pydantic import BaseModel, ValidationError
 from dotenv import load_dotenv
+from app.domain.exceptions import StructuredOutputError
 
 load_dotenv()
+
+MAX_STRUCTURED_OUTPUT_RETRIES = 2
 
 
 class LLMClient:
@@ -21,14 +24,25 @@ class LLMClient:
 
     @time_response
     def generate_structured_output(
-        self, prompt: str, output_schema: type[BaseModel]
+        self,
+        prompt: str,
+        output_schema: type[BaseModel],
+        _retries: int = 0,
     ) -> LLMResponse[BaseModel]:
-        structured_prompt = f"{prompt}\n Output como JSON válido, únicamente devuelve el objeto JSON, conforme a este schema: {output_schema.model_json_schema()}"
+        if _retries >= MAX_STRUCTURED_OUTPUT_RETRIES:
+            raise StructuredOutputError(
+                f"Failed to parse structured output after {MAX_STRUCTURED_OUTPUT_RETRIES} attempts"
+            )
+
+        structured_prompt = (
+            f"{prompt}\n Output como JSON válido, únicamente devuelve el objeto JSON, "
+            f"conforme a este schema: {output_schema.model_json_schema()}"
+        )
 
         response = self.router.chat(structured_prompt)
 
         try:
-            parsed_content = output_schema.model_validate_json(response)
+            parsed_content = output_schema.model_validate_json(response.content)
 
             return LLMResponse(
                 content=parsed_content,
@@ -39,12 +53,17 @@ class LLMClient:
             )
 
         except ValidationError:
-            error_prompt = f"{structured_prompt}\nPrevious output invalid. Corrige: {response.content}"
-            return self.generate_structured_output(error_prompt, output_schema)
+            error_prompt = (
+                f"{structured_prompt}\nPrevious output invalid. "
+                f"Corrige el formato JSON. Respuesta inválida: {response.content}"
+            )
+            return self.generate_structured_output(
+                error_prompt, output_schema, _retries=_retries + 1
+            )
 
     async def generate_content_stream(
         self, prompt: str
-    ) -> AsyncIterator[tuple[str, Optional[LLMResponse]]]:
+    ) -> AsyncIterator[tuple[str, LLMResponse[str] | None]]:
         async for chunk, final_response in self.router.chat_stream(prompt):
             yield (chunk, final_response)
 

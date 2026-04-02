@@ -1,4 +1,6 @@
+import os
 import uuid
+import asyncio
 import structlog
 from time import time
 from contextlib import asynccontextmanager
@@ -8,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .infrastructure.logging import register_exceptions_handlers, logger
 from .infrastructure.metrics import http_requests_total, registry
 from .api.extraction.router import router as extraction_router
-from .infrastructure.storage.qdrant_client import get_qdrant_store, QdrantStore
+from .infrastructure.storage.qdrant_client import get_qdrant_store
 from .api.rag.router import router as rag_router
 from .api.llamaindex.router import router as llama_router
 from .api.agent.router import router as agent_router
@@ -17,25 +19,27 @@ from prometheus_client import make_asgi_app
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Iniciando APP")
-    print("Verificando colección")
-    rag_client: QdrantStore = get_qdrant_store()
-    rag_client.create_collection()
+    logger.info("starting_application", phase="startup")
+
+    # Run sync Qdrant operation in thread pool to avoid blocking event loop
+    rag_client = await asyncio.to_thread(get_qdrant_store)
+    await asyncio.to_thread(rag_client.create_collection)
+
+    logger.info("application_ready", phase="startup_complete")
     yield
+    logger.info("shutdown_application", phase="shutdown")
 
 
 app = FastAPI(lifespan=lifespan)
 
 
+# CORS origins from environment variable (comma-separated)
+# Default to localhost only in development
+DEFAULT_ORIGINS = "http://localhost:8000,http://localhost:8080,http://localhost:5173"
 origins = [
-    "http://localhost",
-    "http://localhost:8000",
-    "http://localhost:8080",
-    "*",
-    "http://127.0.0.1:8080",
-    "http://127.0.0.1:5500",
-    "http://localhost:5500",
-    "http://localhost:5173",
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", DEFAULT_ORIGINS).split(",")
+    if origin.strip()
 ]
 
 app.add_middleware(
@@ -100,7 +104,9 @@ async def structured_log_middleware(request: Request, call_next):
             f"method={request.method} path={request.url.path} user={user} duration={duration:.3f}s status={response.status_code}"
         )
 
-        http_requests_total.labels(request.method, request.url.path, response.status_code).inc()
+        http_requests_total.labels(
+            request.method, request.url.path, response.status_code
+        ).inc()
 
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Session-ID"] = session_id

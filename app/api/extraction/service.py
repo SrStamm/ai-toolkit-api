@@ -1,9 +1,9 @@
 from fastapi import Depends, UploadFile
-from ...application.llm.client import LLMClient, get_llm_client
-from .semantic.invoice_extractor import InvoiceExtractor
-from .semantic.person_extractor import PersonExtractor
-from .source.csv_source import CSVSource
-from .source.pdf_source import PDFSource
+from app.application.llm.client import LLMClient, get_llm_client
+from app.api.extraction.semantic.invoice_extractor import InvoiceExtractor
+from app.api.extraction.semantic.person_extractor import PersonExtractor
+from app.api.extraction.source.csv_source import CSVSource
+from app.api.extraction.source.pdf_source import PDFSource
 
 
 class ExtractionService:

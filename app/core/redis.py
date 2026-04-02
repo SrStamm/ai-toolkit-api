@@ -1,30 +1,43 @@
-import os
-from urllib.parse import urlparse
+"""
+Cliente Redis con soporte para settings centralizados.
+"""
+
 from redis import Redis
+from .settings import get_settings
 
-redis_host = os.getenv("REDIS_HOST", "localhost")
-redis_port = int(os.getenv("REDIS_PORT", "6379"))
-redis_db = int(os.getenv("REDIS_DB", "0"))
 
-redis_url = os.getenv("REDIS_URL")
+def get_redis_client() -> Redis:
+    """
+    Get Redis client using centralized settings.
 
-if redis_url:
-    parsed = urlparse(redis_url)
+    Supports both REDIS_URL and individual REDIS_HOST/REDIS_PORT env vars
+    for backwards compatibility.
+    """
+    settings = get_settings()
 
-    redis_host = parsed.hostname
-    redis_port = parsed.port
-    # redis_password = parsed.password
-    redis_db = int(parsed.path.replace("/", "") or 0)
+    if settings.redis_url:
+        # Use full URL if provided
+        return Redis.from_url(settings.redis_url)
 
-    redis_client = Redis(
-        host=redis_host,
-        port=redis_port,
-        db=redis_db,
+    # Fallback to individual settings
+    return Redis(
+        host=settings.redis_host,
+        port=settings.redis_port,
+        db=settings.redis_db,
     )
-else:
-    # fallback local para desarrollo
-    redis_client = Redis(
-        host=os.getenv("REDIS_HOST", "localhost"),
-        port=int(os.getenv("REDIS_PORT", 6379)),
-        db=int(os.getenv("REDIS_DB", 0)),
-    )
+
+
+# Singleton instance
+_redis_client: Redis | None = None
+
+
+def get_redis() -> Redis:
+    """Get or create Redis client singleton."""
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = get_redis_client()
+    return _redis_client
+
+
+# Alias for backwards compatibility
+redis_client = get_redis()

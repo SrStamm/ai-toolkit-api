@@ -7,12 +7,12 @@ import time
 from fastapi import UploadFile
 import structlog
 
-from .schemas import JobStatus
-from .job_service import JobService
-from ..service import RAGService, get_rag_service
-from ....core.celery_app import celery_app
-from ....infrastructure.metrics import (
-    celery_task_duration_seconds, 
+from app.api.rag.jobs.schemas import JobStatus
+from app.api.rag.jobs.job_service import JobService
+from app.api.rag.service import RAGService, get_rag_service
+from app.core.celery_app import celery_app
+from app.infrastructure.metrics import (
+    celery_task_duration_seconds,
     celery_tasks_total,
     documents_ingested_total,
 )
@@ -54,18 +54,17 @@ def ingest_html_job(self, job_id: str, ingest_data: dict):
         job_service.update_progress(job_id, 100, "completed")
         job_service.update_status(job_id, JobStatus.completed)
 
-        celery_tasks_total.labels('ingest_html_job', 'success').inc()
+        celery_tasks_total.labels("ingest_html_job", "success").inc()
 
     except Exception as e:
-        celery_tasks_total.labels('ingest_html_job', 'error').inc()
-        documents_ingested_total.labels(source_type='url', status='error').inc()
+        celery_tasks_total.labels("ingest_html_job", "error").inc()
+        documents_ingested_total.labels(source_type="url", status="error").inc()
         logger.error("ingest_job_failed", job_id=job_id, error=str(e), exc_info=True)
         job_service.fail(job_id, str(e))
         raise
     finally:
         task_end = time.perf_counter() - task_start
-        celery_task_duration_seconds.labels('ingest_html_job').observe(task_end)
-
+        celery_task_duration_seconds.labels("ingest_html_job").observe(task_end)
 
 
 @celery_app.task(bind=True)
@@ -87,10 +86,7 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
             job_service.update_progress(job_id, percent, message)
 
         with open(file_path, "rb") as f:
-            fake_upload_file = UploadFile(
-                file=f, 
-                filename=os.path.basename(file_path)
-            )
+            fake_upload_file = UploadFile(file=f, filename=os.path.basename(file_path))
 
             asyncio.run(
                 rag_service.ingest_pdf_file(
@@ -98,14 +94,13 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
                     source=source,
                     domain=domain,
                     topic=topic,
-                    progress_callback=tracker
+                    progress_callback=tracker,
                 )
             )
 
-
         logger.info("ingest_job_success", job_id=job_id)
 
-        celery_tasks_total.labels('ingest_file_job', 'success').inc()
+        celery_tasks_total.labels("ingest_file_job", "success").inc()
 
         job_service.update_progress(job_id, 100, "completed")
         job_service.update_status(job_id, JobStatus.completed)
@@ -113,11 +108,11 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
     except Exception as e:
         logger.error("ingest_job_failed", job_id=job_id, error=str(e), exc_info=True)
         job_service.fail(job_id, str(e))
-        celery_tasks_total.labels('ingest_file_job', 'error').inc()
-        documents_ingested_total.labels(source_type='pdf', status='error').inc()
+        celery_tasks_total.labels("ingest_file_job", "error").inc()
+        documents_ingested_total.labels(source_type="pdf", status="error").inc()
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
 
         task_end = time.perf_counter() - task_start
-        celery_task_duration_seconds.labels('ingest_file_job').observe(task_end)
+        celery_task_duration_seconds.labels("ingest_file_job").observe(task_end)

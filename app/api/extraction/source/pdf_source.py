@@ -1,7 +1,7 @@
 from io import BytesIO
 from fastapi import UploadFile
 import pdfplumber
-from ..interface import SourceInterface
+from app.api.extraction.interface import SourceInterface
 
 
 class PDFSource(SourceInterface):

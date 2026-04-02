@@ -1,5 +1,5 @@
 from typing import Dict
-from ...domain.models import CostBreakdown
+from app.domain.models import CostBreakdown
 
 
 class ModelPricing:
@@ -7,7 +7,7 @@ class ModelPricing:
     PRICES: Dict[str, Dict[str, float]] = {
         "mistral-small-latest": {"input": 0.1, "output": 0.3},
         "mistral-large-latest": {"input": 2.0, "output": 6.0},
-        "ollama": {"input": 0.0, "output": 0.0}
+        "ollama": {"input": 0.0, "output": 0.0},
     }
 
     @classmethod

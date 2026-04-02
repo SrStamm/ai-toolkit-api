@@ -1,4 +1,3 @@
-from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -16,19 +15,20 @@ class InvoiceSchema(BaseModel):
     rut_contraparte: str = Field(
         description="RUT del emisor o receptor (formato chileno: XX.XXX.XXX-X)"
     )
-    razon_social: Optional[str] = Field(None, description="Nombre o razón social")
+    razon_social: str | None = Field(None, description="Nombre o razón social")
     fecha_emision: str = Field(description="Fecha en formato DD-MM-YYYY o similar")
     monto_neto: float = Field(description="Monto neto sin IVA")
     monto_iva: float = Field(description="Monto IVA recuperable")
     monto_total: float = Field(description="Monto total de la factura")
-    producto_o_descripcion: Optional[str] = Field(
+    producto_o_descripcion: str | None = Field(
         None, description="Descripción breve del producto/servicio si aplica"
     )
 
 
 class InvoiceList(BaseModel):
-    invoices: List[InvoiceSchema]
+    invoices: list[InvoiceSchema]
+
 
 class ChunkWithMetadata(BaseModel):
     text: str
-    section: Optional[str] = None
+    section: str | None = None
