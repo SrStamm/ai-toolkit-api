@@ -3,6 +3,9 @@ uvicorn
 python-dotenv
 pydantic-settings
 
+pytest
+pytest-asyncio
+
 requests
 beautifulsoup4
 pdfplumber
