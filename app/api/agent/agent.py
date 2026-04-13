@@ -11,7 +11,7 @@ from app.api.agent.session_memory import get_session_memory, Message, SessionMem
 from app.api.agent.schemas import AgentResponse
 from app.api.agent.tools import ToolRegistry
 from app.api.agent.prompt import PROMPT_ROUTING_SYSTEM
-from app.api.llamaindex.orchrestator import (
+from app.api.llamaindex.orchestrator import (
     LLMClient,
     LlamaIndexOrchestrator,
     get_orchestrator,

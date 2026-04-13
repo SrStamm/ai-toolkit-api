@@ -7,19 +7,36 @@ from app.infrastructure.embedding import get_rerank_model
 from app.infrastructure.logging import time_response
 from app.api.rag.exceptions import VectorStoreError
 from .interfaces import HybridVector, VectorStoreInterface
+from app.core.settings import get_settings
 import structlog
 
-
-qdrant = QdrantClient(host="qdrant", port=6333)
 
 COLLECTION_NAME = "documents"
 log = structlog.getLogger()
 
+# Singleton client - lazily initialized
+_qdrant_client: QdrantClient | None = None
+
+
+def get_qdrant_client() -> QdrantClient:
+    """Get or create Qdrant client using centralized settings."""
+    global _qdrant_client
+    if _qdrant_client is None:
+        settings = get_settings()
+        _qdrant_client = QdrantClient(
+            host=settings.qdrant_host,
+            port=settings.qdrant_port,
+        )
+    return _qdrant_client
+
 
 class QdrantStore(VectorStoreInterface):
-    def __init__(self, client: QdrantClient) -> None:
-        self.client = client
+    def __init__(
+        self, client: QdrantClient | None = None, rerank_threshold: float = 0.6
+    ) -> None:
+        self.client = client or get_qdrant_client()
         self.rerank_model = get_rerank_model()
+        self.rerank_threshold = rerank_threshold
 
     @time_response
     def create_collection(self):
@@ -138,11 +155,17 @@ class QdrantStore(VectorStoreInterface):
 
         search_result.sort(key=lambda x: x.payload["rerank_score"], reverse=True)
 
-        filtered = [hit for hit in search_result if hit.payload["rerank_score"] > 0.6]
+        filtered = [
+            hit
+            for hit in search_result
+            if hit.payload["rerank_score"] > self.rerank_threshold
+        ]
 
         if not filtered and len(search_result) > 0:
-            print(
-                "WARNING: No chunks passed the 0.6 threshold. Taking top 1 for debugging."
+            log.warning(
+                "no_chunks_passed_rerank_threshold",
+                threshold=self.rerank_threshold,
+                total_chunks=len(search_result),
             )
             filtered = [search_result[0]]
 
@@ -183,8 +206,12 @@ class QdrantStore(VectorStoreInterface):
         log.info("Old data cleaned", source=source, deleted_count=deleted.operation_id)
 
 
-qdrant_client = QdrantStore(qdrant)
+_qdrant_store: QdrantStore | None = None
 
 
 def get_qdrant_store() -> QdrantStore:
-    return qdrant_client
+    """Get or create QdrantStore singleton."""
+    global _qdrant_store
+    if _qdrant_store is None:
+        _qdrant_store = QdrantStore(client=get_qdrant_client())
+    return _qdrant_store
