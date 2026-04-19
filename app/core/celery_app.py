@@ -28,4 +28,4 @@ celery_app = Celery(
 # Configure task result expiration (1 hour default)
 celery_app.conf.result_expires = 3600
 
-celery_app.autodiscover_tasks(["app.api.rag.jobs.celery_tasks"])
+celery_app.autodiscover_tasks(["app.api.retrieval_engine.jobs.celery_tasks"])

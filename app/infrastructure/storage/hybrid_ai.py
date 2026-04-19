@@ -9,7 +9,7 @@ from app.infrastructure.metrics import (
     embedding_duration_seconds,
     embedding_requests_total,
 )
-from app.api.rag.exceptions import EmbeddingError
+from app.api.retrieval_engine.exceptions import EmbeddingError
 from .interfaces import HybridEmbeddingInterface, HybridVector
 
 logger = structlog.get_logger()

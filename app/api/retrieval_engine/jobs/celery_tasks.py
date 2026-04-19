@@ -7,9 +7,9 @@ import time
 from fastapi import UploadFile
 import structlog
 
-from app.api.rag.jobs.schemas import JobStatus
-from app.api.rag.jobs.job_service import JobService
-from app.api.rag.service import RAGService, get_rag_service
+from app.api.retrieval_engine.jobs.schemas import JobStatus
+from app.api.retrieval_engine.jobs.job_service import JobService
+from app.api.retrieval_engine.service import RAGService, get_rag_service
 from app.core.celery_app import celery_app
 from app.infrastructure.metrics import (
     celery_task_duration_seconds,

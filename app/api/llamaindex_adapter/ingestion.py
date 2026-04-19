@@ -9,7 +9,7 @@ from llama_index.core.schema import TextNode
 from llama_index.readers.file import PDFReader
 from llama_index.core.node_parser import SentenceSplitter
 
-from app.api.llamaindex.config import setup_llamaindex
+from app.api.llamaindex_adapter.config import setup_llamaindex
 from app.api.extraction.cleaners.pdf_cleaner import PDFCleaner, CleanerInterface
 from app.api.extraction.factory import SourceFactory
 

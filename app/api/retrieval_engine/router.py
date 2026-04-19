@@ -6,12 +6,12 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import StreamingResponse
 import structlog
 
-from app.api.rag.jobs.celery_tasks import ingest_file_job, ingest_html_job
-from app.api.rag.jobs.job_service import JobService
+from app.api.retrieval_engine.jobs.celery_tasks import ingest_file_job, ingest_html_job
+from app.api.retrieval_engine.jobs.job_service import JobService
 from app.api.extraction.exceptions import EmptySourceContentError
-from app.api.rag.exceptions import ChunkingError, EmbeddingError, error_event
-from app.api.rag.schemas import IngestRequest, QueryRequest, QueryResponse
-from app.api.rag.service import RAGService, get_rag_service
+from app.api.retrieval_engine.exceptions import ChunkingError, EmbeddingError, error_event
+from app.api.retrieval_engine.schemas import IngestRequest, QueryRequest, QueryResponse
+from app.api.retrieval_engine.service import RAGService, get_rag_service
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 

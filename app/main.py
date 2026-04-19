@@ -11,8 +11,8 @@ from .infrastructure.logging import register_exceptions_handlers, logger
 from .infrastructure.metrics import http_requests_total, registry
 from .api.extraction.router import router as extraction_router
 from .infrastructure.storage.qdrant_client import get_qdrant_store
-from .api.rag.router import router as rag_router
-from .api.llamaindex.router import router as llama_router
+from .api.retrieval_engine.router import router as rag_router
+from .api.llamaindex_adapter.router import router as llama_router
 from .api.agent.router import router as agent_router
 from prometheus_client import make_asgi_app
 

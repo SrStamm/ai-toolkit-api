@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from app.api.rag.jobs.schemas import JobState, JobStatus
+from app.api.retrieval_engine.jobs.schemas import JobState, JobStatus
 from app.core.redis import redis_client
 
 

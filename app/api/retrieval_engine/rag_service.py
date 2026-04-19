@@ -9,11 +9,11 @@ from uuid import UUID
 
 from fastapi import UploadFile
 
-from app.api.rag.ingestion_service import IngestionService
-from app.api.rag.query_service import QueryService
-from app.api.rag.reranker import Reranker
-from app.api.rag.metrics_collector import MetricsCollector
-from app.api.rag.schemas import QueryResponse
+from app.api.retrieval_engine.ingestion_service import IngestionService
+from app.api.retrieval_engine.query_service import QueryService
+from app.api.retrieval_engine.reranker import Reranker
+from app.api.retrieval_engine.metrics_collector import MetricsCollector
+from app.api.retrieval_engine.schemas import QueryResponse
 from app.infrastructure.storage.interfaces import VectorStoreInterface
 from app.infrastructure.storage.hybrid_ai import HybridEmbeddingService
 from app.application.llm.client import LLMClient

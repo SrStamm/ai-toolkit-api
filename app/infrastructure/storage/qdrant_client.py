@@ -5,7 +5,7 @@ import torch
 
 from app.infrastructure.embedding import get_rerank_model
 from app.infrastructure.logging import time_response
-from app.api.rag.exceptions import VectorStoreError
+from app.api.retrieval_engine.exceptions import VectorStoreError
 from .interfaces import HybridVector, VectorStoreInterface
 from app.core.settings import get_settings
 import structlog

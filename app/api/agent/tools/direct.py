@@ -27,7 +27,7 @@ def _direct_tool_handler(
 
     # Intentar parsear la respuesta como JSON
     try:
-        from app.api.rag.schemas import LLMAnswer
+        from app.api.retrieval_engine.schemas import LLMAnswer
 
         parsed = LLMAnswer.model_validate_json(res.content)
         output = parsed.answer

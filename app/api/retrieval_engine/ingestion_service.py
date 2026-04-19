@@ -15,8 +15,8 @@ import structlog
 from app.api.extraction.schema import ChunkWithMetadata
 from app.api.extraction.factory import SourceFactory
 from app.api.extraction.exceptions import EmptySourceContentError
-from app.api.rag.exceptions import ChunkingError
-from app.api.rag.schemas import Citation
+from app.api.retrieval_engine.exceptions import ChunkingError
+from app.api.retrieval_engine.schemas import Citation
 from app.infrastructure.storage.interfaces import FilterContext, VectorStoreInterface
 from app.infrastructure.storage.hybrid_ai import HybridEmbeddingService
 from app.infrastructure.metrics import (
