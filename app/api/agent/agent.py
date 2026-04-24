@@ -4,6 +4,7 @@ Agent determinístico con tool registry.
 Decide qué tool usar según la query del usuario.
 """
 
+from typing import Optional
 import structlog
 import uuid
 import json
@@ -86,11 +87,9 @@ class Agent:
             tool_list=tools
         )
 
-        logger.info("DEBUG_PROMPT_ROUTER", prompt=prompt)
-
+        # Call LLM
         raw = self.llm.generate_content(prompt).content.strip()
-
-        logger.info("DEBUG_DECISION_ROUTER", raw=raw)
+        logger.info("DEBUG_DECISION_ROUTER", raw=raw, prompt=prompt)
 
         try:
             decision_json = json.loads(raw)
@@ -100,19 +99,34 @@ class Agent:
             logger.warning(f"Invalid JSON from router: {raw}")
             return "final_answer"
 
-    def generate_answer(self, state: AgentState) -> str:
+    def generate_answer(self, state: AgentState) -> AgentResponse:
         prompt = PROMP_GENERATE_ANSWER.format(question=state.query)
 
         if state.context:
             prompt = prompt + f"Context: {state.context}"
 
-        response = self.llm.generate_content(prompt).content.strip().lower()
+        response = self.llm.generate_content(prompt)
 
-        return response
+        logger.info("DEBUG_RESPONSE_LLM", response=str(response))
 
-    def agent_loop(self, query: str):
+        return AgentResponse(
+            output=response.content.strip(),
+            session_id=state.session_id,
+            metadata={
+                'usage': response.usage,
+                'cost': response.cost,
+                'model': response.model,
+                'provider': response.provider
+            }
+        )
+
+    def agent_loop(self, query: str, session_id: Optional[str] = None):
+        # Create session_id if not exists
+        if not session_id:
+            session_id = self._create_session_id()
+
         # Create state
-        state = AgentState(query=query)
+        state = AgentState(query=query, session_id=session_id)
 
         # Loop for agent
         for step in range(3):
