@@ -4,11 +4,16 @@ RAG Tool para el agente.
 Busca en la base vectorial y construye respuesta con contexto.
 """
 
+from typing import Optional
 from .tools_registry import ToolRegistry, ToolResponse
+from ...llamaindex_adapter.orchestrator import LlamaIndexOrchestrator
 
 
 def _retrieve_context_tool_handler(
-    query: str, top_k: int = 5, rag_orchestrator=None, **kwargs
+    query: str,
+    top_k: int = 5,
+    rag_orchestrator: Optional[LlamaIndexOrchestrator] = None,
+    **kwargs
 ) -> ToolResponse:
     """Handler para la tool RAG."""
     if rag_orchestrator is None:
@@ -17,9 +22,10 @@ def _retrieve_context_tool_handler(
             metadata={"error": "missing_dependency"},
         )
 
-    res = rag_orchestrator.get_context(query=query)
+    res = rag_orchestrator.get_context(query=query, top_k=top_k)
+
     return ToolResponse(
-        output=res.answer,
+        output=res,
         # metadata={"citations": res.citations, "metadata": res.metadata},
     )
 

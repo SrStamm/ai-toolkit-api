@@ -112,7 +112,7 @@ class LlamaIndexOrchestrator:
         return query_engine.query(query)
 
     def get_context(
-        self, query: str, domain: str | None = None,  topic: str | None = None
+        self, query: str, top_k: int, domain: str | None = None,  topic: str | None = None, 
     ):
         # 1. Create filters
         query_filters = self._query_filters(domain, topic)
@@ -124,7 +124,7 @@ class LlamaIndexOrchestrator:
 
         # 3. Retrieval + Rerank
         retriever = self.index.as_retriever(
-            similarity_top_k=8, vector_store_query_mode="hybrid", filters=query_filters
+            similarity_top_k=top_k, vector_store_query_mode="hybrid", filters=query_filters
         )
         nodes = retriever.retrieve(retrieval_query)
         nodes = self.rerank._postprocess_nodes(nodes, query_bundle=QueryBundle(query))

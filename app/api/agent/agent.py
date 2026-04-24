@@ -61,20 +61,30 @@ class Agent:
             for name, defn in self.tools.items()
         )
 
-    def execute(self, tool_name: str, query: str, context_str: str = ""):
-        """Execute a tool by name."""
+    def execute(self, tool_name: str, state: AgentState, **tool_args):
         if tool_name not in self.tools:
-            raise ToolNotFoundError(f"Tool '{tool_name}' not found in registry")
+            raise ToolNotFoundError(f"Tool '{tool_name}' not found")
 
         tool_def = self.tools[tool_name]
 
+        # deps 
         relevant_deps = {
-            k: v for k, v in self.deps.items() if k in tool_def.dependencies
+            k: v for k, v in self.deps.items()
+            if k in tool_def.dependencies
         }
 
-        kwargs = {"query": query, "context": context_str, **relevant_deps}
+        # mapping dinámico desde state
+        state_data = state.model_dump()
 
-        return tool_def.handler(**kwargs)
+        # Merge con prioridad:
+        final_kwargs = {
+            **state_data,
+            **tool_args,
+            **relevant_deps
+        }
+
+        return tool_def.handler(**final_kwargs)
+
 
     def router(self, state: AgentState) -> str:
         """Decide which tool to use based on the query."""
@@ -112,11 +122,12 @@ class Agent:
             prompt = prompt + f"Context: {state.context}"
 
         response = self.llm.generate_content(prompt)
+        parsed = json.loads(response.content)
 
         logger.info("DEBUG_RESPONSE_LLM", response=str(response))
 
         return AgentResponse(
-            output=response.content.strip(),
+            output=parsed["answer"],
             session_id=state.session_id,
             metadata={
                 'usage': response.usage,
@@ -139,13 +150,11 @@ class Agent:
             # Agent make a decision
             decision = self.router(state)
 
-            if decision == "retrieve_context" and not state.context:
-                context = self.execute("retrieve_context", state.query)
+            if decision == "retrieve_context":
+                context = self.execute("retrieve_context", state=state)
                 state.context = context
-            elif decision == "final_answer":
-                return self.generate_answer(state)
-            else:
-                return self.generate_answer(state)
+
+            return self.generate_answer(state)
 
 
 def create_agent() -> Agent:

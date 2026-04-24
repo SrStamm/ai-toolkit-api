@@ -15,5 +15,6 @@ class QueryAgentRequest(BaseModel):
 class AgentState(BaseModel):
     query: str
     session_id: str
+    top_k: int = 5
     history: Optional[List[str]] = None
     context: Optional[str] = None
