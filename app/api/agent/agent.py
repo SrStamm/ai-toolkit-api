@@ -6,6 +6,7 @@ Decide qué tool usar según la query del usuario.
 
 import structlog
 import uuid
+import json
 
 from .session_memory import get_session_memory, Message, SessionMemory
 from .schemas import AgentResponse
@@ -76,26 +77,28 @@ class Agent:
 
     def router(self, state: AgentState) -> str:
         """Decide which tool to use based on the query."""
+        # Get available tools
         tools = self.build_tool_list()
 
-        prompt = PROMPT_ROUTING_SYSTEM.format(query=state.query, tool_list=tools)
-
-        logger.info("DEBU_PROMPT_ROUTER", prompt=prompt)
-
-        decision = self.llm.generate_content(prompt).content
-        decision = decision.strip().lower()
-
-        logger.info("DEBU_DECISION_ROUTER", decision=decision)
-
-        if "retrieve_context" in decision:
-            return "retrieve_context"
-
-        # Fallback: si el modelo no devuelve algo esperado, default a final_answer
-        logger.warning(
-            f"Router returned unexpected output: {decision}, defaulting to final_answer"
+        # Create prompt
+        prompt = PROMPT_ROUTING_SYSTEM.format(
+            query=state.query,
+            tool_list=tools
         )
 
-        return "final_answer"
+        logger.info("DEBUG_PROMPT_ROUTER", prompt=prompt)
+
+        raw = self.llm.generate_content(prompt).content.strip()
+
+        logger.info("DEBUG_DECISION_ROUTER", raw=raw)
+
+        try:
+            decision_json = json.loads(raw)
+            return decision_json.get("action", "final_answer")
+
+        except Exception:
+            logger.warning(f"Invalid JSON from router: {raw}")
+            return "final_answer"
 
     def generate_answer(self, state: AgentState) -> str:
         prompt = PROMP_GENERATE_ANSWER.format(question=state.query)
