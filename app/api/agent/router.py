@@ -10,3 +10,10 @@ def custom_query_llama(
     serv: Agent = Depends(get_agent)
 ):
     return serv.agent(query=query.text, session_id=query.session_id)
+
+@router.post("/agent-loop")
+def agent_loop(
+        query: QueryAgentRequest,
+        serv: Agent = Depends(get_agent)
+):
+    return serv.agent_loop(query=query.text)
