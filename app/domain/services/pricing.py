@@ -8,6 +8,7 @@ class ModelPricing:
         "mistral-small-latest": {"input": 0.1, "output": 0.3},
         "mistral-large-latest": {"input": 2.0, "output": 6.0},
         "ollama": {"input": 0.0, "output": 0.0},
+        "qwen3:8b": {"input": 0.0, "output": 0.0},
     }
 
     @classmethod

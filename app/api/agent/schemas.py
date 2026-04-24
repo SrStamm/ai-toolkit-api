@@ -1,5 +1,12 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
+from enum import Enum
+
+
+class ActionType(str, Enum):
+    RETRIEVE_CONTEXT = "retrieve_context"
+    CALL_TOOL = "call_tool"
+    FINAL_ANSWER = "final_answer"
 
 
 class AgentResponse(BaseModel):
@@ -19,8 +26,13 @@ class AgentState(BaseModel):
     top_k: int = 5
     history: Optional[List[str]] = None
     context: Optional[str] = None
+    tool_results: List[str] = Field(default_factory=list)
+
+    def add_tool_result(self, result: str) -> None:
+        self.tool_results.append(result)
 
 
 class Decision(BaseModel):
-    action: str
-    args: dict | None = None
+    action: ActionType
+    tool_name: str | None = None
+    args: dict = Field(default_factory=dict)

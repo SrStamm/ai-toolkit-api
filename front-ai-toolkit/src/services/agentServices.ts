@@ -3,7 +3,7 @@ import Fetch from "@/utils/api";
 
 export const agentAsk = async (body: AgentQuestion): Promise<AgentResponse> => {
   return await Fetch<AgentResponse>({
-    path: "/agent/ask-custom",
+    path: "/agent/agent-loop",
     method: "POST",
     body: body,
   });
