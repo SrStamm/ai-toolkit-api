@@ -29,12 +29,19 @@ PROMPT_ROUTING_SYSTEM = """You are a routing system that decides whether to use 
 Available tools:
 {tool_list}
 
+Have context: {context}
+
 Instructions:
 - Return ONLY valid JSON
-- Use this format:
+- Use one of these formats:
 
+{{"action": "retrieve_context"}}
 {{"action": "final_answer"}}
 
+Rules:
+- If the user asks about documentation or knowledge base AND you DO NOT have context → use "retrieve_context"
+- If you ALREADY have context → use "final_answer"
+- Do NOT call retrieve_context more than once
 - Do NOT return anything else
 
 Query: {query}
