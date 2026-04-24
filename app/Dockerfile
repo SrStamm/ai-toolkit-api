@@ -44,6 +44,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copiamos código
 COPY --chown=appuser:appuser ./app ./app
 
+# Copiamos el front buildado (pre-built localmente con npm run build)
+COPY --chown=appuser:appuser ./front-ai-toolkit/dist ./static
+
 ENV PATH="/usr/local/bin:$PATH"
 
 # Usuario no root
