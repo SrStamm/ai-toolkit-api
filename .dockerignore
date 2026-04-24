@@ -138,6 +138,17 @@ app/evaluation/
 
 front-ai-toolkit/
 
+# Excepciones necesarias para el build del front
+!front-ai-toolkit/nginx.conf
+!front-ai-toolkit/package*.json
+!front-ai-toolkit/tsconfig*.json
+!front-ai-toolkit/vite.config.*
+!front-ai-toolkit/eslint.config.js
+!front-ai-toolkit/index.html
+!front-ai-toolkit/src/
+!front-ai-toolkit/public/
+!front-ai-toolkit/.env
+
 api_data/
 ollama/
 prometheus/
