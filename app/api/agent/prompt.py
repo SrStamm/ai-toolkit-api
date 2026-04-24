@@ -35,12 +35,13 @@ Instructions:
 - Return ONLY valid JSON
 - Use one of these formats:
 
-{{"action": "retrieve_context"}}
+{{"action": "retrieve_context", "args": {{"top_k": 5}}}}
 {{"action": "final_answer"}}
 
 Rules:
 - If the user asks about documentation or knowledge base AND you DO NOT have context → use "retrieve_context"
 - If you ALREADY have context → use "final_answer"
+- Include "args" only when the tool needs parameters
 - Do NOT call retrieve_context more than once
 - Do NOT return anything else
 

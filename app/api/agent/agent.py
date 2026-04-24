@@ -10,9 +10,8 @@ import uuid
 import json
 
 from .session_memory import get_session_memory, Message, SessionMemory
-from .schemas import AgentResponse
+from .schemas import AgentResponse, AgentState, Decision
 from .tools import ToolRegistry
-from .schemas import AgentState
 from .prompt import PROMPT_ROUTING_SYSTEM, PROMP_GENERATE_ANSWER
 from ..llamaindex_adapter.orchestrator import (
     LLMClient,
@@ -61,32 +60,37 @@ class Agent:
             for name, defn in self.tools.items()
         )
 
-    def execute(self, tool_name: str, state: AgentState, **tool_args):
+    def execute(self, tool_name: str, state: AgentState, tool_args: dict | None = None):
         if tool_name not in self.tools:
             raise ToolNotFoundError(f"Tool '{tool_name}' not found")
 
         tool_def = self.tools[tool_name]
 
-        # deps 
+        # deps
         relevant_deps = {
             k: v for k, v in self.deps.items()
             if k in tool_def.dependencies
         }
 
-        # mapping dinámico desde state
+        # filter state data by tool_params
+        tool_params = tool_def.parameters.get("properties", {}).keys()
         state_data = state.model_dump()
+        filtered_state = {
+            k: v for k, v in state_data.items()
+            if k in tool_params
+        }
 
         # Merge con prioridad:
         final_kwargs = {
-            **state_data,
-            **tool_args,
+            **filtered_state,
+            **(tool_args or {}),
             **relevant_deps
         }
 
         return tool_def.handler(**final_kwargs)
 
 
-    def router(self, state: AgentState) -> str:
+    def router(self, state: AgentState) -> Decision:
         """Decide which tool to use based on the query."""
         # Get available tools
         tools = self.build_tool_list()
@@ -105,15 +109,19 @@ class Agent:
         try:
             decision_json = json.loads(raw)
 
+            # Prevent repeated context retrieval
             if decision_json.get('action') == "retrieve_context" and state.context:
                 logger.warning("Preventing repeated context retrieval")
-                return "final_answer"
+                return Decision(action="final_answer")
 
-            return decision_json.get("action", "final_answer")
+            return Decision(
+                action=decision_json.get("action", "final_answer"),
+                args=decision_json.get("args")
+            )
 
         except Exception:
             logger.warning(f"Invalid JSON from router: {raw}")
-            return "final_answer"
+            return Decision(action="final_answer")
 
     def generate_answer(self, state: AgentState) -> AgentResponse:
         prompt = PROMP_GENERATE_ANSWER.format(question=state.query)
@@ -150,8 +158,12 @@ class Agent:
             # Agent make a decision
             decision = self.router(state)
 
-            if decision == "retrieve_context":
-                context = self.execute("retrieve_context", state=state)
+            if decision.action == "retrieve_context":
+                context = self.execute(
+                    "retrieve_context",
+                    state=state,
+                    tool_args=decision.args
+                )
                 state.context = context
 
             return self.generate_answer(state)
