@@ -1,29 +1,3 @@
-PROMP_DIRECT = """You are an expert assistant that answers questions.
-
-Question: {question}
-
-Instructions:
-- Answer in the same language as the question
-- Be concise and direct
-- Return ONLY valid JSON in this exact format:
-
-{{"answer": "your answer here"}}
-
-Do not include markdown formatting, explanations, or any text outside the JSON object.
-"""
-
-PROMP_DIRECT_WITH_CONTEXT = """You are an expert assistant that answers questions.
-{context}
-Question: {question}
-Instructions:
-- Answer in the same language as the question
-- Use the conversation history above to maintain context
-- Be concise and direct
-- Return ONLY valid JSON in this exact format:
-{{"answer": "your answer here"}}
-Do not include markdown formatting, explanations, or any text outside the JSON object.
-"""
-
 PROMPT_ROUTING_SYSTEM = """You are a routing system that decides whether to use tools.
 
 Available tools:
@@ -39,26 +13,17 @@ Instructions:
 {{"action": "final_answer"}}
 
 Rules:
-- If the user asks about documentation or knowledge base AND you DO NOT have context → use "retrieve_context"
-- If you ALREADY have context → use "final_answer"
-- Include "args" only when the tool needs parameters
+- ALWAYS use "retrieve_context" when the user asks about: documentation, how to do something, explain something, usage, guide, manuals, or any knowledge base question
+- Use "final_answer" only when the user asks casual questions, greetings, opinions, or you already have context
 - Do NOT call retrieve_context more than once
 - Do NOT return anything else
+"""
 
-Query: {query}
-Answer:"""
-
-
-PROMP_GENERATE_ANSWER = """You are an expert assistant that answers questions.
-
-Question: {question}
-
+PROMPT_GENERATE_ANSWER = """You are an expert assistant that answers questions.
 Instructions:
-- Answer in the same language as the question
-- Be concise and direct
-- Return ONLY valid JSON in this exact format:
+- Answer in the same language at the question 
+- Be concise and direct 
+- Return valid JSON in this exact format:
 
 {{"answer": "your answer here"}}
-
-Do not include markdown formatting, explanations, or any text outside the JSON object.
 """

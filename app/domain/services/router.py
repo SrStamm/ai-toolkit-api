@@ -5,7 +5,7 @@ import structlog
 import threading
 
 from app.domain.providers.factory_provider import LLMFactory
-from app.domain.providers.base import BaseLLMProvider
+from app.domain.providers.base import BaseLLMProvider, Message
 from app.core.settings import get_primary_config, get_fallback_config
 from app.infrastructure.metrics import (
     llm_requests_total,
@@ -131,6 +131,96 @@ class LLMRouter:
 
             start_fb = time.perf_counter()
             response = self.fallback.chat(prompt)
+            duration_fb = time.perf_counter() - start_fb
+
+            llm_request_duration_seconds.labels(
+                self.fallback.name, self.fallback.model
+            ).observe(duration_fb)
+
+            llm_requests_total.labels(
+                self.fallback.name, self.fallback.model, "fallback"
+            ).inc()
+
+            return response
+
+    def chat_with_messages(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ):
+        """
+        Chat with message history and optional system prompt.
+        Uses primary provider with fallback on error.
+        """
+        now = time.time()
+        provider_name = self.primary.name
+        model_name = self.primary.model
+
+        if self.state == "OPEN":
+            if now - self.opened_at >= self.open_timeout:
+                self.state = "HALF-OPEN"
+                self._update_circuit_gauge("HALF-OPEN")
+                circuit_state_changes_total.labels("HALF-OPEN").inc()
+                self.logger.info("circuit_half_open")
+            else:
+                llm_fallback_total.labels(provider_name, self.fallback.name).inc()
+
+                llm_requests_total.labels(
+                    self.fallback.name, self.fallback.model, "fallback"
+                ).inc()
+
+                self.logger.info("llm_fallback_used", state=self.state, reason="OPEN")
+                return self.fallback.chat_with_messages(messages, system_prompt)
+
+        start = time.perf_counter()
+
+        try:
+            response = self.primary.chat_with_messages(messages, system_prompt)
+
+            duration = time.perf_counter() - start
+
+            llm_request_duration_seconds.labels(provider_name, model_name).observe(
+                duration
+            )
+
+            llm_requests_total.labels(provider_name, model_name, "success").inc()
+
+            with self._lock:
+                if self.state == "HALF-OPEN":
+                    self.logger.info(
+                        "circuit_closed",
+                        previous_state="HALF-OPEN",
+                        failure_count=self.failure_count,
+                    )
+
+                    self.state = "CLOSED"
+                    self.failure_count = 0
+                    self._update_circuit_gauge("CLOSED")
+                    circuit_state_changes_total.labels("CLOSED").inc()
+
+            return response
+
+        except Exception:
+            duration = time.perf_counter() - start
+            llm_request_duration_seconds.labels(provider_name, model_name).observe(
+                duration
+            )
+
+            llm_requests_total.labels(provider_name, model_name, "error").inc()
+
+            self._on_failure()
+
+            self.logger.info(
+                "llm_fallback_used", state=self.state, reason="threshold reached"
+            )
+
+            llm_fallback_total.labels(
+                provider_name,
+                self.fallback.name,
+            ).inc()
+
+            start_fb = time.perf_counter()
+            response = self.fallback.chat_with_messages(messages, system_prompt)
             duration_fb = time.perf_counter() - start_fb
 
             llm_request_duration_seconds.labels(
