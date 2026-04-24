@@ -84,7 +84,8 @@ class Agent:
         # Create prompt
         prompt = PROMPT_ROUTING_SYSTEM.format(
             query=state.query,
-            tool_list=tools
+            tool_list=tools,
+            context=True if state.context else False
         )
 
         # Call LLM
@@ -93,6 +94,11 @@ class Agent:
 
         try:
             decision_json = json.loads(raw)
+
+            if decision_json.get('action') == "retrieve_context" and state.context:
+                logger.warning("Preventing repeated context retrieval")
+                return "final_answer"
+
             return decision_json.get("action", "final_answer")
 
         except Exception:
@@ -133,11 +139,12 @@ class Agent:
             # Agent make a decision
             decision = self.router(state)
 
-            if decision == "retrieve_context":
+            if decision == "retrieve_context" and not state.context:
                 context = self.execute("retrieve_context", state.query)
                 state.context = context
-
             elif decision == "final_answer":
+                return self.generate_answer(state)
+            else:
                 return self.generate_answer(state)
 
 
