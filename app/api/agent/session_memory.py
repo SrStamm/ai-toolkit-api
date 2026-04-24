@@ -64,8 +64,8 @@ class RedisSessionMemory:
     """
 
     # Default settings
-    DEFAULT_WINDOW_SIZE = 10
-    DEFAULT_TTL_SECONDS = 86400  # 24 hours
+    DEFAULT_WINDOW_SIZE = 5
+    DEFAULT_TTL_SECONDS = 10800  # 3 hours
 
     def __init__(
         self,

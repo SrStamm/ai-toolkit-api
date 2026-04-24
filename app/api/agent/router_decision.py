@@ -36,20 +36,37 @@ class Router:
         
         Args:
             state: Estado actual del agente
-            
+             
         Returns:
             Decision con la acción a tomar
         """
         tools = self._build_tool_list()
+        
+        # Build conversation history for context
+        history_context = ""
+        if state.history:
+            prev_messages = []
+            for msg in state.history:
+                if msg.role == "user":
+                    prev_messages.append(f"User: {msg.content}")
+                elif msg.role == "assistant":
+                    prev_messages.append(f"Assistant: {msg.content}")
+            if prev_messages:
+                history_context = "\n\nPrevious conversation:\n" + "\n".join(prev_messages)
         
         system_content = PROMPT_ROUTING_SYSTEM.format(
             tool_list=tools,
             context=bool(state.context)
         )
         
+        # Include history in the user message if available
+        full_query = state.query
+        if history_context:
+            full_query = f"{history_context}\n\nCurrent question: {state.query}"
+        
         messages = [
             {"role": "system", "content": system_content},
-            {"role": "user", "content": state.query}
+            {"role": "user", "content": full_query}
         ]
         
         raw = self.llm.generate_content_with_messages(messages=messages).content.strip()
