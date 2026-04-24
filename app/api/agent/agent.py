@@ -1,7 +1,7 @@
 """
 Agent determinístico con tool registry.
 
-Decide qué tool usar según la query del usuario.
+Orquestador que coordina ToolRunner y Router para ejecutar acciones.
 """
 
 from typing import Optional
@@ -10,16 +10,17 @@ import uuid
 import json
 
 from .session_memory import get_session_memory, SessionMemory, Message
-from .schemas import AgentResponse, AgentState, Decision
+from .schemas import AgentResponse, AgentState, Decision, ActionType
 from .tools import ToolRegistry
 from .prompt import PROMPT_ROUTING_SYSTEM, PROMPT_GENERATE_ANSWER
+from .tool_runner import ToolRunner
+from .router_decision import Router
 from ..llamaindex_adapter.orchestrator import (
     LLMClient,
     LlamaIndexOrchestrator,
     get_orchestrator,
     get_llm_client,
 )
-from ...domain.exceptions import ToolNotFoundError
 
 logger = structlog.get_logger()
 
@@ -27,14 +28,15 @@ logger = structlog.get_logger()
 class Agent:
     """
     Agente determinístico que usa LLM para decidir qué tool ejecutar.
+    
+    Ahora actúa como orchestrator que coordina ToolRunner y Router.
     """
 
     def __init__(self, llm: LLMClient, rag: LlamaIndexOrchestrator):
-        # Inicializar tools lazily
-        ToolRegistry.initialize()
-
-        self.tools = ToolRegistry.list_tools()
-        self.deps = {"rag_orchestrator": rag, "llm_client": llm}
+        # Inicializar componentes
+        self.tool_runner = ToolRunner(deps={"rag_orchestrator": rag, "llm_client": llm})
+        self.router = Router(llm_client=llm)
+        self.router.tools = ToolRegistry.list_tools()
         self.llm = llm
         self.session_memory: SessionMemory = get_session_memory()
 
@@ -42,92 +44,50 @@ class Agent:
         """Create a new session ID."""
         return str(uuid.uuid4())
 
-    def _build_context(self, query: str, history: list[Message]) -> str:
-        """Build context string from conversation history."""
-        if not history:
-            return query
-
-        history_str = "\n".join([f"{msg.role}: {msg.content}" for msg in history])
-
-        return f"""Last conversation:
-        {history_str}
-        Query: {query}"""
-
-    def build_tool_list(self) -> str:
-        """Build human-readable list of available tools for the router prompt."""
-        return "\n".join(
-            f"- {name}: {defn.description} (params: {list(defn.parameters['properties'].keys())})"
-            for name, defn in self.tools.items()
-        )
-
-    def execute(self, tool_name: str, state: AgentState, tool_args: dict | None = None):
-        if tool_name not in self.tools:
-            raise ToolNotFoundError(f"Tool '{tool_name}' not found")
-
-        tool_def = self.tools[tool_name]
-
-        # deps
-        relevant_deps = {
-            k: v for k, v in self.deps.items()
-            if k in tool_def.dependencies
-        }
-
-        # filter state data by tool_params
-        tool_params = tool_def.parameters.get("properties", {}).keys()
-        state_data = state.model_dump()
-        filtered_state = {
-            k: v for k, v in state_data.items()
-            if k in tool_params
-        }
-
-        # Merge con prioridad:
-        final_kwargs = {
-            **(tool_args or {}),
-            **filtered_state,
-            **relevant_deps
-        }
-
-        return tool_def.handler(**final_kwargs)
-
-
-    def router(self, state: AgentState) -> Decision:
-        """Decide which tool to use based on the query."""
-        # Get available tools
-        tools = self.build_tool_list()
-
-        # Build messages: system with prompt + user with query
-        system_content = PROMPT_ROUTING_SYSTEM.format(
-            tool_list=tools,
-            context=True if state.context else False
-        )
+    def agent_loop(self, query: str, session_id: Optional[str] = None):
+        """Loop principal del agente.
         
-        messages = [
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": state.query}
-        ]
+        Coordina ToolRunner y Router para ejecutar acciones hasta llegar a FINAL_ANSWER.
+        """
+        # Create session_id if not exists
+        if not session_id:
+            session_id = self._create_session_id()
 
-        # Call LLM
-        raw = self.llm.generate_content_with_messages(messages=messages).content.strip()
-        logger.info("DEBUG_DECISION_ROUTER", raw=raw, query=state.query)
+        # Create state
+        state = AgentState(query=query, session_id=session_id)
 
-        try:
-            decision_json = json.loads(raw)
+        # Loop for agent
+        while True:
+            # Get decision from router
+            decision = self.router.get_decision(state)
 
-            # Prevent repeated context retrieval
-            if decision_json.get('action') == "retrieve_context" and state.context:
-                logger.warning("Preventing repeated context retrieval")
-                return Decision(action="final_answer")
+            # Handle FINAL_ANSWER
+            if decision.action == ActionType.FINAL_ANSWER:
+                break
 
-            return Decision(
-                action=decision_json.get("action", "final_answer"),
-                args=decision_json.get("args")
-            )
+            # Handle RETRIEVE_CONTEXT
+            if decision.action == ActionType.RETRIEVE_CONTEXT:
+                state.context = self.tool_runner.run(
+                    "retrieve_context",
+                    decision.args,
+                    state
+                )
+                continue
 
-        except Exception:
-            logger.warning(f"Invalid JSON from router: {raw}")
-            return Decision(action="final_answer")
+            # Handle CALL_TOOL
+            if decision.action == ActionType.CALL_TOOL:
+                result = self.tool_runner.run(
+                    decision.tool_name,
+                    decision.args,
+                    state
+                )
+                state.add_tool_result(result)
+                continue
+
+        return self.generate_answer(state)
 
     def generate_answer(self, state: AgentState) -> AgentResponse:
+        """Genera la respuesta final usando el LLM."""
         messages: list[dict] = []
 
         # System message with the prompt template
@@ -156,29 +116,6 @@ class Agent:
                 'provider': response.provider
             }
         )
-
-    def agent_loop(self, query: str, session_id: Optional[str] = None):
-        # Create session_id if not exists
-        if not session_id:
-            session_id = self._create_session_id()
-
-        # Create state
-        state = AgentState(query=query, session_id=session_id)
-
-        # Loop for agent
-        for step in range(3):
-            # Agent make a decision
-            decision = self.router(state)
-
-            if decision.action == "retrieve_context":
-                context = self.execute(
-                    "retrieve_context",
-                    state=state,
-                    tool_args=decision.args
-                )
-                state.context = context
-
-            return self.generate_answer(state)
 
 
 def create_agent() -> Agent:
