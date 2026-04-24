@@ -27,39 +27,54 @@ La versión v4.0 extiende el sistema RAG hacia un agente determinístico capaz d
 
 - Tool registry centralizado con decorador `@register_tool`
 - Abstracción de herramientas mediante `ToolDefinition` y `ToolResponse`
+- Arquitectura de 3 componentes: **Agent** (orquestador), **Router** (decisión LLM), **ToolRunner** (ejecución)
 - Router LLM que decide entre herramientas disponibles según la query
 - Memoria de sesión con ventana deslizante (window size configurable)
 - Inyección de dependencias por tool (cada tool declara qué deps necesita)
-- Agente expuesto vía endpoint `/agent/ask-custom`
+- Agente expuesto vía endpoint `/agent/agent-loop`
 - Frontend actualizado para consumir el endpoint del agente
 
 ### Arquitectura v4.0
 
-```ascii
+```
 Cliente / Frontend
 ↓
-FastAPI – /agent/ask-custom
+FastAPI – /agent/agent-loop
   - Validación de request
   - Gestión de session_id
 ↓
-Agent
+Agent (orquestador)
   - SessionMemory (historial por sesión)
-  - Router LLM (decide qué tool usar)
-  - Tool Executor (inyecta dependencias y ejecuta)
+  - while True loop
+      ↓
+    Router.get_decision() → Decision(ActionType)
+      ↓
+    ToolRunner.run() → ToolResponse
+      ↓
+    Tool (pure function)
+      ↓
+  State actualizado
 ↓
 Tools
-  ├── direct  → LLM sin contexto documental
-  └── rag     → LlamaIndex Orchestrator → Qdrant
+  ├── retrieve_context  → RAG → Qdrant
+  └── ...other_tools
 ↓
 AgentResponse (output + session_id + metadata)
 ```
 
+### Components
+
+| Componente | Responsabilidad |
+|------------|-----------------|
+| **Agent** | Orchestrator: controla el flow, llama router, ejecuta tool_runner, decide siguiente paso |
+| **Router** | LLM decide acción, devuelve `Decision` tipada con `ActionType` enum |
+| **ToolRunner** | Valida inputs, resuelve dependencias, mapea state → tool input, ejecuta la tool |
+
 ### Tools disponibles
 
-| Tool     | Descripción                                                   | Dependencias       |
-| -------- | ------------------------------------------------------------- | ------------------ |
-| `direct` | Responde conocimiento general sin consultar documentos        | `llm_client`       |
-| `rag`    | Busca en la base vectorial y construye respuesta con contexto | `rag_orchestrator` |
+| Tool               | Descripción                                                   | Dependencias       |
+| ------------------ | ------------------------------------------------------------- | ------------------ |
+| `retrieve_context` | Busca en la base vectorial y construye respuesta con contexto | `rag_orchestrator` |
 
 ---
 
@@ -134,8 +149,10 @@ Este proyecto demuestra:
 
 ### Agente
 
+- **Arquitectura de 3 componentes**: Agent (orchestrator), Router (LLM decision), ToolRunner (execution)
 - Tool registry centralizado con decorador `@register_tool`
-- Routing LLM hacia la tool adecuada
+- Routing LLM hacia la tool adecuada con `Decision` tipada
+- `ActionType` enum: `RETRIEVE_CONTEXT`, `CALL_TOOL`, `FINAL_ANSWER`
 - Memoria de sesión con ventana deslizante
 - Inyección de dependencias declarativa por tool
 - Respuesta estructurada con `AgentResponse`
@@ -208,17 +225,17 @@ Este proyecto demuestra:
 
 - Tool registry con decorador `@register_tool`
 - Abstracción de herramientas (`ToolDefinition`, `ToolResponse`)
-- Agente con router LLM
+- **Arquitectura de 3 componentes**: Agent, Router, ToolRunner
+- Router LLM con `Decision` tipada (`ActionType` enum)
 - Memoria de sesión por ventana deslizante
-- Tools: `direct` y `rag`
-- Endpoint `/agent/ask-custom`
+- Tool: `retrieve_context`
+- Endpoint `/agent/agent-loop`
 
-### V4.1 – Planner + mejoras del agente (próximo)
+### V4.1 – Mejoras del agente (en desarrollo)
 
-- Memoria de sesión con Redis
 - Output estructurado del router (JSON + validación Pydantic)
-- Planner básico (por definir)
-- Router entre: RAG, Tool, Direct LLM
+- Más tools integrables
+- Memoria de sesión con Redis
 
 ---
 
