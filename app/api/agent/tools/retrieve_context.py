@@ -7,7 +7,7 @@ Busca en la base vectorial y construye respuesta con contexto.
 from .tools_registry import ToolRegistry, ToolResponse
 
 
-def _rag_tool_handler(
+def _retrieve_context_tool_handler(
     query: str, top_k: int = 5, rag_orchestrator=None, **kwargs
 ) -> ToolResponse:
     """Handler para la tool RAG."""
@@ -20,14 +20,14 @@ def _rag_tool_handler(
     res = rag_orchestrator.get_context(query=query)
     return ToolResponse(
         output=res.answer,
-        metadata={"citations": res.citations, "metadata": res.metadata},
+        # metadata={"citations": res.citations, "metadata": res.metadata},
     )
 
 
-def register_rag_tool() -> None:
-    """Registra la tool RAG en el registry."""
+def register_retrieve_context_tool() -> None:
+    """Registra la tool en el registry."""
     ToolRegistry.register(
-        name="rag",
+        name="retrieve_context",
         description="Search in vector database. Use this when the user asks about information from documents or needs context from a knowledge base.",
         parameters={
             "type": "object",
@@ -41,6 +41,6 @@ def register_rag_tool() -> None:
             },
             "required": ["query"],
         },
-        handler=_rag_tool_handler,
+        handler=_retrieve_context_tool_handler,
         dependencies=["rag_orchestrator"],
     )
