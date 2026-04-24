@@ -1,7 +1,7 @@
 # ai-toolkit
 
-> **Versión actual:** `v4.0`  
-> **Estado:** estable (educacional / experimental, con agente determinístico)
+> **Versión actual:** `v4.1`  
+> **Estado:** estable (educacional / experimental, with contextual agent)
 
 **Herramientas de IA para backend (FastAPI)**
 
@@ -19,20 +19,16 @@
 
 ---
 
-## Estado actual – v4.0 (Agente determinístico + Orquestación)
+## Estado actual – v4.1 (Agente contextual)
 
-La versión v4.0 extiende el sistema RAG hacia un agente determinístico capaz de decidir qué herramienta usar según la naturaleza de la consulta. Se mantiene toda la infraestructura de v2.2 (Celery, Redis, Prometheus, Grafana) y se agrega una capa de orquestación sobre el pipeline existente.
+La versión v4.1 extiende el agente determinístico de v4.0 con memoria de conversación. El agente ahora recuerda lo que el usuario dijo y lo que el assistant respondió en sesiones previas, manteniendo contexto a través de múltiples turnos de diálogo.
 
-### Objetivos alcanzados en v4.0
+### Objetivos alcanzados en v4.1
 
-- Tool registry centralizado con decorador `@register_tool`
-- Abstracción de herramientas mediante `ToolDefinition` y `ToolResponse`
-- Arquitectura de 3 componentes: **Agent** (orquestador), **Router** (decisión LLM), **ToolRunner** (ejecución)
-- Router LLM que decide entre herramientas disponibles según la query
-- Memoria de sesión con ventana deslizante (window size configurable)
-- Inyección de dependencias por tool (cada tool declara qué deps necesita)
-- Agente expuesto vía endpoint `/agent/agent-loop`
-- Frontend actualizado para consumir el endpoint del agente
+- memorias de sesión conversaciones en Redis (sliding window de 5 mensajes)
+- TTL de 3 horas (renovable en cada interacción)
+- Historial de conversación inyectado al LLM en cada request
+- El agente responde correctamente cuando el usuario hace referencia a información previa
 
 ### Arquitectura v4.0
 
@@ -231,11 +227,12 @@ Este proyecto demuestra:
 - Tool: `retrieve_context`
 - Endpoint `/agent/agent-loop`
 
-### V4.1 – Mejoras del agente (en desarrollo)
+### V4.1 – Agente contextual (completado)
 
-- Output estructurado del router (JSON + validación Pydantic)
-- Más tools integrables
-- Memoria de sesión con Redis
+- Memoria de conversación en Redis con sliding window (5 mensajes)
+- TTL de 3 horas, renovado en cada interacción
+- Historial de conversación inyectado al LLM
+- El agente responde correctamente cuando el usuario hace referencia a información previa
 
 ---
 
