@@ -7,6 +7,9 @@ Busca en la base vectorial y construye respuesta con contexto.
 from typing import Optional
 from .tools_registry import ToolRegistry, ToolResponse
 from ...llamaindex_adapter.orchestrator import LlamaIndexOrchestrator
+import structlog
+
+logger = structlog.get_logger()
 
 
 def _retrieve_context_tool_handler(
@@ -21,6 +24,8 @@ def _retrieve_context_tool_handler(
             output="Error: RAG orchestrator not available",
             metadata={"error": "missing_dependency"},
         )
+
+    logger.info("tool_variables", query=query)
 
     res = rag_orchestrator.get_context(query=query, top_k=top_k)
 

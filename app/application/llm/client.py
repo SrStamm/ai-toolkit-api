@@ -8,6 +8,7 @@ from ...infrastructure.logging import time_response
 from ...domain.models import LLMResponse
 from ...domain.exceptions import StructuredOutputError
 from ...domain.services.router import LLMRouter, get_llm_router
+from ...domain.providers.base import Message
 
 load_dotenv()
 
@@ -21,6 +22,21 @@ class LLMClient:
     @time_response
     def generate_content(self, prompt: str) -> LLMResponse[str]:
         return self.router.chat(prompt)
+
+    @time_response
+    def generate_content_with_messages(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ) -> LLMResponse:
+        """
+        Generate content using message history and optional system prompt.
+
+        Args:
+            messages: List of messages with role and content.
+            system_prompt: Optional system prompt to prepend.
+        """
+        return self.router.chat_with_messages(messages, system_prompt)
 
     @time_response
     def generate_structured_output(

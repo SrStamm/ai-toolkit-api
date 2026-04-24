@@ -15,7 +15,7 @@ import structlog
 from app.domain.models import LLMResponse, TokenUsage
 from app.domain.services.pricing import ModelPricing
 from app.core.settings import LLMConfig
-from app.domain.providers.base import BaseLLMProvider
+from app.domain.providers.base import BaseLLMProvider, Message
 from app.domain.exceptions import (
     RetryableError,
     NetworkTimeoutError,
@@ -54,6 +54,17 @@ class RetryableProvider(BaseLLMProvider):
     @abstractmethod
     def _execute_chat_sync(self, prompt: str) -> LLMResponse:
         """Execute synchronous chat. Implement in subclass."""
+        ...
+
+    @abstractmethod
+    def _execute_chat_with_messages(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ) -> LLMResponse:
+        """
+        Execute synchronous chat with messages. Implement in subclass.
+        """
         ...
 
     @abstractmethod
@@ -120,6 +131,18 @@ class RetryableProvider(BaseLLMProvider):
     def chat(self, prompt: str) -> LLMResponse:
         """Synchronous chat with retry."""
         return self._with_retry_sync(lambda: self._execute_chat_sync(prompt))
+
+    def chat_with_messages(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ) -> LLMResponse:
+        """
+        Synchronous chat with message history and optional system prompt.
+        """
+        return self._with_retry_sync(
+            lambda: self._execute_chat_with_messages(messages, system_prompt)
+        )
 
     async def _with_retry_async(
         self, operation: Callable[[], AsyncIterator[tuple[str, T]]]

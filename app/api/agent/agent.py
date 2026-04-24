@@ -9,10 +9,10 @@ import structlog
 import uuid
 import json
 
-from .session_memory import get_session_memory, Message, SessionMemory
+from .session_memory import get_session_memory, SessionMemory, Message
 from .schemas import AgentResponse, AgentState, Decision
 from .tools import ToolRegistry
-from .prompt import PROMPT_ROUTING_SYSTEM, PROMP_GENERATE_ANSWER
+from .prompt import PROMPT_ROUTING_SYSTEM, PROMPT_GENERATE_ANSWER
 from ..llamaindex_adapter.orchestrator import (
     LLMClient,
     LlamaIndexOrchestrator,
@@ -82,8 +82,8 @@ class Agent:
 
         # Merge con prioridad:
         final_kwargs = {
-            **filtered_state,
             **(tool_args or {}),
+            **filtered_state,
             **relevant_deps
         }
 
@@ -95,16 +95,20 @@ class Agent:
         # Get available tools
         tools = self.build_tool_list()
 
-        # Create prompt
-        prompt = PROMPT_ROUTING_SYSTEM.format(
-            query=state.query,
+        # Build messages: system with prompt + user with query
+        system_content = PROMPT_ROUTING_SYSTEM.format(
             tool_list=tools,
             context=True if state.context else False
         )
+        
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": state.query}
+        ]
 
         # Call LLM
-        raw = self.llm.generate_content(prompt).content.strip()
-        logger.info("DEBUG_DECISION_ROUTER", raw=raw, prompt=prompt)
+        raw = self.llm.generate_content_with_messages(messages=messages).content.strip()
+        logger.info("DEBUG_DECISION_ROUTER", raw=raw, query=state.query)
 
         try:
             decision_json = json.loads(raw)
@@ -124,12 +128,20 @@ class Agent:
             return Decision(action="final_answer")
 
     def generate_answer(self, state: AgentState) -> AgentResponse:
-        prompt = PROMP_GENERATE_ANSWER.format(question=state.query)
+        messages: list[dict] = []
 
+        # System message with the prompt template
+        system_prompt = PROMPT_GENERATE_ANSWER
+        messages.append({"role": "system", "content": system_prompt})
+
+        # User message with context (if available) and the question
+        user_content = state.query
         if state.context:
-            prompt = prompt + f"Context: {state.context}"
+            user_content = f"Context from knowledge base:\n{state.context}\n\nQuestion: {state.query}"
+        
+        messages.append({"role": "user", "content": user_content})
 
-        response = self.llm.generate_content(prompt)
+        response = self.llm.generate_content_with_messages(messages=messages)
         parsed = json.loads(response.content)
 
         logger.info("DEBUG_RESPONSE_LLM", response=str(response))

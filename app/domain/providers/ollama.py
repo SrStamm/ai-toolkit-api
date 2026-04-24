@@ -4,12 +4,12 @@ Ollama local LLM provider implementation.
 
 import json
 from typing import Callable
+
 import httpx
 
-from app.core.settings import LLMConfig
-from app.domain.models import LLMResponse, TokenUsage
-from app.domain.services.pricing import ModelPricing
-from app.domain.providers.retryable_provider import RetryableProvider
+from ...domain.models import LLMResponse
+from ...domain.providers.retryable_provider import RetryableProvider
+from ...domain.providers.base import Message
 
 
 class OllamaProvider(RetryableProvider):
@@ -78,9 +78,28 @@ class OllamaProvider(RetryableProvider):
 
     def _execute_chat_sync(self, prompt: str) -> LLMResponse:
         """Execute synchronous chat with Ollama."""
+        messages = [{"role": "user", "content": prompt}]
+        return self._execute_chat_with_messages(messages)
+
+    def _execute_chat_with_messages(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ) -> LLMResponse:
+        """Execute synchronous chat with messages using Ollama."""
+        # Build messages list
+        chat_messages: list[dict] = []
+
+        # Add system prompt if provided
+        if system_prompt:
+            chat_messages.append({"role": "system", "content": system_prompt})
+
+        # Add provided messages
+        chat_messages.extend(messages)
+
         data = {
             "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": chat_messages,
             "stream": False,
         }
 
