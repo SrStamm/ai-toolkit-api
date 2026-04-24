@@ -2,6 +2,8 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from enum import Enum
 
+from .session_memory import Message
+
 
 class ActionType(str, Enum):
     RETRIEVE_CONTEXT = "retrieve_context"
@@ -24,7 +26,7 @@ class AgentState(BaseModel):
     query: str
     session_id: str
     top_k: int = 5
-    history: Optional[List[str]] = None
+    history: Optional[List[Message]] = None
     context: Optional[str] = None
     tool_results: List[str] = Field(default_factory=list)
 

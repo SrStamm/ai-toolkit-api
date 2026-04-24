@@ -56,6 +56,13 @@ class Agent:
         # Create state
         state = AgentState(query=query, session_id=session_id)
 
+        # Add user query to session history
+        self.session_memory.add(session_id, "user", query)
+
+        # Get conversation history for context
+        history = self.session_memory.get_history(session_id)
+        state.history = history
+
         # Loop for agent
         while True:
             # Get decision from router
@@ -94,6 +101,11 @@ class Agent:
         system_prompt = PROMPT_GENERATE_ANSWER
         messages.append({"role": "system", "content": system_prompt})
 
+        # Add conversation history as messages (excluding the last user message to avoid duplication)
+        if state.history:
+            for msg in state.history[:-1]:
+                messages.append({"role": msg.role, "content": msg.content})
+
         # User message with context (if available) and the question
         user_content = state.query
         if state.context:
@@ -105,6 +117,13 @@ class Agent:
         parsed = json.loads(response.content)
 
         logger.info("DEBUG_RESPONSE_LLM", response=str(response))
+
+        # Save assistant response to session history
+        self.session_memory.add(
+            state.session_id,
+            "assistant",
+            parsed["answer"]
+        )
 
         return AgentResponse(
             output=parsed["answer"],
