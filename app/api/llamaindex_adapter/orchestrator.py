@@ -111,6 +111,29 @@ class LlamaIndexOrchestrator:
 
         return query_engine.query(query)
 
+    def get_context(
+        self, query: str, domain: str | None = None,  topic: str | None = None
+    ):
+        # 1. Create filters
+        query_filters = self._query_filters(domain, topic)
+
+        # 2. Translate query if needed
+        retrieval_query = (
+            self._translate_to_english(query) if domain == "libros" else query
+        )
+
+        # 3. Retrieval + Rerank
+        retriever = self.index.as_retriever(
+            similarity_top_k=8, vector_store_query_mode="hybrid", filters=query_filters
+        )
+        nodes = retriever.retrieve(retrieval_query)
+        nodes = self.rerank._postprocess_nodes(nodes, query_bundle=QueryBundle(query))
+
+        # 4. Create Context and call LLM
+        context_str = "\n\n".join([n.get_content() for n in nodes])
+
+        return context_str
+
     def custom_query(
         self, query: str, domain: str | None = None, topic: str | None = None
     ) -> QueryResponse:

@@ -211,3 +211,7 @@ __marimo__/
 ollama/
 api_data/
 prometheus/
+
+.gga
+resterm.env.json
+ask-agent.rest

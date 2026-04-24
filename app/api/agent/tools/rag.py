@@ -17,7 +17,7 @@ def _rag_tool_handler(
             metadata={"error": "missing_dependency"},
         )
 
-    res = rag_orchestrator.custom_query(query=query)
+    res = rag_orchestrator.get_context(query=query)
     return ToolResponse(
         output=res.answer,
         metadata={"citations": res.citations, "metadata": res.metadata},
