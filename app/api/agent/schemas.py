@@ -13,6 +13,7 @@ class QueryAgentRequest(BaseModel):
     session_id: str | None = Field(default=None)
 
 class AgentState(BaseModel):
-    query: str 
+    query: str
+    session_id: str
     history: Optional[List[str]] = None
     context: Optional[str] = None
