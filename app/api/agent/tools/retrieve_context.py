@@ -4,11 +4,16 @@ RAG Tool para el agente.
 Busca en la base vectorial y construye respuesta con contexto.
 """
 
+from typing import Optional
 from .tools_registry import ToolRegistry, ToolResponse
+from ...llamaindex_adapter.orchestrator import LlamaIndexOrchestrator
 
 
-def _rag_tool_handler(
-    query: str, top_k: int = 5, rag_orchestrator=None, **kwargs
+def _retrieve_context_tool_handler(
+    query: str,
+    top_k: int = 5,
+    rag_orchestrator: Optional[LlamaIndexOrchestrator] = None,
+    **kwargs
 ) -> ToolResponse:
     """Handler para la tool RAG."""
     if rag_orchestrator is None:
@@ -17,17 +22,18 @@ def _rag_tool_handler(
             metadata={"error": "missing_dependency"},
         )
 
-    res = rag_orchestrator.custom_query(query=query)
+    res = rag_orchestrator.get_context(query=query, top_k=top_k)
+
     return ToolResponse(
-        output=res.answer,
-        metadata={"citations": res.citations, "metadata": res.metadata},
+        output=res,
+        # metadata={"citations": res.citations, "metadata": res.metadata},
     )
 
 
-def register_rag_tool() -> None:
-    """Registra la tool RAG en el registry."""
+def register_retrieve_context_tool() -> None:
+    """Registra la tool en el registry."""
     ToolRegistry.register(
-        name="rag",
+        name="retrieve_context",
         description="Search in vector database. Use this when the user asks about information from documents or needs context from a knowledge base.",
         parameters={
             "type": "object",
@@ -41,6 +47,6 @@ def register_rag_tool() -> None:
             },
             "required": ["query"],
         },
-        handler=_rag_tool_handler,
+        handler=_retrieve_context_tool_handler,
         dependencies=["rag_orchestrator"],
     )

@@ -6,13 +6,13 @@ from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import NodeWithScore
 from llama_index.core.vector_stores.types import MetadataFilter, MetadataFilters
 
-from app.api.llamaindex_adapter.ingestion import LlamaIngester
-from app.api.llamaindex_adapter.indexing import LlamaIndexer
-from app.api.llamaindex_adapter.config import setup_llamaindex
-from app.api.retrieval_engine.prompt import PROMPT_TEMPLATE_CHAT
-from app.api.retrieval_engine.schemas import Citation, Metadata, QueryResponse
-from app.infrastructure.embedding import get_rerank_model
-from app.application.llm.client import LLMClient, get_llm_client
+from .ingestion import LlamaIngester
+from .indexing import LlamaIndexer
+from .config import setup_llamaindex
+from ..retrieval_engine.prompt import PROMPT_TEMPLATE_CHAT
+from ..retrieval_engine.schemas import Citation, Metadata, QueryResponse
+from ...infrastructure.embedding import get_rerank_model
+from ...application.llm.client import LLMClient, get_llm_client
 
 setup_llamaindex()
 
@@ -110,6 +110,29 @@ class LlamaIndexOrchestrator:
         )
 
         return query_engine.query(query)
+
+    def get_context(
+        self, query: str, top_k: int, domain: str | None = None,  topic: str | None = None, 
+    ):
+        # 1. Create filters
+        query_filters = self._query_filters(domain, topic)
+
+        # 2. Translate query if needed
+        retrieval_query = (
+            self._translate_to_english(query) if domain == "libros" else query
+        )
+
+        # 3. Retrieval + Rerank
+        retriever = self.index.as_retriever(
+            similarity_top_k=top_k, vector_store_query_mode="hybrid", filters=query_filters
+        )
+        nodes = retriever.retrieve(retrieval_query)
+        nodes = self.rerank._postprocess_nodes(nodes, query_bundle=QueryBundle(query))
+
+        # 4. Create Context and call LLM
+        context_str = "\n\n".join([n.get_content() for n in nodes])
+
+        return context_str
 
     def custom_query(
         self, query: str, domain: str | None = None, topic: str | None = None

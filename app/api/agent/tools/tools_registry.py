@@ -6,9 +6,9 @@ Esto evita side effects al import y permite testing más fácil.
 """
 
 from dataclasses import dataclass, field
-from typing import Callable, Any
+from typing import Callable
 
-from app.domain.exceptions import ToolNotFoundError
+from ....domain.exceptions import ToolNotFoundError
 
 
 @dataclass
@@ -136,11 +136,9 @@ class ToolRegistry:
             return
 
         # Importar las tools lazily
-        from .direct import register_direct_tool
-        from .rag import register_rag_tool
+        from .retrieve_context import register_retrieve_context_tool
 
-        register_direct_tool()
-        register_rag_tool()
+        register_retrieve_context_tool()
 
         cls._initialized = True
 

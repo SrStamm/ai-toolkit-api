@@ -4,20 +4,22 @@ Agent determinístico con tool registry.
 Decide qué tool usar según la query del usuario.
 """
 
+from typing import Optional
 import structlog
 import uuid
+import json
 
-from app.api.agent.session_memory import get_session_memory, Message, SessionMemory
-from app.api.agent.schemas import AgentResponse
-from app.api.agent.tools import ToolRegistry
-from app.api.agent.prompt import PROMPT_ROUTING_SYSTEM
-from app.api.llamaindex_adapter.orchestrator import (
+from .session_memory import get_session_memory, Message, SessionMemory
+from .schemas import AgentResponse, AgentState, Decision
+from .tools import ToolRegistry
+from .prompt import PROMPT_ROUTING_SYSTEM, PROMP_GENERATE_ANSWER
+from ..llamaindex_adapter.orchestrator import (
     LLMClient,
     LlamaIndexOrchestrator,
     get_orchestrator,
     get_llm_client,
 )
-from app.domain.exceptions import ToolNotFoundError
+from ...domain.exceptions import ToolNotFoundError
 
 logger = structlog.get_logger()
 
@@ -58,68 +60,113 @@ class Agent:
             for name, defn in self.tools.items()
         )
 
-    def execute(self, tool_name: str, query: str, context_str: str = ""):
-        """Execute a tool by name."""
+    def execute(self, tool_name: str, state: AgentState, tool_args: dict | None = None):
         if tool_name not in self.tools:
-            raise ToolNotFoundError(f"Tool '{tool_name}' not found in registry")
+            raise ToolNotFoundError(f"Tool '{tool_name}' not found")
 
         tool_def = self.tools[tool_name]
 
+        # deps
         relevant_deps = {
-            k: v for k, v in self.deps.items() if k in tool_def.dependencies
+            k: v for k, v in self.deps.items()
+            if k in tool_def.dependencies
         }
 
-        kwargs = {"query": query, "context": context_str, **relevant_deps}
+        # filter state data by tool_params
+        tool_params = tool_def.parameters.get("properties", {}).keys()
+        state_data = state.model_dump()
+        filtered_state = {
+            k: v for k, v in state_data.items()
+            if k in tool_params
+        }
 
-        return tool_def.handler(**kwargs)
+        # Merge con prioridad:
+        final_kwargs = {
+            **filtered_state,
+            **(tool_args or {}),
+            **relevant_deps
+        }
 
-    def router(self, query: str) -> str:
+        return tool_def.handler(**final_kwargs)
+
+
+    def router(self, state: AgentState) -> Decision:
         """Decide which tool to use based on the query."""
+        # Get available tools
         tools = self.build_tool_list()
 
-        prompt = PROMPT_ROUTING_SYSTEM.format(query=query, tool_list=tools)
-
-        decision = self.llm.generate_content(prompt).content
-        decision = decision.strip().lower()
-
-        if "rag" in decision:
-            return "rag"
-        elif "direct" in decision:
-            return "direct"
-
-        # Fallback: si el modelo no devuelve algo esperado, default a direct
-        logger.warning(
-            f"Router returned unexpected output: {decision}, defaulting to direct"
+        # Create prompt
+        prompt = PROMPT_ROUTING_SYSTEM.format(
+            query=state.query,
+            tool_list=tools,
+            context=True if state.context else False
         )
-        return "direct"
 
-    def agent(self, query: str, session_id: str | None = None):
-        """Main agent loop: route query to appropriate tool and return response."""
-        # Create a session_id if not exists
+        # Call LLM
+        raw = self.llm.generate_content(prompt).content.strip()
+        logger.info("DEBUG_DECISION_ROUTER", raw=raw, prompt=prompt)
+
+        try:
+            decision_json = json.loads(raw)
+
+            # Prevent repeated context retrieval
+            if decision_json.get('action') == "retrieve_context" and state.context:
+                logger.warning("Preventing repeated context retrieval")
+                return Decision(action="final_answer")
+
+            return Decision(
+                action=decision_json.get("action", "final_answer"),
+                args=decision_json.get("args")
+            )
+
+        except Exception:
+            logger.warning(f"Invalid JSON from router: {raw}")
+            return Decision(action="final_answer")
+
+    def generate_answer(self, state: AgentState) -> AgentResponse:
+        prompt = PROMP_GENERATE_ANSWER.format(question=state.query)
+
+        if state.context:
+            prompt = prompt + f"Context: {state.context}"
+
+        response = self.llm.generate_content(prompt)
+        parsed = json.loads(response.content)
+
+        logger.info("DEBUG_RESPONSE_LLM", response=str(response))
+
+        return AgentResponse(
+            output=parsed["answer"],
+            session_id=state.session_id,
+            metadata={
+                'usage': response.usage,
+                'cost': response.cost,
+                'model': response.model,
+                'provider': response.provider
+            }
+        )
+
+    def agent_loop(self, query: str, session_id: Optional[str] = None):
+        # Create session_id if not exists
         if not session_id:
             session_id = self._create_session_id()
 
-        # Get history for session
-        history = self.session_memory.get_history(session_id)
+        # Create state
+        state = AgentState(query=query, session_id=session_id)
 
-        # Build query with the context
-        enriched_query = self._build_context(query, history)
+        # Loop for agent
+        for step in range(3):
+            # Agent make a decision
+            decision = self.router(state)
 
-        # Add user message
-        self.session_memory.add(session_id, "user", query)
+            if decision.action == "retrieve_context":
+                context = self.execute(
+                    "retrieve_context",
+                    state=state,
+                    tool_args=decision.args
+                )
+                state.context = context
 
-        # Router
-        decision = self.router(enriched_query)
-        result = self.execute(tool_name=decision, query=enriched_query)
-
-        # Add ai message
-        self.session_memory.add(session_id, "assistant", result.output)
-
-        logger.info("Tool execution", tool=decision, query=enriched_query)
-
-        return AgentResponse(
-            output=result.output, session_id=session_id, metadata=result.metadata or {}
-        )
+            return self.generate_answer(state)
 
 
 def create_agent() -> Agent:
