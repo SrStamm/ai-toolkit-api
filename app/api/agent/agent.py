@@ -110,34 +110,6 @@ class Agent:
 
         return response
 
-    def agent(self, query: str, session_id: str | None = None):
-        """Main agent loop: route query to appropriate tool and return response."""
-        # Create a session_id if not exists
-        if not session_id:
-            session_id = self._create_session_id()
-
-        # Get history for session
-        history = self.session_memory.get_history(session_id)
-
-        # Build query with the context
-        enriched_query = self._build_context(query, history)
-
-        # Add user message
-        self.session_memory.add(session_id, "user", query)
-
-        # Router
-        decision = self.router(enriched_query)
-        result = self.execute(tool_name=decision, query=enriched_query)
-
-        # Add ai message
-        self.session_memory.add(session_id, "assistant", result.output)
-
-        logger.info("Tool execution", tool=decision, query=enriched_query)
-
-        return AgentResponse(
-            output=result.output, session_id=session_id, metadata=result.metadata or {}
-        )
-
     def agent_loop(self, query: str):
         # Create state
         state = AgentState(query=query)
