@@ -7,17 +7,18 @@ Decide qué tool usar según la query del usuario.
 import structlog
 import uuid
 
-from app.api.agent.session_memory import get_session_memory, Message, SessionMemory
-from app.api.agent.schemas import AgentResponse
-from app.api.agent.tools import ToolRegistry
-from app.api.agent.prompt import PROMPT_ROUTING_SYSTEM
-from app.api.llamaindex_adapter.orchestrator import (
+from .session_memory import get_session_memory, Message, SessionMemory
+from .schemas import AgentResponse
+from .tools import ToolRegistry
+from .schemas import AgentState
+from .prompt import PROMPT_ROUTING_SYSTEM, PROMP_GENERATE_ANSWER
+from ..llamaindex_adapter.orchestrator import (
     LLMClient,
     LlamaIndexOrchestrator,
     get_orchestrator,
     get_llm_client,
 )
-from app.domain.exceptions import ToolNotFoundError
+from ...domain.exceptions import ToolNotFoundError
 
 logger = structlog.get_logger()
 
@@ -73,25 +74,38 @@ class Agent:
 
         return tool_def.handler(**kwargs)
 
-    def router(self, query: str) -> str:
+    def router(self, state: AgentState) -> str:
         """Decide which tool to use based on the query."""
         tools = self.build_tool_list()
 
-        prompt = PROMPT_ROUTING_SYSTEM.format(query=query, tool_list=tools)
+        prompt = PROMPT_ROUTING_SYSTEM.format(query=state.query, tool_list=tools)
+
+        logger.info("DEBU_PROMPT_ROUTER", prompt=prompt)
 
         decision = self.llm.generate_content(prompt).content
         decision = decision.strip().lower()
 
-        if "rag" in decision:
-            return "rag"
-        elif "direct" in decision:
-            return "direct"
+        logger.info("DEBU_DECISION_ROUTER", decision=decision)
 
-        # Fallback: si el modelo no devuelve algo esperado, default a direct
+        if "retrieve_context" in decision:
+            return "retrieve_context"
+
+        # Fallback: si el modelo no devuelve algo esperado, default a final_answer
         logger.warning(
-            f"Router returned unexpected output: {decision}, defaulting to direct"
+            f"Router returned unexpected output: {decision}, defaulting to final_answer"
         )
-        return "direct"
+
+        return "final_answer"
+
+    def generate_answer(self, state: AgentState) -> str:
+        prompt = PROMP_GENERATE_ANSWER.format(question=state.query)
+
+        if state.context:
+            prompt = prompt + f"Context: {state.context}"
+
+        response = self.llm.generate_content(prompt).content.strip().lower()
+
+        return response
 
     def agent(self, query: str, session_id: str | None = None):
         """Main agent loop: route query to appropriate tool and return response."""
@@ -120,6 +134,22 @@ class Agent:
         return AgentResponse(
             output=result.output, session_id=session_id, metadata=result.metadata or {}
         )
+
+    def agent_loop(self, query: str):
+        # Create state
+        state = AgentState(query=query)
+
+        # Loop for agent
+        for step in range(3):
+            # Agent make a decision
+            decision = self.router(state)
+
+            if decision == "retrieve_context":
+                context = self.execute("retrieve_context", state.query)
+                state.context = context
+
+            elif decision == "final_answer":
+                return self.generate_answer(state)
 
 
 def create_agent() -> Agent:
