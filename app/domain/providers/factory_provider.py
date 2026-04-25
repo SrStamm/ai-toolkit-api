@@ -2,6 +2,7 @@
 Factory para crear proveedores LLM con soporte para overrides en tiempo de ejecución.
 """
 
+import os
 from typing import Any
 
 from ...core.settings import LLMConfig
@@ -18,6 +19,12 @@ class LLMFactory:
         "ollama": OllamaProvider,
         "mistral": MistralProvider,
         "groq": GroqProvider,
+    }
+
+    # Mapping provider -> env var para API key
+    _api_key_env_vars: dict[str, str] = {
+        "mistral": "MISTRAL_API_KEY",
+        "groq": "GROQ_API_KEY",
     }
 
     @staticmethod
@@ -53,5 +60,14 @@ class LLMFactory:
 
         if not provider_class:
             raise ValueError(f"Proveedor {provider_name} no soportado")
+
+        # Get API key from env var if not in config
+        api_key = config_to_use.api_key
+        if not api_key:
+            env_var = LLMFactory._api_key_env_vars.get(provider_name)
+            if env_var:
+                api_key = os.getenv(env_var, "")
+
+        config_to_use = config_to_use.model_copy(update={"api_key": api_key})
 
         return provider_class(config_to_use)
