@@ -6,6 +6,7 @@ from typing import Any
 
 from ...core.settings import LLMConfig
 from ...domain.providers.base import BaseLLMProvider
+from ...domain.providers.groq import GroqProvider
 from ...domain.providers.mistral import MistralProvider
 from ...domain.providers.ollama import OllamaProvider
 
@@ -16,6 +17,7 @@ class LLMFactory:
     _providers: dict[str, type[BaseLLMProvider]] = {
         "ollama": OllamaProvider,
         "mistral": MistralProvider,
+        "groq": GroqProvider,
     }
 
     @staticmethod
