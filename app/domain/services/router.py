@@ -272,11 +272,18 @@ class LLMRouter:
         return _stream()
 
 
-def get_llm_router() -> LLMRouter:
+def get_llm_router(
+    provider_override: str | None = None,
+    model_override: str | None = None,
+) -> LLMRouter:
     config_primary = get_primary_config()
     config_fallback = get_fallback_config()
 
-    primary = LLMFactory.create_provider(config_primary)
+    primary = LLMFactory.create_provider(
+        config_primary,
+        provider_override=provider_override,
+        model_override=model_override,
+    )
     fallback = LLMFactory.create_provider(config_fallback)
 
     return LLMRouter(primary=primary, fallback=fallback)

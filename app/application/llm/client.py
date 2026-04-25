@@ -84,6 +84,12 @@ class LLMClient:
             yield (chunk, final_response)
 
 
-def get_llm_client():
-    router: LLMRouter = get_llm_router()
+def get_llm_client(
+    provider_override: str | None = None,
+    model_override: str | None = None,
+):
+    router: LLMRouter = get_llm_router(
+        provider_override=provider_override,
+        model_override=model_override,
+    )
     return LLMClient(router)

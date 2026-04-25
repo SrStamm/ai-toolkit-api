@@ -12,15 +12,10 @@ from typing import Callable, TypeVar
 from collections.abc import AsyncIterator
 import structlog
 
-from app.domain.models import LLMResponse, TokenUsage
-from app.domain.services.pricing import ModelPricing
-from app.core.settings import LLMConfig
-from app.domain.providers.base import BaseLLMProvider, Message
-from app.domain.exceptions import (
-    RetryableError,
-    NetworkTimeoutError,
-    ConnectionError as LLMConnectionError,
-)
+from ..models import LLMResponse, TokenUsage, CostBreakdown
+from ..services.pricing import ModelPricing
+from ..providers.base import BaseLLMProvider, Message
+from ...core.settings import LLMConfig
 
 T = TypeVar("T")
 logger = structlog.get_logger()
@@ -294,11 +289,19 @@ class RetryableProvider(BaseLLMProvider):
             total_tokens=prompt_tokens + completion_tokens,
         )
 
-        cost = ModelPricing.calculate_cost(
-            self.config.model,
-            usage.prompt_tokens,
-            usage.completion_tokens,
-        )
+        if self.config.provider == "ollama":
+            cost = CostBreakdown(
+                input_cost=0.0,
+                output_cost=0.0,
+                total_cost=0.0,
+                currency="None"
+            )
+        else:
+            cost = ModelPricing.calculate_cost(
+                self.config.model,
+                usage.prompt_tokens,
+                usage.completion_tokens,
+            )
 
         final_response = LLMResponse(
             content=accumulated_content,
@@ -323,11 +326,19 @@ class RetryableProvider(BaseLLMProvider):
             total_tokens=prompt_tokens + completion_tokens,
         )
 
-        cost = ModelPricing.calculate_cost(
-            self.config.model,
-            usage.prompt_tokens,
-            usage.completion_tokens,
-        )
+        if self.config.provider == "ollama":
+            cost = CostBreakdown(
+                input_cost=0.0,
+                output_cost=0.0,
+                total_cost=0.0,
+                currency="None"
+            )
+        else:
+            cost = ModelPricing.calculate_cost(
+                self.config.model,
+                usage.prompt_tokens,
+                usage.completion_tokens,
+            )
 
         return LLMResponse(
             content=content,
