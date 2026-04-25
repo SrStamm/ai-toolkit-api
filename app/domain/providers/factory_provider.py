@@ -61,9 +61,14 @@ class LLMFactory:
         if not provider_class:
             raise ValueError(f"Proveedor {provider_name} no soportado")
 
-        # Get API key from env var if not in config
+        # Get API key: if provider_override, always use env var for that provider
+        # otherwise use config.api_key if set, otherwise fallback to env var
         api_key = config_to_use.api_key
-        if not api_key:
+        if provider_override:
+            env_var = LLMFactory._api_key_env_vars.get(provider_override)
+            if env_var:
+                api_key = os.getenv(env_var, "")
+        elif not api_key:
             env_var = LLMFactory._api_key_env_vars.get(provider_name)
             if env_var:
                 api_key = os.getenv(env_var, "")
