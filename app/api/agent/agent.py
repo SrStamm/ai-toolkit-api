@@ -137,9 +137,12 @@ class Agent:
         )
 
 
-def create_agent() -> Agent:
+def create_agent(
+    provider: str | None = None,
+    model: str | None = None,
+) -> Agent:
     """Factory function to create an Agent instance."""
-    return Agent(llm=get_llm_client(), rag=get_orchestrator())
+    return Agent(llm=get_llm_client(provider, model), rag=get_orchestrator())
 
 
 def get_agent() -> Agent:
