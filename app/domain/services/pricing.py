@@ -14,6 +14,7 @@ class ModelPricing:
         # Groq
         "llama-3.1-70b-versatile": {"input": 0.65, "output": 0.8},
         "llama-3.1-8b-instant": {"input": 0.05, "output": 0.08},
+        "llama-3.3-70b-versatile": {"input": 0.59, "output": 0.79},
         "mixtral-8x7b-32768": {"input": 0.24, "output": 0.24},
     }
 
