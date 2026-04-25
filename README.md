@@ -60,11 +60,11 @@ AgentResponse (output + session_id + metadata)
 
 ### Components
 
-| Componente | Responsabilidad |
-|------------|-----------------|
-| **Agent** | Orchestrator: controla el flow, llama router, ejecuta tool_runner, decide siguiente paso |
-| **Router** | LLM decide acción, devuelve `Decision` tipada con `ActionType` enum |
-| **ToolRunner** | Valida inputs, resuelve dependencias, mapea state → tool input, ejecuta la tool |
+| Componente     | Responsabilidad                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| **Agent**      | Orchestrator: controla el flow, llama router, ejecuta tool_runner, decide siguiente paso |
+| **Router**     | LLM decide acción, devuelve `Decision` tipada con `ActionType` enum                      |
+| **ToolRunner** | Valida inputs, resuelve dependencias, mapea state → tool input, ejecuta la tool          |
 
 ### Tools disponibles
 
@@ -201,14 +201,14 @@ Este proyecto demuestra:
 - Mejor estrategia de metadata
 - Mejora de filtros semánticos
 
-### V3.1
+### V3.1 (completado)
 
 - Integrar RAGAS
 - Medir faithfulness
 - Medir answer relevancy
 - Medir context precision
 
-### V3.2
+### V3.2 (completado)
 
 - Implementar versión con LlamaIndex
 - Comparar:
@@ -233,6 +233,56 @@ Este proyecto demuestra:
 - TTL de 3 horas, renovado en cada interacción
 - Historial de conversación inyectado al LLM
 - El agente responde correctamente cuando el usuario hace referencia a información previa
+
+### V4.2 – Agent State & Multi-Provider
+
+- Soporte para múltiples providers:
+  - groq
+  - Selección dinámica de modelo/provider por request
+- Dynamic model selection:
+  - Configuración de providers (.yaml/.py)
+  - Selección via headers o request config
+  - `LLMFactory` resuelve provider activo
+- Evolución del estado del agente:
+  - `last_tool`
+  - `last_tool_result`
+  - `tool_execution_count`
+- Mejora en trazabilidad del reasoning del agente
+
+### V4.3 – Retrieval Quality & Streaming
+
+- Mejora de `retrieve_context`:
+  - Filtros por dominio
+  - Devolver citations
+- Documents management tools:
+  - `delete_document`
+  - `reindex_document`
+  - `get_document_metadata`
+  - Uso de metadata (`document_name`) como identificador lógico
+- Streaming de respuesta del agente
+- Refactor del tool registry:
+  - Registro dinámico de tools
+
+### V4.4 – Autonomous Ingestion & Simplification
+
+- Nuevas tools:
+  - `ingest_url`
+  - `ingest_file`
+- Human-in-the-loop ingestion:
+  - Las ingestas no se ejecutan automáticamente
+  - Se encolan como `PENDING`
+  - Nuevas tools:
+    - `list_pending_ingestions`
+    - `approve_ingestion`
+- El agente solicita metadata al usuario:
+  - `domain`
+  - `topic`
+- Mejora del Router:
+  - Detección automática de input (URL vs archivo)
+  - Eliminación de argumentos innecesarios en `_final_answer_`
+- Simplificación del sistema:
+  - Eliminación de endpoints redundantes
+  - Eliminación de RAG manual (todo pasa por el agente)
 
 ---
 
