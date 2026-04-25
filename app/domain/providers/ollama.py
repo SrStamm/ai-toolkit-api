@@ -4,7 +4,6 @@ Ollama local LLM provider implementation.
 
 import json
 from typing import Callable
-
 import httpx
 
 from ...domain.models import LLMResponse
