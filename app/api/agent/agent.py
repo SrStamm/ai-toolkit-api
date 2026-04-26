@@ -152,7 +152,17 @@ class Agent:
         messages.append({"role": "user", "content": user_content})
 
         response = self.llm.generate_content_with_messages(messages=messages)
-        parsed = json.loads(response.content)
+        
+        # Verificar que la respuesta no esté vacía
+        if not response.content or not response.content.strip():
+            logger.warning("Empty LLM response, using fallback")
+            parsed = {"answer": state.context or "No se pudo generar una respuesta."}
+        else:
+            try:
+                parsed = json.loads(response.content)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Invalid JSON from LLM: {e}, using fallback")
+                parsed = {"answer": state.context or "No se pudo generar una respuesta."}
 
         logger.info(
             "llm_final_response",
