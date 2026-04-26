@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { getProviders } from "@/services/llmServices";
-import type { LLMProvider, LLMModel } from "@/types/llm";
+import type { LLMProvider } from "@/types/llm";
 import { showToastError } from "./toast";
 
 interface UseLLMConfigReturn {
@@ -18,14 +18,19 @@ export function useLLMConfig(): UseLLMConfigReturn {
   const [providers, setProviders] = useState<LLMProvider[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const setProvider = useCallback((newProvider: string) => {
-    const providerConfig = providers.find(p => p.name === newProvider);
-    if (providerConfig) {
-      setProviderState(newProvider);
-      // Auto-set model to default when provider changes
-      setModelState(providerConfig.default_model || providerConfig.models[0]?.name || "");
-    }
-  }, [providers]);
+  const setProvider = useCallback(
+    (newProvider: string) => {
+      const providerConfig = providers.find((p) => p.name === newProvider);
+      if (providerConfig) {
+        setProviderState(newProvider);
+        // Auto-set model to default when provider changes
+        setModelState(
+          providerConfig.default_model || providerConfig.models[0]?.name || "",
+        );
+      }
+    },
+    [providers],
+  );
 
   const setModel = useCallback((newModel: string) => {
     setModelState(newModel);
@@ -36,15 +41,20 @@ export function useLLMConfig(): UseLLMConfigReturn {
       try {
         const data = await getProviders();
         setProviders(data);
-        
+
         if (data.length > 0) {
           const defaultProvider = data[0];
           setProviderState(defaultProvider.name);
-          setModelState(defaultProvider.default_model || defaultProvider.models[0]?.name || "");
+          setModelState(
+            defaultProvider.default_model ||
+              defaultProvider.models[0]?.name ||
+              "",
+          );
         }
         setIsLoaded(true);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Error al cargar providers";
+        const errorMessage =
+          err instanceof Error ? err.message : "Error al cargar providers";
         showToastError(errorMessage);
         setIsLoaded(true);
       }
@@ -72,15 +82,15 @@ interface LLMSelectorProps {
   isLoading?: boolean;
 }
 
-export function LLMSelector({ 
-  provider, 
-  model, 
-  providers, 
-  onProviderChange, 
+export function LLMSelector({
+  provider,
+  model,
+  providers,
+  onProviderChange,
   onModelChange,
-  isLoading 
+  isLoading,
 }: LLMSelectorProps) {
-  const selectedProvider = providers.find(p => p.name === provider);
+  const selectedProvider = providers.find((p) => p.name === provider);
   const models = selectedProvider?.models || [];
 
   const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -108,9 +118,9 @@ export function LLMSelector({
           </option>
         ))}
       </select>
-      
+
       <span className="text-muted-foreground/50">/</span>
-      
+
       <select
         value={model}
         onChange={handleModelChange}
@@ -125,3 +135,4 @@ export function LLMSelector({
     </div>
   );
 }
+
