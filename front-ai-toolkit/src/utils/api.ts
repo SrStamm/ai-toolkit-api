@@ -4,15 +4,17 @@ interface FetchProps {
   path: string;
   method: string;
   body?: object;
+  headers?: Record<string, string>;
 }
 
-const Fetch = async <T = unknown>({ path, method, body }: FetchProps): Promise<T> => {
+const Fetch = async <T = unknown>({ path, method, body, headers }: FetchProps): Promise<T> => {
   const Body = body !== undefined ? JSON.stringify(body) : undefined;
 
   const fetchOptions: RequestInit = {
     method: method,
     headers: {
       "Content-Type": "application/json",
+      ...headers,
     },
     ...(Body && { body: Body }),
   };
