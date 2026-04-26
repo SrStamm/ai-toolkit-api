@@ -63,21 +63,50 @@ class Agent:
         history = self.session_memory.get_history(session_id)
         state.history = history
 
-        # Loop for agent
+        # Loop for agent - with step counter
+        step = 0
         while True:
+            step += 1
+            
             # Get decision from router
             decision = self.router.get_decision(state)
+            
+            logger.info(
+                "agent_step",
+                step=step,
+                decision_action=decision.action.value,
+                decision_tool=decision.tool_name,
+                decision_args=decision.args,
+                session_id=session_id,
+            )
 
             # Handle FINAL_ANSWER
             if decision.action == ActionType.FINAL_ANSWER:
+                logger.info(
+                    "agent_finished",
+                    step=step,
+                    total_tool_executions=state.tool_execution_count,
+                    session_id=session_id,
+                )
                 break
 
             # Handle RETRIEVE_CONTEXT
             if decision.action == ActionType.RETRIEVE_CONTEXT:
-                state.context = self.tool_runner.run(
+                result = self.tool_runner.run(
                     "retrieve_context",
                     decision.args,
                     state
+                )
+                # Guardar contexto obtenido
+                state.context = result.output
+                state.set_last_tool("retrieve_context", result.output)
+                logger.info(
+                    "agent_tool_executed",
+                    step=step,
+                    tool="retrieve_context",
+                    args=decision.args,
+                    result_preview=result.output[:300],
+                    session_id=session_id,
                 )
                 continue
 
@@ -88,7 +117,16 @@ class Agent:
                     decision.args,
                     state
                 )
-                state.add_tool_result(result)
+                # Registrar trazabilidad de tool
+                state.set_last_tool(decision.tool_name, result.output)
+                logger.info(
+                    "agent_tool_executed",
+                    step=step,
+                    tool=decision.tool_name,
+                    args=decision.args,
+                    result_preview=result.output[:300],
+                    session_id=session_id,
+                )
                 continue
 
         return self.generate_answer(state)
@@ -114,9 +152,29 @@ class Agent:
         messages.append({"role": "user", "content": user_content})
 
         response = self.llm.generate_content_with_messages(messages=messages)
-        parsed = json.loads(response.content)
+        
+        # Verificar que la respuesta no esté vacía
+        if not response.content or not response.content.strip():
+            logger.warning("Empty LLM response, using fallback")
+            parsed = {"answer": state.context or "No se pudo generar una respuesta."}
+        else:
+            try:
+                parsed = json.loads(response.content)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Invalid JSON from LLM: {e}, using fallback")
+                parsed = {"answer": state.context or "No se pudo generar una respuesta."}
 
-        logger.info("DEBUG_RESPONSE_LLM", response=str(response))
+        logger.info(
+            "llm_final_response",
+            answer=parsed["answer"][:200] + "..." if len(parsed["answer"]) > 200 else parsed["answer"],
+            model=response.model,
+            provider=response.provider,
+            usage_prompt=response.usage.prompt_tokens,
+            usage_completion=response.usage.completion_tokens,
+            usage_total=response.usage.total_tokens,
+            cost_usd=round(response.cost.total_cost, 6),
+            session_id=state.session_id,
+        )
 
         # Save assistant response to session history
         self.session_memory.add(
