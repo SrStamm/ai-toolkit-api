@@ -97,6 +97,8 @@ class Agent:
                     decision.args,
                     state
                 )
+                # Guardar contexto obtenido
+                state.context = result.output
                 state.set_last_tool("retrieve_context", result.output)
                 logger.info(
                     "agent_tool_executed",
