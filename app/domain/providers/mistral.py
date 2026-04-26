@@ -1,38 +1,39 @@
 """
-Mistral AI provider implementation.
+Mistral AI provider implementation using httpx.
 """
 
 from collections.abc import AsyncIterator
 from typing import Callable
 
-from mistralai.client import Mistral
-from httpx import ConnectError, NetworkError, TimeoutException
+import httpx
 
-from ...domain.models import LLMResponse, TokenUsage
-from ...domain.services.pricing import ModelPricing
+from ...domain.models import LLMResponse
 from ...domain.providers.retryable_provider import RetryableProvider
 from ...domain.providers.base import Message
 
 
 class MistralProvider(RetryableProvider):
     """
-    Mistral AI provider using the RetryableProvider base.
+    Mistral AI provider using httpx directly (no SDK).
     """
+
+    BASE_URL = "https://api.mistral.ai/v1"
+    CHAT_COMPLETIONS_ENDPOINT = f"{BASE_URL}/chat/completions"
 
     def _setup_provider(self) -> None:
         """Setup Mistral-specific attributes."""
-        self.client = Mistral(api_key=self.config.api_key)
         self.name = "mistral"
         self.model = self.config.model
+        self.api_key = self.config.api_key
+        self._timeout = httpx.Timeout(timeout=60.0, connect=10.0, read=None)
 
     def _get_retryable_exceptions(self) -> tuple[type[Exception], ...]:
         """Mistral-specific retryable exceptions."""
         return (
-            TimeoutError,
-            ConnectionError,
-            ConnectError,
-            TimeoutException,
-            NetworkError,
+            httpx.TimeoutException,
+            httpx.ConnectError,
+            httpx.NetworkError,
+            httpx.ReadError,
         )
 
     def _execute_chat_sync(self, prompt: str) -> LLMResponse:
@@ -59,31 +60,40 @@ class MistralProvider(RetryableProvider):
         # Add provided messages
         chat_messages.extend(messages)
 
-        chat_response = self.client.chat.complete(
-            model=self.config.model,
-            messages=chat_messages,
-            temperature=self.config.temperature,
-            response_format={"type": "json_object"},
-        )
+        # Request payload
+        data = {
+            "model": self.model,
+            "messages": chat_messages,
+            "temperature": self.config.temperature,
+            "response_format": {"type": "json_object"},
+        }
 
-        usage = TokenUsage(
-            prompt_tokens=chat_response.usage.prompt_tokens,
-            completion_tokens=chat_response.usage.completion_tokens,
-            total_tokens=chat_response.usage.total_tokens,
-        )
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
 
-        cost = ModelPricing.calculate_cost(
-            model=self.config.model,
-            prompt_tokens=usage.prompt_tokens,
-            completion_tokens=usage.completion_tokens,
-        )
+        with httpx.Client(timeout=self._timeout) as client:
+            response = client.post(
+                self.CHAT_COMPLETIONS_ENDPOINT,
+                headers=headers,
+                json=data,
+            )
+            response.raise_for_status()
+            response_data = response.json()
 
-        return LLMResponse(
-            content=chat_response.choices[0].message.content,
-            usage=usage,
-            cost=cost,
-            model=self.config.model,
-            provider=self.name,
+        # Extract response content
+        content = response_data["choices"][0]["message"]["content"]
+
+        # Extract usage info
+        usage = response_data.get("usage", {})
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+
+        return self._build_usage_response(
+            content=content,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
         )
 
     def _execute_chat_stream(
@@ -98,35 +108,56 @@ class MistralProvider(RetryableProvider):
             (content, prompt_tokens, completion_tokens)
             - content is empty string for final yield with token counts
         """
-        response = self.client.chat.stream(
-            model=self.config.model,
-            messages=[
+        import json as json_lib
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        data = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": prompt},
             ],
-            temperature=self.config.temperature,
-        )
+            "temperature": self.config.temperature,
+            "stream": True,
+        }
 
         prompt_tokens = 0
         completion_tokens = 0
 
-        for event in response:
-            if hasattr(event, "data") and event.data:
-                chunk_data = event.data
+        with httpx.Client(timeout=self._timeout) as client:
+            with client.stream(
+                "POST",
+                self.CHAT_COMPLETIONS_ENDPOINT,
+                headers=headers,
+                json=data,
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
 
-                if (
-                    hasattr(chunk_data, "choices")
-                    and chunk_data.choices
-                    and len(chunk_data.choices) > 0
-                ):
-                    delta = chunk_data.choices[0].delta
+                    chunk_data = line[6:]  # Remove "data: " prefix
+                    if chunk_data == "[DONE]":
+                        break
 
-                    if hasattr(delta, "content") and delta.content:
-                        content = delta.content
+                    chunk_json = json_lib.loads(chunk_data)
+                    delta = chunk_json.get("choices", [{}])[0].get("delta", {}).get(
+                        "content", ""
+                    )
+
+                    if delta:
                         if on_chunk:
-                            on_chunk(content)
-                        yield (content, 0, 0)
+                            on_chunk(delta)
+                        yield (delta, 0, 0)
 
-        # Mistral doesn't provide token counts in stream response
-        # Estimate based on content length
-        yield ("", 0, 0)
+                    usage = chunk_json.get("usage", {})
+                    if usage.get("prompt_tokens"):
+                        prompt_tokens = usage["prompt_tokens"]
+                    if usage.get("completion_tokens"):
+                        completion_tokens = usage["completion_tokens"]
+
+        # Yield final response with token counts
+        yield ("", prompt_tokens, completion_tokens)

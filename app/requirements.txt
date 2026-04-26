@@ -13,7 +13,6 @@ chardet
 pandas
 
 qdrant-client
-mistralai
 sentence-transformers
 python-multipart
 structlog
