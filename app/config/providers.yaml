@@ -1,0 +1,42 @@
+# Configuración de proveedores y modelos para LLM
+#
+# Estructura:
+# providers:
+#   - name: "nombre-del-proveedor"
+#     api_key_env: "NOMBRE_VARIABLE_ENTORNO"  # Nombre de la variable de entorno para la API key
+#     default_model: "modelo-por-defecto"      # Opcional: modelo por defecto para el proveedor
+#     models:
+#       - name: "nombre-del-modelo"
+#         max_tokens: 32000
+#         supports_tools: true/false
+
+providers:
+  - name: "mistral"
+    api_key_env: "MISTRAL_API_KEY"
+    default_model: "mistral-small-latest"
+    models:
+      - name: "mistral-small-latest"
+        max_tokens: 32000
+        supports_tools: true
+      - name: "mistral-large-latest"
+        max_tokens: 128000
+        supports_tools: true
+
+  - name: "ollama"
+    api_key_env: ""
+    default_model: "qwen2.5:7b"
+    models:
+      - name: "qwen2.5:7b"
+        max_tokens: 8000
+        supports_tools: false
+      - name: "llama3.1:8b"
+        max_tokens: 8000
+        supports_tools: false
+
+  - name: "groq"
+    api_key_env: "GROQ_API_KEY"
+    default_model: "llama-3.3-70b-versatile"
+    models:
+      - name: "llama-3.3-70b-versatile"
+        max_tokens: 131072
+        supports_tools: true

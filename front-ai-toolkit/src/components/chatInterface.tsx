@@ -10,6 +10,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { cn } from "@/lib/utils";
 import { SendHorizonal, Loader2, Bot, User } from "lucide-react";
+import { useLLMConfig, LLMSelector } from "./llmConfigBar";
 
 interface Message {
   id: string;
@@ -31,6 +32,8 @@ const codeBlockStyle = {
 };
 
 export function ChatInterface() {
+  const { provider, model, providers, isLoaded, setProvider, setModel } = useLLMConfig();
+  
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -72,7 +75,10 @@ export function ChatInterface() {
     };
 
     try {
-      const response = await agentAsk(body);
+      const response = await agentAsk(body, {
+        provider,
+        model,
+      });
 
       if (response.session_id) {
         setSessionId(response.session_id);
@@ -108,6 +114,22 @@ export function ChatInterface() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Header con selector de LLM */}
+      <div className="shrink-0 px-4 py-2 border-b flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Bot className="size-4 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">LLM:</span>
+        </div>
+        <LLMSelector
+          provider={provider}
+          model={model}
+          providers={providers}
+          onProviderChange={setProvider}
+          onModelChange={setModel}
+          isLoading={!isLoaded}
+        />
+      </div>
+
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {messages.length === 0 ? (
