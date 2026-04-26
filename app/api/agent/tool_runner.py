@@ -69,8 +69,8 @@ class ToolRunner:
             "agent_tool_executed",
             tool_name=tool_name,
             args=args or {},
-            result_preview=result.content[:500] if len(result.content) > 500 else result.content,
-            result_length=len(result.content),
+            result_preview=result.output[:500] if len(result.output) > 500 else result.output,
+            result_length=len(result.output),
         )
         
         return result

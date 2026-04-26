@@ -97,13 +97,13 @@ class Agent:
                     decision.args,
                     state
                 )
-                state.set_last_tool("retrieve_context", result.content)
+                state.set_last_tool("retrieve_context", result.output)
                 logger.info(
                     "agent_tool_executed",
                     step=step,
                     tool="retrieve_context",
                     args=decision.args,
-                    result_preview=result.content[:300],
+                    result_preview=result.output[:300],
                     session_id=session_id,
                 )
                 continue
@@ -116,13 +116,13 @@ class Agent:
                     state
                 )
                 # Registrar trazabilidad de tool
-                state.set_last_tool(decision.tool_name, result.content)
+                state.set_last_tool(decision.tool_name, result.output)
                 logger.info(
                     "agent_tool_executed",
                     step=step,
                     tool=decision.tool_name,
                     args=decision.args,
-                    result_preview=result.content[:300],
+                    result_preview=result.output[:300],
                     session_id=session_id,
                 )
                 continue
