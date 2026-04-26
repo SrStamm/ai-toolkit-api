@@ -215,3 +215,9 @@ prometheus/
 .gga
 resterm.env.json
 ask-agent.rest
+
+# SDD (Spec-Driven Development)
+openspec/
+DESIGN_YAML_CONFIG.md
+TASKS_YAML_CONFIG.md
+docs/
