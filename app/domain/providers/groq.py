@@ -6,7 +6,6 @@ Uses OpenAI-compatible API at https://api.groq.com/openai/v1/.
 
 from collections.abc import AsyncIterator
 from typing import Callable
-
 import httpx
 
 from ...domain.models import LLMResponse
