@@ -1,6 +1,6 @@
 # ai-toolkit
 
-> **Versión actual:** `v4.1`  
+> **Versión actual:** `v4.2`  
 > **Estado:** estable (educacional / experimental, with contextual agent)
 
 **Herramientas de IA para backend (FastAPI)**
@@ -19,16 +19,18 @@
 
 ---
 
-## Estado actual – v4.1 (Agente contextual)
+## Estado actual – v4.2 (Agent State & Multi-Provider)
 
-La versión v4.1 extiende el agente determinístico de v4.0 con memoria de conversación. El agente ahora recuerda lo que el usuario dijo y lo que el assistant respondió en sesiones previas, manteniendo contexto a través de múltiples turnos de diálogo.
+La versión v4.2 extiende el agente de v4.1 con soporte para múltiples providers y mejor trazabilidad.
 
-### Objetivos alcanzados en v4.1
+### Objetivos alcanzados en v4.2
 
-- memorias de sesión conversaciones en Redis (sliding window de 5 mensajes)
-- TTL de 3 horas (renovable en cada interacción)
-- Historial de conversación inyectado al LLM en cada request
-- El agente responde correctamente cuando el usuario hace referencia a información previa
+- Soporte para múltiples providers (groq, mistral, ollama)
+- Selección dinámica de modelo/provider por request (headers `x-provider`, `x-model`)
+- Eliminación de SDK mistral, uso de httpx directo
+- Estado del agente con `last_tool`, `last_tool_result`, `tool_execution_count`
+- Trazabilidad mejorada: cada paso del loop logged con step number
+- Few-shot examples en el prompt del router para mejores decisiones
 
 ### Arquitectura v4.0
 
@@ -234,7 +236,7 @@ Este proyecto demuestra:
 - Historial de conversación inyectado al LLM
 - El agente responde correctamente cuando el usuario hace referencia a información previa
 
-### V4.2 – Agent State & Multi-Provider
+### V4.2 – Agent State & Multi-Provider (completado)
 
 - Soporte para múltiples providers:
   - groq
