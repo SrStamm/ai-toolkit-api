@@ -1,27 +1,21 @@
 # -- Etapa 1: Builder
 FROM python:3.12-slim AS builder
 
+# Instala uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
 WORKDIR /build
-
-# Instala dependencias de compilación
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libopenblas-dev \
-    gfortran \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Crea venv y lo pone en el PATH
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
 
 # Copia e instala las dependencias
 COPY app/requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-  && pip install --no-cache-dir \
-       --extra-index-url https://download.pytorch.org/whl/cpu \
-       -r requirements.txt  && \
-    find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + && \
-    find /opt/venv -type d -name "tests" -exec rm -rf {} +
+RUN uv venv /opt/venv && \
+    . /opt/venv/bin/activate && \
+    uv pip install --no-cache \
+        --index-strategy unsafe-best-match \
+        torch==2.11.0 \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        -r requirements.txt && \
+    rm -rf /opt/venv/nvidia /opt/venv/torch/lib/libcuda* /opt/venv/triton
 
 # -- Etapa 2: Production
 FROM python:3.12-slim AS production
