@@ -29,5 +29,3 @@ llama-index
 llama-index-vector-stores-qdrant 
 llama-index-embeddings-huggingface 
 llama-index-readers-file
-
-fastembed

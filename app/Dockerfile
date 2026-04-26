@@ -19,7 +19,9 @@ COPY app/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
   && pip install --no-cache-dir \
        --extra-index-url https://download.pytorch.org/whl/cpu \
-       -r requirements.txt
+       -r requirements.txt  && \
+    find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + && \
+    find /opt/venv -type d -name "tests" -exec rm -rf {} +
 
 # -- Etapa 2: Production
 FROM python:3.12-slim AS production
@@ -43,9 +45,6 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copiamos código
 COPY --chown=appuser:appuser ./app ./app
-
-# Copiamos el front buildado (pre-built localmente con npm run build)
-COPY --chown=appuser:appuser ./front-ai-toolkit/dist ./static
 
 ENV PATH="/usr/local/bin:$PATH"
 
