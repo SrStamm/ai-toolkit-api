@@ -61,7 +61,13 @@ class InvalidAPIKeyError(PermanentError):
 
 
 class ModelNotFoundError(PermanentError):
-    """Requested model does not exist."""
+    """Requested model does not exist or is not configured for the provider."""
+
+    pass
+
+
+class ProviderNotFoundError(PermanentError):
+    """Requested provider does not exist or is not configured in YAML."""
 
     pass
 
