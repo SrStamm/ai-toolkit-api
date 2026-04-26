@@ -56,7 +56,10 @@ class Router:
         
         system_content = PROMPT_ROUTING_SYSTEM.format(
             tool_list=tools,
-            context=bool(state.context)
+            context=bool(state.context),
+            tool_execution_count=state.tool_execution_count,
+            last_tool=state.last_tool or "None",
+            last_tool_result=(state.last_tool_result[:200] + "..." if len(state.last_tool_result or "") > 200 else state.last_tool_result) or "None",
         )
         
         # Include history in the user message if available
@@ -70,7 +73,15 @@ class Router:
         ]
         
         raw = self.llm.generate_content_with_messages(messages=messages).content.strip()
-        logger.info("DEBUG_ROUTER", raw=raw)
+        
+        logger.info(
+            "router_decision",
+            step=state.tool_execution_count + 1,  # Próximo paso
+            query_preview=state.query[:100],
+            has_context=bool(state.context),
+            has_history=bool(state.history),
+            raw_response=raw,
+        )
         
         try:
             decision_json = json.loads(raw)

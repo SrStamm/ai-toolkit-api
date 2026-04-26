@@ -5,6 +5,11 @@ Available tools:
 
 Have context: {context}
 
+Tool execution history:
+- Tool executions so far: {tool_execution_count}
+- Last tool executed: {last_tool}
+- Last tool result: {last_tool_result}
+
 Instructions:
 - Return ONLY valid JSON
 - Use one of these formats:
@@ -14,7 +19,10 @@ Instructions:
 
 Rules:
 - ALWAYS use "retrieve_context" when the user asks about: documentation, how to do something, explain something, usage, guide, manuals, or any knowledge base question
-- Use "final_answer" only when the user asks casual questions, greetings, opinions, or you already have context
+- Use "final_answer" only when:
+  * You already have context from previous tool executions
+  * The user asks casual questions, greetings, opinions
+  * You have tools results that answer the question
 - Do NOT call retrieve_context more than once
 - Do NOT return anything else
 """

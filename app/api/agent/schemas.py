@@ -29,9 +29,21 @@ class AgentState(BaseModel):
     history: Optional[List[Message]] = None
     context: Optional[str] = None
     tool_results: List[str] = Field(default_factory=list)
+    
+    # Trazabilidad de herramientas
+    last_tool: str | None = None
+    last_tool_result: str | None = None
+    tool_execution_count: int = 0
 
     def add_tool_result(self, result: str) -> None:
         self.tool_results.append(result)
+    
+    def set_last_tool(self, tool_name: str, result: str) -> None:
+        """Registra la última tool ejecutada."""
+        self.last_tool = tool_name
+        self.last_tool_result = result
+        self.tool_execution_count += 1
+        self.add_tool_result(result)
 
 
 class Decision(BaseModel):
