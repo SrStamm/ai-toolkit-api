@@ -44,10 +44,10 @@ class Agent:
         """Create a new session ID."""
         return str(uuid.uuid4())
 
-    def agent_loop(self, query: str, session_id: Optional[str] = None):
-        """Loop principal del agente.
+    async def agent_loop(self, query: str, session_id: Optional[str] = None):
+        """Async main agent loop.
 
-        Coordina ToolRunner y Router para ejecutar acciones hasta llegar a FINAL_ANSWER.
+        Coordinates ToolRunner and Router to execute actions until FINAL_ANSWER.
         """
         # Create session_id if not exists
         if not session_id:
@@ -68,8 +68,8 @@ class Agent:
         while True:
             step += 1
 
-            # Get decision from router
-            decision = self.router.get_decision(state)
+            # Get decision from router (async)
+            decision = await self.router.get_decision(state)
 
             logger.info(
                 "agent_step",
@@ -99,12 +99,6 @@ class Agent:
                 )
                 # Guardar contexto obtenido
                 state.context = result.output
-                logger.info(
-                    "DEBUG_SET_CONTEXT",
-                    context_preview=result.output[:100],
-                    state_context_after=state.context[:100] if state.context else "None",
-                    session_id=session_id,
-                )
                 state.set_last_tool("retrieve_context", result.output)
                 logger.info(
                     "agent_tool_executed",
@@ -135,10 +129,10 @@ class Agent:
                 )
                 continue
 
-        return self.generate_answer(state)
+        return await self._generate_answer_async(state)
 
-    def generate_answer(self, state: AgentState) -> AgentResponse:
-        """Genera la respuesta final usando el LLM."""
+    async def _generate_answer_async(self, state: AgentState) -> AgentResponse:
+        """Generate final answer using async LLM call."""
         messages: list[dict] = []
 
         # System message with the prompt template
@@ -157,9 +151,9 @@ class Agent:
         
         messages.append({"role": "user", "content": user_content})
 
-        response = self.llm.generate_content_with_messages(messages=messages)
+        response = await self.llm.generate_content_with_messages_async(messages=messages)
         
-        # Verificar que la respuesta no esté vacía
+        # Verify response is not empty
         if not response.content or not response.content.strip():
             logger.warning("Empty LLM response, using fallback")
             parsed = {"answer": state.context or "No se pudo generar una respuesta."}
@@ -208,110 +202,129 @@ class Agent:
         - agent_decision: Router decision
         - tool_start: Tool execution started
         - tool_done: Tool execution completed
-        - llm_token: LLM response token
+        - llm_token: LLM response token (buffered)
         - done: Final response with metadata
+        - error: Error occurred
         """
-
         def sse_event(event: str, data: str) -> str:
             """Format SSE event."""
             return f"event: {event}\ndata: {data}\n\n"
 
-        if not session_id:
-            session_id = self._create_session_id()
+        try:
+            if not session_id:
+                session_id = self._create_session_id()
 
-        state = AgentState(query=query, session_id=session_id)
-        self.session_memory.add(session_id, "user", query)
-        history = self.session_memory.get_history(session_id)
-        state.history = history
+            state = AgentState(query=query, session_id=session_id)
+            self.session_memory.add(session_id, "user", query)
+            history = self.session_memory.get_history(session_id)
+            state.history = history
 
-        step = 0
-        while True:
-            step += 1
-            decision = await self.router._get_decision_async(state)
+            step = 0
+            while True:
+                step += 1
+                # Get decision from router (now async)
+                decision = await self.router.get_decision(state)
 
-            # Yield decision event
-            yield sse_event("agent_decision", json.dumps(decision.model_dump()))
+                # Yield decision event
+                yield sse_event("agent_decision", json.dumps(decision.model_dump()))
+                
+                if decision.action == ActionType.FINAL_ANSWER:
+                    yield sse_event("done", json.dumps({'session_id': session_id, 'step': step}))
+                    break
+                
+                if decision.action == ActionType.RETRIEVE_CONTEXT:
+                    yield sse_event("tool_start", json.dumps({'tool': 'retrieve_context'}))
+                    
+                    result = self.tool_runner.run(
+                        "retrieve_context",
+                        decision.args,
+                        state
+                    )
+                    state.context = result.output
+                    state.set_last_tool("retrieve_context", result.output)
+                    
+                    yield sse_event("tool_done", json.dumps({'tool': 'retrieve_context', 'status': 'success'}))
+                    continue
+                
+                if decision.action == ActionType.CALL_TOOL:
+                    yield sse_event("tool_start", json.dumps({'tool': decision.tool_name}))
+                    
+                    result = self.tool_runner.run(
+                        decision.tool_name,
+                        decision.args,
+                        state
+                    )
+                    state.set_last_tool(decision.tool_name, result.output)
+                    
+                    yield sse_event("tool_done", json.dumps({'tool': decision.tool_name, 'status': 'success'}))
+                    continue
             
-            if decision.action == ActionType.FINAL_ANSWER:
-                yield sse_event("done", json.dumps({'session_id': session_id, 'step': step}))
-                break
+            # Generate final answer with streaming + buffering
+            messages: list[dict] = []
+            system_prompt = PROMPT_GENERATE_ANSWER
+            messages.append({"role": "system", "content": system_prompt})
             
-            if decision.action == ActionType.RETRIEVE_CONTEXT:
-                yield sse_event("tool_start", json.dumps({'tool': 'retrieve_context'}))
-                
-                result = self.tool_runner.run(
-                    "retrieve_context",
-                    decision.args,
-                    state
-                )
-                # Guardar contexto obtenido
-                state.context = result.output
-                state.set_last_tool("retrieve_context", result.output)
-                
-                yield sse_event("tool_done", json.dumps({'tool': 'retrieve_context', 'status': 'success'}))
-                continue
+            if state.history:
+                for msg in state.history[:-1]:
+                    messages.append({"role": msg.role, "content": msg.content})
             
-            if decision.action == ActionType.CALL_TOOL:
-                yield sse_event("tool_start", json.dumps({'tool': decision.tool_name}))
-                
-                result = self.tool_runner.run(
-                    decision.tool_name,
-                    decision.args,
-                    state
-                )
-                state.set_last_tool(decision.tool_name, result.output)
-                
-                yield sse_event("tool_done", json.dumps({'tool': decision.tool_name, 'status': 'success'}))
-                continue
-        
-        # Generate final answer with streaming
-        messages: list[dict] = []
-        system_prompt = PROMPT_GENERATE_ANSWER
-        messages.append({"role": "system", "content": system_prompt})
-        
-        if state.history:
-            for msg in state.history[:-1]:
-                messages.append({"role": msg.role, "content": msg.content})
-        
-        user_content = state.query
-        if state.context:
-            user_content = f"Context from knowledge base:\n{state.context}\n\nQuestion: {state.query}"
-        messages.append({"role": "user", "content": user_content})
-        
-        accumulated_answer = ""
-        async for token, final_response in self.llm.generate_content_with_messages_stream(
-            messages=messages
-        ):
-            if token:
-                accumulated_answer += token
-                yield sse_event("llm_token", json.dumps({'token': token}))
+            user_content = state.query
+            if state.context:
+                user_content = f"Context from knowledge base:\n{state.context}\n\nQuestion: {state.query}"
+            messages.append({"role": "user", "content": user_content})
             
-            if final_response:
-                # Strip the "answer" wrapper since we're streaming tokens directly
-                # The model should return just the content now
-                accumulated_answer = accumulated_answer.strip()
-                if accumulated_answer.startswith('{"answer":'):
-                    try:
-                        parsed = json.loads(accumulated_answer)
-                        accumulated_answer = parsed.get("answer", accumulated_answer)
-                    except:
-                        pass
+            # Buffer for tokens
+            token_buffer = ""
+            BUFFER_SIZE = 30  # chars
+            
+            async for token, final_response in self.llm.generate_content_with_messages_stream(
+                messages=messages
+            ):
+                if token:
+                    token_buffer += token
+                    
+                    # Send buffer when full or at punctuation
+                    if len(token_buffer) >= BUFFER_SIZE or token in '.!?\n':
+                        yield sse_event("llm_token", json.dumps({'token': token_buffer}))
+                        token_buffer = ""
                 
-                self.session_memory.add(
-                    state.session_id,
-                    "assistant",
-                    accumulated_answer
-                )
-                
-                yield sse_event("done", json.dumps({
-                    'session_id': state.session_id,
-                    'answer': accumulated_answer,
-                    'usage': final_response.usage.__dict__ if final_response.usage else {},
-                    'cost': final_response.cost.__dict__ if final_response.cost else {},
-                    'model': final_response.model,
-                    'provider': final_response.provider
-                }))
-                break
+                if final_response:
+                    # Send remaining buffer
+                    if token_buffer:
+                        yield sse_event("llm_token", json.dumps({'token': token_buffer}))
+                        token_buffer = ""
+                    
+                    # Parse answer from JSON wrapper if present
+                    content = token_buffer.strip() if token_buffer else ""
+                    if not content and final_response.content:
+                        content = final_response.content.strip()
+                        if content.startswith('{"answer":'):
+                            try:
+                                parsed = json.loads(content)
+                                content = parsed.get("answer", content)
+                            except:
+                                pass
+                    
+                    self.session_memory.add(
+                        state.session_id,
+                        "assistant",
+                        content
+                    )
+                    
+                    yield sse_event("done", json.dumps({
+                        'session_id': state.session_id,
+                        'answer': content,
+                        'usage': final_response.usage.__dict__ if final_response.usage else {},
+                        'cost': final_response.cost.__dict__ if final_response.cost else {},
+                        'model': final_response.model,
+                        'provider': final_response.provider
+                    }))
+                    break
+
+        except Exception as e:
+            logger.error("agent_loop_stream_error", error=str(e))
+            yield sse_event("error", json.dumps({'error': str(e)}))
+            yield sse_event("done", json.dumps({'status': 'error', 'error': str(e)}))
 
 
 def create_agent(

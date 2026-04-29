@@ -8,12 +8,13 @@ router = APIRouter(prefix="/agent", tags=["Agent"])
 
 
 @router.post("/agent-loop")
-def agent_loop(query: QueryAgentRequest, request: Request):
+async def agent_loop(query: QueryAgentRequest, request: Request):
+    """Main agent endpoint (async)."""
     agent = create_agent(
         provider=request.headers.get("x-llm-provider"),
         model=request.headers.get("x-llm-model"),
     )
-    return agent.agent_loop(
+    return await agent.agent_loop(
         query=query.text,
         session_id=query.session_id
     )

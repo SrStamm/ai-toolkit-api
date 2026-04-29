@@ -27,35 +27,18 @@ class Router:
             return "No tools available"
         
         return "\n".join(
-            f"- {name}: {defn.description}"
+f"- {name}: {defn.description}"
             for name, defn in self.tools.items()
         )
     
-    def get_decision(self, state: AgentState) -> Decision:
-        """Synchronous version - runs the async version synchronously."""
-        import asyncio
-        # Crear un nuevo event loop solo si no hay uno corriendo
-        try:
-            loop = asyncio.get_running_loop()
-            # Ya estamos en un loop async, crear una tarea y esperar
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(
-                    asyncio.run, self._get_decision_async(state)
-                )
-                return future.result()
-        except RuntimeError:
-            # No hay loop corriendo, podemos usar asyncio.run
-            return asyncio.run(self._get_decision_async(state))
-    
-    async def _get_decision_async(self, state: AgentState) -> Decision:
-        """Obtiene decisión del LLM sobre qué acción tomar.
+    async def get_decision(self, state: AgentState) -> Decision:
+        """Async method to get LLM decision.
         
         Args:
-            state: Estado actual del agente
-             
+            state: Current agent state
+              
         Returns:
-            Decision con la acción a tomar
+            Decision with action to take
         """
         tools = self._build_tool_list()
         
@@ -66,7 +49,7 @@ class Router:
             for msg in state.history:
                 if msg.role == "user":
                     prev_messages.append(f"User: {msg.content}")
-                elif msg.role == "assitant":
+                elif msg.role == "assistant":
                     prev_messages.append(f"Assistant: {msg.content}")
             if prev_messages:
                 history_context = "\n\nPrevious conversation:\n" + "\n".join(prev_messages)
@@ -89,11 +72,12 @@ class Router:
             {"role": "user", "content": full_query}
         ]
         
-        raw = (await self.llm.generate_content_with_messages_async(messages=messages)).content.strip()
+        response = await self.llm.generate_content_with_messages_async(messages=messages)
+        raw = response.content.strip()
         
         logger.info(
             "router_decision",
-            step=state.tool_execution_count + 1,  # Próximo paso
+            step=state.tool_execution_count + 1,
             query_preview=state.query[:100],
             has_context=bool(state.context),
             has_history=bool(state.history),
@@ -103,10 +87,19 @@ class Router:
         try:
             decision_json = json.loads(raw)
             
-            # Prevenir recuperación repetida de contexto
+            # Prevent repeated context retrieval
             if decision_json.get('action') == "retrieve_context" and state.context:
                 logger.warning("Preventing repeated context retrieval")
                 return Decision(action=ActionType.FINAL_ANSWER)
+            
+            return Decision(
+                action=ActionType(decision_json.get("action", "final_answer")),
+                tool_name=decision_json.get("tool_name"),
+                args=decision_json.get("args", {})
+            )
+        except Exception:
+            logger.warning(f"Invalid JSON from router: {raw}")
+            return Decision(action=ActionType.FINAL_ANSWER)
             
             return Decision(
                 action=ActionType(decision_json.get("action", "final_answer")),
