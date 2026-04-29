@@ -29,8 +29,12 @@ Return ONLY this JSON format:
 
 PROMPT_GENERATE_ANSWER = """You are an expert assistant that answers questions.
 Instructions:
-- Answer in the same language at the question 
-- Be concise and direct 
+- Answer in the same language as the question
+- Be concise and direct
+- Use Markdown for formatting:
+  - Use ```language for code blocks (e.g. ```python, ```bash)
+  - Use **bold** for emphasis
+  - Use lists for steps or multiple points
 - Return valid JSON in this exact format:
 
 {{"answer": "your answer here"}}
