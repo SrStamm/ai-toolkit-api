@@ -153,20 +153,12 @@ class Agent:
 
         response = await self.llm.generate_content_with_messages_async(messages=messages)
         
-        # Verify response is not empty
-        if not response.content or not response.content.strip():
-            logger.warning("Empty LLM response, using fallback")
-            parsed = {"answer": state.context or "No se pudo generar una respuesta."}
-        else:
-            try:
-                parsed = json.loads(response.content)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Invalid JSON from LLM: {e}, using fallback")
-                parsed = {"answer": state.context or "No se pudo generar una respuesta."}
+        # Verify response is not empty - response.content is now the answer directly (no JSON wrapper)
+        answer = response.content.strip() if response.content and response.content.strip() else (state.context or "No se pudo generar una respuesta.")
 
         logger.info(
             "llm_final_response",
-            answer=parsed["answer"][:200] + "..." if len(parsed["answer"]) > 200 else parsed["answer"],
+            answer=answer[:200] + "..." if len(answer) > 200 else answer,
             model=response.model,
             provider=response.provider,
             usage_prompt=response.usage.prompt_tokens,
@@ -180,11 +172,11 @@ class Agent:
         self.session_memory.add(
             state.session_id,
             "assistant",
-            parsed["answer"]
+            answer
         )
 
         return AgentResponse(
-            output=parsed["answer"],
+            output=answer,
             session_id=state.session_id,
             metadata={
                 'usage': response.usage,
@@ -229,7 +221,7 @@ class Agent:
                 yield sse_event("agent_decision", json.dumps(decision.model_dump()))
                 
                 if decision.action == ActionType.FINAL_ANSWER:
-                    yield sse_event("done", json.dumps({'session_id': session_id, 'step': step}))
+                    # Don't send done here - let the streaming code after the loop generate and send it
                     break
                 
                 if decision.action == ActionType.RETRIEVE_CONTEXT:

@@ -21,6 +21,29 @@ interface Message {
 
 const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
+/** Parse answer - handles JSON wrapper like {"answer": "..."} and removes code block wrappers */
+function parseAnswer(answer: string): string {
+  if (!answer) return "";
+
+  // Try to parse JSON wrapper if present
+  let content = answer.trim();
+  if (content.startsWith('{"answer":')) {
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed.answer) {
+        content = parsed.answer;
+      }
+    } catch {
+      // Not valid JSON, continue with original
+    }
+  }
+
+  // Remove markdown code block wrapper if present (e.g., ```json\n...\n```)
+  content = content.replace(/^```(?:json|text)?\n?/, "").replace(/```$/, "");
+
+  return content.trim();
+}
+
 const codeBlockStyle = {
   background: "#1e1e1e",
   whiteSpace: "pre-wrap" as const,
@@ -99,10 +122,12 @@ export function ChatInterface() {
             if (data.session_id) {
               setSessionId(data.session_id);
             }
+            // Use accumulated content from streaming, fallback to data.answer
+            const finalContent = accumulatedContent || data.answer;
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === aiMessage.id
-                  ? { ...msg, content: data.answer || accumulatedContent, isStreaming: false }
+                  ? { ...msg, content: parseAnswer(finalContent), isStreaming: false }
                   : msg
               )
             );
@@ -138,7 +163,7 @@ export function ChatInterface() {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMessage.id
-              ? { ...msg, content: response.output, isStreaming: false }
+              ? { ...msg, content: parseAnswer(response.output), isStreaming: false }
               : msg
           )
         );
