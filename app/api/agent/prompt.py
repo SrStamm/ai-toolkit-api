@@ -35,7 +35,5 @@ Instructions:
   - Use ```language for code blocks (e.g. ```python, ```bash)
   - Use **bold** for emphasis
   - Use lists for steps or multiple points
-- Return valid JSON in this exact format:
-
-{{"answer": "your answer here"}}
+- Return ONLY the answer text, NO JSON wrapper needed
 """

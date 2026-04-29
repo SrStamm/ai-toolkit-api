@@ -1,15 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "./ui/button";
-import { Card } from "./ui/card";
 import { Input } from "./ui/input";
-import { agentAsk } from "@/services/agentServices";
+import { agentAsk, agentAskStream } from "@/services/agentServices";
 import type { AgentQuestion } from "@/types/agent";
 import { showToastError } from "./toast";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { cn } from "@/lib/utils";
-import { SendHorizonal, Loader2, Bot, User } from "lucide-react";
+import { SendHorizontal, Loader2, Bot, User } from "lucide-react";
 import { useLLMConfig, LLMSelector } from "./llmConfigBar";
 
 interface Message {
@@ -17,9 +16,33 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   isStreaming?: boolean;
+  isStream?: boolean;
 }
 
-const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
+/** Parse answer - handles JSON wrapper like {"answer": "..."} and removes code block wrappers */
+function parseAnswer(answer: string): string {
+  if (!answer) return "";
+
+  // Try to parse JSON wrapper if present
+  let content = answer.trim();
+  if (content.startsWith('{"answer":')) {
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed.answer) {
+        content = parsed.answer;
+      }
+    } catch {
+      // Not valid JSON, continue with original
+    }
+  }
+
+  // Remove markdown code block wrapper if present (e.g., ```json\n...\n```)
+  content = content.replace(/^```(?:json|text)?\n?/, "").replace(/```$/, "");
+
+  return content.trim();
+}
 
 const codeBlockStyle = {
   background: "#1e1e1e",
@@ -32,8 +55,8 @@ const codeBlockStyle = {
 };
 
 export function ChatInterface() {
-  const { provider, model, providers, isLoaded, setProvider, setModel } = useLLMConfig();
-  
+  const { provider, model, providers, isLoaded, setProvider, setModel, useStream, setUseStream } = useLLMConfig();
+
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -63,6 +86,7 @@ export function ChatInterface() {
       role: "assistant",
       content: "",
       isStreaming: true,
+      isStream: useStream,
     };
 
     setMessages((prev) => [...prev, userMessage, aiMessage]);
@@ -74,34 +98,83 @@ export function ChatInterface() {
       session_id: sessionId || undefined,
     };
 
-    try {
-      const response = await agentAsk(body, {
-        provider,
-        model,
-      });
+    if (useStream) {
+      let accumulatedContent = "";
 
-      if (response.session_id) {
-        setSessionId(response.session_id);
-      }
-
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessage.id
-            ? { ...msg, content: response.output, isStreaming: false }
-            : msg
-        )
+      agentAskStream(
+        body,
+        { provider, model, useStream },
+        (event, data) => {
+          if (event === "agent_decision") {
+            console.log("Agent decision:", data);
+          } else if (event === "tool_start") {
+            console.log("Tool started:", data);
+          } else if (event === "tool_done") {
+            console.log("Tool done:", data);
+          } else if (event === "llm_token") {
+            accumulatedContent += data.token || "";
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessage.id ? { ...msg, content: accumulatedContent } : msg
+              )
+            );
+          } else if (event === "done") {
+            if (data.session_id) {
+              setSessionId(data.session_id);
+            }
+            // Use accumulated content from streaming, fallback to data.answer
+            const finalContent = accumulatedContent || data.answer;
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessage.id
+                  ? { ...msg, content: parseAnswer(finalContent), isStreaming: false }
+                  : msg
+              )
+            );
+            setIsLoading(false);
+            inputRef.current?.focus();
+          } else if (event === "error") {
+            console.error("Stream error:", data);
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessage.id
+                  ? { ...msg, content: "Error: " + (data.error || "Unknown error"), isStreaming: false }
+                  : msg
+              )
+            );
+            setIsLoading(false);
+          }
+        },
+        (error) => {
+          console.error("Stream error:", error);
+          showToastError(error);
+          setMessages((prev) => prev.filter((msg) => msg.id !== aiMessage.id));
+          setIsLoading(false);
+        }
       );
+    } else {
+      try {
+        const response = await agentAsk(body, { provider, model });
 
-      if (response.metadata && Object.keys(response.metadata).length > 0) {
-        console.log("Agent metadata:", response.metadata);
+        if (response.session_id) {
+          setSessionId(response.session_id);
+        }
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMessage.id
+              ? { ...msg, content: parseAnswer(response.output), isStreaming: false }
+              : msg
+          )
+        );
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+        showToastError(errorMessage);
+        setMessages((prev) => prev.filter((msg) => msg.id !== aiMessage.id));
+      } finally {
+        setIsLoading(false);
+        inputRef.current?.focus();
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      showToastError(errorMessage);
-      setMessages((prev) => prev.filter((msg) => msg.id !== aiMessage.id));
-    } finally {
-      setIsLoading(false);
-      inputRef.current?.focus();
     }
   };
 
@@ -127,6 +200,8 @@ export function ChatInterface() {
           onProviderChange={setProvider}
           onModelChange={setModel}
           isLoading={!isLoaded}
+          useStream={useStream}
+          onStreamChange={setUseStream}
         />
       </div>
 
@@ -163,16 +238,9 @@ export function ChatInterface() {
               onClick={handleQuery}
               disabled={isLoading || !query.trim()}
               size="icon-lg"
-              className={cn(
-                "shrink-0 transition-all",
-                query.trim() && "bg-primary hover:bg-primary/90"
-              )}
+              className={cn("shrink-0 transition-all", query.trim() && "bg-primary hover:bg-primary/90")}
             >
-              {isLoading ? (
-                <Loader2 className="size-5 animate-spin" />
-              ) : (
-                <SendHorizonal className="size-5" />
-              )}
+              {isLoading ? <Loader2 className="size-5 animate-spin" /> : <SendHorizontal className="size-5" />}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2 text-center">
@@ -191,27 +259,23 @@ function EmptyState() {
         <Bot className="size-14 text-primary" />
       </div>
       <div className="space-y-2 max-w-md">
-        <h3 className="text-xl font-semibold">
-          ¿En qué puedo ayudarte?
-        </h3>
+        <h3 className="text-xl font-semibold">¿En qué puedo ayudarte?</h3>
         <p className="text-sm text-muted-foreground leading-relaxed">
           Hacé preguntas sobre tus documentos ingestados. El agente usará el contexto
           disponible para darte respuestas precisas y detalladas.
         </p>
       </div>
       <div className="flex flex-wrap justify-center gap-2">
-        {[
-          "¿Qué contiene este documento?",
-          "Resume lo más importante",
-          "Explica el concepto principal"
-        ].map((suggestion) => (
-          <button
-            key={suggestion}
-            className="text-xs px-3 py-1.5 rounded-full bg-muted/50 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground border border-transparent hover:border-border"
-          >
-            {suggestion}
-          </button>
-        ))}
+        {["¿Qué contiene este documento?", "Resume lo más importante", "Explica el concepto principal"].map(
+          (suggestion) => (
+            <button
+              key={suggestion}
+              className="text-xs px-3 py-1.5 rounded-full bg-muted/50 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground border border-transparent hover:border-border"
+            >
+              {suggestion}
+            </button>
+          )
+        )}
       </div>
     </div>
   );
@@ -221,37 +285,15 @@ function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
   return (
-    <div
-      className={cn(
-        "flex gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300",
-        isUser ? "flex-row-reverse" : "flex-row"
-      )}
-    >
+    <div className={cn("flex gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300", isUser ? "flex-row-reverse" : "flex-row")}>
       {/* Avatar */}
-      <div className={cn(
-        "shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
-        isUser ? "bg-primary/10" : "bg-muted"
-      )}>
-        {isUser ? (
-          <User className="size-4 text-primary" />
-        ) : (
-          <Bot className="size-4 text-muted-foreground" />
-        )}
+      <div className={cn("shrink-0 w-8 h-8 rounded-full flex items-center justify-center", isUser ? "bg-primary/10" : "bg-muted")}>
+        {isUser ? <User className="size-4 text-primary" /> : <Bot className="size-4 text-muted-foreground" />}
       </div>
 
       {/* Message */}
-      <div className={cn(
-        "flex-1 max-w-[85%]",
-        isUser ? "items-end" : "items-start"
-      )}>
-        <Card
-          className={cn(
-            "px-4 py-3",
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted/50 border-0"
-          )}
-        >
+      <div className={cn("flex-1 max-w-[85%]", isUser ? "items-end" : "items-start")}>
+        <div className={cn("px-4 py-3 rounded-2xl", isUser ? "bg-primary text-primary-foreground" : "bg-muted/50 border-0")}>
           {message.isStreaming && !message.content ? (
             <div className="flex items-center gap-2">
               <div className="flex gap-1">
@@ -261,27 +303,14 @@ function MessageBubble({ message }: { message: Message }) {
               </div>
             </div>
           ) : (
-            <div className={cn(
-              "prose prose-sm max-w-none text-sm",
-              isUser ? "prose-invert" : "prose-neutral"
-            )}>
+            <div className={cn("prose prose-sm max-w-none text-sm", isUser ? "prose-invert" : "prose-neutral")}>
               <Markdown
                 components={{
-                  p: ({ children }) => (
-                    <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
-                  ),
-                  ul: ({ children }) => (
-                    <ul className="list-disc list-outside pl-5 mb-2 space-y-1">{children}</ul>
-                  ),
-                  ol: ({ children }) => (
-                    <ol className="list-decimal list-outside pl-5 mb-2 space-y-1">{children}</ol>
-                  ),
-                  li: ({ children }) => (
-                    <li className="leading-relaxed">{children}</li>
-                  ),
-                  strong: ({ children }) => (
-                    <strong className="font-semibold">{children}</strong>
-                  ),
+                  p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc list-outside pl-5 mb-2 space-y-1">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal list-outside pl-5 mb-2 space-y-1">{children}</ol>,
+                  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                   code: ({ className, children, ...props }) => {
                     const match = /language-(\w+)/.exec(className || "");
                     const isInline = !match && !className?.includes("language");
@@ -289,10 +318,7 @@ function MessageBubble({ message }: { message: Message }) {
                     if (isInline) {
                       return (
                         <code
-                          className={cn(
-                            "px-1.5 py-0.5 rounded text-xs font-mono",
-                            isUser ? "bg-primary-foreground/20" : "bg-muted"
-                          )}
+                          className={cn("px-1.5 py-0.5 rounded text-xs font-mono", isUser ? "bg-primary-foreground/20" : "bg-muted")}
                           {...props}
                         >
                           {children}
@@ -319,7 +345,12 @@ function MessageBubble({ message }: { message: Message }) {
                     <blockquote className="border-l-2 pl-3 italic opacity-80 my-2">{children}</blockquote>
                   ),
                   a: ({ href, children }) => (
-                    <a href={href} className="text-primary underline underline-offset-2 hover:opacity-80" target="_blank" rel="noopener noreferrer">
+                    <a
+                      href={href}
+                      className="text-primary underline underline-offset-2 hover:opacity-80"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       {children}
                     </a>
                   ),
@@ -329,10 +360,8 @@ function MessageBubble({ message }: { message: Message }) {
               </Markdown>
             </div>
           )}
-        </Card>
+        </div>
       </div>
     </div>
   );
 }
-
-export default ChatInterface;

@@ -27,18 +27,18 @@ class Router:
             return "No tools available"
         
         return "\n".join(
-            f"- {name}: {defn.description}"
+f"- {name}: {defn.description}"
             for name, defn in self.tools.items()
         )
     
-    def get_decision(self, state: AgentState) -> Decision:
-        """Obtiene decisión del LLM sobre qué acción tomar.
+    async def get_decision(self, state: AgentState) -> Decision:
+        """Async method to get LLM decision.
         
         Args:
-            state: Estado actual del agente
-             
+            state: Current agent state
+              
         Returns:
-            Decision con la acción a tomar
+            Decision with action to take
         """
         tools = self._build_tool_list()
         
@@ -72,11 +72,12 @@ class Router:
             {"role": "user", "content": full_query}
         ]
         
-        raw = self.llm.generate_content_with_messages(messages=messages).content.strip()
+        response = await self.llm.generate_content_with_messages_async(messages=messages)
+        raw = response.content.strip()
         
         logger.info(
             "router_decision",
-            step=state.tool_execution_count + 1,  # Próximo paso
+            step=state.tool_execution_count + 1,
             query_preview=state.query[:100],
             has_context=bool(state.context),
             has_history=bool(state.history),
@@ -86,10 +87,28 @@ class Router:
         try:
             decision_json = json.loads(raw)
             
-            # Prevenir recuperación repetida de contexto
+            # Prevent repeated context retrieval
             if decision_json.get('action') == "retrieve_context" and state.context:
                 logger.warning("Preventing repeated context retrieval")
                 return Decision(action=ActionType.FINAL_ANSWER)
+            
+            return Decision(
+                action=ActionType(decision_json.get("action", "final_answer")),
+                tool_name=decision_json.get("tool_name"),
+                args=decision_json.get("args", {})
+            )
+        except Exception:
+            logger.warning(f"Invalid JSON from router: {raw}")
+            return Decision(action=ActionType.FINAL_ANSWER)
+            
+            return Decision(
+                action=ActionType(decision_json.get("action", "final_answer")),
+                tool_name=decision_json.get("tool_name"),
+                args=decision_json.get("args", {})
+            )
+        except Exception:
+            logger.warning(f"Invalid JSON from router: {raw}")
+            return Decision(action=ActionType.FINAL_ANSWER)
             
             return Decision(
                 action=ActionType(decision_json.get("action", "final_answer")),

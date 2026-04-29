@@ -237,38 +237,77 @@ class LLMRouter:
         async def _stream():
             provider_name = self.primary.name
             model_name = self.primary.model
-
+            
             start = time.perf_counter()
-
             try:
-                async for chunk in self.primary.chat_stream(prompt):
-                    yield chunk
-
+                async for chunk, final_response in self.primary.chat_stream(prompt):
+                    yield chunk, final_response
+                
                 duration = time.perf_counter() - start
-
                 llm_request_duration_seconds.labels(provider_name, model_name).observe(
                     duration
                 )
-
                 llm_requests_total.labels(provider_name, model_name, "success").inc()
-
+                
                 with self._lock:
                     if self.state == "HALF-OPEN":
                         self.state = "CLOSED"
                         self.failure_count = 0
                         self._update_circuit_gauge("CLOSED")
                         circuit_state_changes_total.labels("CLOSED").inc()
-
+            
             except Exception:
                 self._on_failure()
-
                 llm_requests_total.labels(provider_name, model_name, "error").inc()
-
                 llm_fallback_total.labels(provider_name, self.fallback.name).inc()
-
-                async for chunk in self.fallback.chat_stream(prompt):
-                    yield chunk
-
+                
+                async for chunk, final_response in self.fallback.chat_stream(prompt):
+                    yield chunk, final_response
+        
+        return _stream()
+    
+    def chat_with_messages_stream(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ):
+        """
+        Stream chat with message history and optional system prompt.
+        """
+        async def _stream():
+            provider_name = self.primary.name
+            model_name = self.primary.model
+            
+            start = time.perf_counter()
+            try:
+                async for chunk, final_response in self.primary.chat_with_messages_stream(
+                    messages, system_prompt
+                ):
+                    yield chunk, final_response
+                
+                duration = time.perf_counter() - start
+                llm_request_duration_seconds.labels(provider_name, model_name).observe(
+                    duration
+                )
+                llm_requests_total.labels(provider_name, model_name, "success").inc()
+                
+                with self._lock:
+                    if self.state == "HALF-OPEN":
+                        self.state = "CLOSED"
+                        self.failure_count = 0
+                        self._update_circuit_gauge("CLOSED")
+                        circuit_state_changes_total.labels("CLOSED").inc()
+            
+            except Exception:
+                self._on_failure()
+                llm_requests_total.labels(provider_name, model_name, "error").inc()
+                llm_fallback_total.labels(provider_name, self.fallback.name).inc()
+                
+                async for chunk, final_response in self.fallback.chat_with_messages_stream(
+                    messages, system_prompt
+                ):
+                    yield chunk, final_response
+        
         return _stream()
 
 

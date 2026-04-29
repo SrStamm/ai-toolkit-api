@@ -1,21 +1,43 @@
 from fastapi import APIRouter, Request, Depends
+from starlette.responses import StreamingResponse
 from .schemas import QueryAgentRequest
 from .agent import create_agent
 from ...core.settings import get_settings, YamlAppConfig
-
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
 
 @router.post("/agent-loop")
-def agent_loop(query: QueryAgentRequest, request: Request):
+async def agent_loop(query: QueryAgentRequest, request: Request):
+    """Main agent endpoint (async)."""
     agent = create_agent(
         provider=request.headers.get("x-llm-provider"),
         model=request.headers.get("x-llm-model"),
     )
-    return agent.agent_loop(
+    return await agent.agent_loop(
         query=query.text,
         session_id=query.session_id
+    )
+
+
+@router.post("/agent-loop/stream")
+async def agent_loop_stream(query: QueryAgentRequest, request: Request):
+    """Streaming version of agent-loop using Server-Sent Events."""
+    agent = create_agent(
+        provider=request.headers.get("x-llm-provider"),
+        model=request.headers.get("x-llm-model"),
+    )
+    
+    async def generate():
+        async for event in agent.agent_loop_stream(
+            query=query.text,
+            session_id=query.session_id
+        ):
+            yield event
+    
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream"
     )
 
 
