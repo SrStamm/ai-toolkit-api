@@ -135,3 +135,85 @@ class GroqProvider(RetryableProvider):
                         completion_tokens = usage["completion_tokens"]
 
         yield ("", prompt_tokens, completion_tokens)
+
+    async def _execute_chat_with_messages_stream(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ) -> AsyncIterator[tuple[str, LLMResponse | None]]:
+        """
+        Execute streaming chat with messages using Groq.
+        
+        Yields (token, final_response).
+        """
+        chat_messages: list[dict] = []
+        
+        if system_prompt:
+            chat_messages.append({"role": "system", "content": system_prompt})
+        
+        chat_messages.extend(messages)
+        
+        url = f"{self.base_url}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        data = {
+            "model": self.model,
+            "messages": chat_messages,
+            "stream": True,
+        }
+        
+        accumulated_content = ""
+        prompt_tokens = 0
+        completion_tokens = 0
+        final_response = None
+        
+        with httpx.Client(timeout=self._timeout) as client:
+            with client.stream("POST", url, headers=headers, json=data) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    
+                    chunk_data = line[6:]  # Remove "data: " prefix
+                    if chunk_data == "[DONE]":
+                        break
+                    
+                    import json as json_lib
+                    chunk_json = json_lib.loads(chunk_data)
+                    delta = chunk_json.get("choices", [{}])[0].get("delta", {}).get(
+                        "content", ""
+                    )
+                    
+                    if delta:
+                        accumulated_content += delta
+                        yield (delta, None)
+                    
+                    usage = chunk_json.get("usage", {})
+                    if usage.get("prompt_tokens"):
+                        prompt_tokens = usage["prompt_tokens"]
+                    if usage.get("completion_tokens"):
+                        completion_tokens = usage["completion_tokens"]
+        
+        final_response = self._build_usage_response(
+            content=accumulated_content,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+        yield ("", final_response)
+
+    async def chat_with_messages_stream(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ) -> AsyncIterator[tuple[str, LLMResponse | None]]:
+        """
+        Stream chat with message history using Groq.
+        
+        Yields (token, final_response).
+        """
+        async for token, response in self._execute_chat_with_messages_stream(
+            messages, system_prompt
+        ):
+            yield (token, response)

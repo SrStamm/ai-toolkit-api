@@ -3,7 +3,7 @@ Ollama local LLM provider implementation.
 """
 
 import json
-from typing import Callable
+from typing import AsyncIterator, Callable
 import httpx
 
 from ...domain.models import LLMResponse
@@ -118,3 +118,73 @@ class OllamaProvider(RetryableProvider):
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
         )
+
+    async def _execute_chat_with_messages_stream(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ) -> AsyncIterator[tuple[str, LLMResponse | None]]:
+        """
+        Execute streaming chat with messages using Ollama.
+        
+        Yields (token, final_response).
+        """
+        # Build messages
+        chat_messages: list[dict] = []
+        if system_prompt:
+            chat_messages.append({"role": "system", "content": system_prompt})
+        chat_messages.extend(messages)
+        
+        data = {
+            "model": self.model,
+            "messages": chat_messages,
+            "stream": True,
+        }
+        
+        accumulated_content = ""
+        prompt_tokens = 0
+        completion_tokens = 0
+        final_response = None
+        
+        url = f"{self.url}/api/chat"
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with client.stream("POST", url, json=data) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    
+                    chunk_data = json.loads(line)
+                    
+                    if chunk_data.get("done"):
+                        prompt_tokens = chunk_data.get("prompt_eval_count", 0)
+                        completion_tokens = chunk_data.get("eval_count", 0)
+                        break
+                    
+                    delta = chunk_data.get("message", {}).get("content", "")
+                    
+                    if delta:
+                        accumulated_content += delta
+                        yield (delta, None)
+        
+        final_response = self._build_usage_response(
+            content=accumulated_content,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+        yield ("", final_response)
+
+    async def chat_with_messages_stream(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ) -> AsyncIterator[tuple[str, LLMResponse | None]]:
+        """
+        Stream chat with message history using Ollama.
+        
+        Yields (token, final_response).
+        """
+        async for token, response in self._execute_chat_with_messages_stream(
+            messages, system_prompt
+        ):
+            yield (token, response)

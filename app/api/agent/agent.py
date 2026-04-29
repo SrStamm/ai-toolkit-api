@@ -9,10 +9,10 @@ import structlog
 import uuid
 import json
 
-from .session_memory import get_session_memory, SessionMemory, Message
-from .schemas import AgentResponse, AgentState, Decision, ActionType
+from .session_memory import get_session_memory, SessionMemory
+from .schemas import AgentResponse, AgentState, ActionType
 from .tools import ToolRegistry
-from .prompt import PROMPT_ROUTING_SYSTEM, PROMPT_GENERATE_ANSWER
+from .prompt import PROMPT_GENERATE_ANSWER
 from .tool_runner import ToolRunner
 from .router_decision import Router
 from ..llamaindex_adapter.orchestrator import (
@@ -46,7 +46,7 @@ class Agent:
 
     def agent_loop(self, query: str, session_id: Optional[str] = None):
         """Loop principal del agente.
-        
+
         Coordina ToolRunner y Router para ejecutar acciones hasta llegar a FINAL_ANSWER.
         """
         # Create session_id if not exists
@@ -67,10 +67,10 @@ class Agent:
         step = 0
         while True:
             step += 1
-            
+
             # Get decision from router
             decision = self.router.get_decision(state)
-            
+
             logger.info(
                 "agent_step",
                 step=step,
@@ -99,6 +99,12 @@ class Agent:
                 )
                 # Guardar contexto obtenido
                 state.context = result.output
+                logger.info(
+                    "DEBUG_SET_CONTEXT",
+                    context_preview=result.output[:100],
+                    state_context_after=state.context[:100] if state.context else "None",
+                    session_id=session_id,
+                )
                 state.set_last_tool("retrieve_context", result.output)
                 logger.info(
                     "agent_tool_executed",
@@ -193,6 +199,119 @@ class Agent:
                 'provider': response.provider
             }
         )
+
+    async def agent_loop_stream(self, query: str, session_id: Optional[str] = None):
+        """
+        Streaming version of agent_loop.
+
+        Yields SSE events:
+        - agent_decision: Router decision
+        - tool_start: Tool execution started
+        - tool_done: Tool execution completed
+        - llm_token: LLM response token
+        - done: Final response with metadata
+        """
+
+        def sse_event(event: str, data: str) -> str:
+            """Format SSE event."""
+            return f"event: {event}\ndata: {data}\n\n"
+
+        if not session_id:
+            session_id = self._create_session_id()
+
+        state = AgentState(query=query, session_id=session_id)
+        self.session_memory.add(session_id, "user", query)
+        history = self.session_memory.get_history(session_id)
+        state.history = history
+
+        step = 0
+        while True:
+            step += 1
+            decision = await self.router._get_decision_async(state)
+
+            # Yield decision event
+            yield sse_event("agent_decision", json.dumps(decision.model_dump()))
+            
+            if decision.action == ActionType.FINAL_ANSWER:
+                yield sse_event("done", json.dumps({'session_id': session_id, 'step': step}))
+                break
+            
+            if decision.action == ActionType.RETRIEVE_CONTEXT:
+                yield sse_event("tool_start", json.dumps({'tool': 'retrieve_context'}))
+                
+                result = self.tool_runner.run(
+                    "retrieve_context",
+                    decision.args,
+                    state
+                )
+                # Guardar contexto obtenido
+                state.context = result.output
+                state.set_last_tool("retrieve_context", result.output)
+                
+                yield sse_event("tool_done", json.dumps({'tool': 'retrieve_context', 'status': 'success'}))
+                continue
+            
+            if decision.action == ActionType.CALL_TOOL:
+                yield sse_event("tool_start", json.dumps({'tool': decision.tool_name}))
+                
+                result = self.tool_runner.run(
+                    decision.tool_name,
+                    decision.args,
+                    state
+                )
+                state.set_last_tool(decision.tool_name, result.output)
+                
+                yield sse_event("tool_done", json.dumps({'tool': decision.tool_name, 'status': 'success'}))
+                continue
+        
+        # Generate final answer with streaming
+        messages: list[dict] = []
+        system_prompt = PROMPT_GENERATE_ANSWER
+        messages.append({"role": "system", "content": system_prompt})
+        
+        if state.history:
+            for msg in state.history[:-1]:
+                messages.append({"role": msg.role, "content": msg.content})
+        
+        user_content = state.query
+        if state.context:
+            user_content = f"Context from knowledge base:\n{state.context}\n\nQuestion: {state.query}"
+        messages.append({"role": "user", "content": user_content})
+        
+        accumulated_answer = ""
+        async for token, final_response in self.llm.generate_content_with_messages_stream(
+            messages=messages
+        ):
+            if token:
+                accumulated_answer += token
+                yield sse_event("llm_token", json.dumps({'token': token}))
+            
+            if final_response:
+                # Strip the "answer" wrapper since we're streaming tokens directly
+                # The model should return just the content now
+                accumulated_answer = accumulated_answer.strip()
+                if accumulated_answer.startswith('{"answer":'):
+                    try:
+                        parsed = json.loads(accumulated_answer)
+                        accumulated_answer = parsed.get("answer", accumulated_answer)
+                    except:
+                        pass
+                
+                self.session_memory.add(
+                    state.session_id,
+                    "assistant",
+                    accumulated_answer
+                )
+                
+                yield sse_event("done", json.dumps({
+                    'session_id': state.session_id,
+                    'answer': accumulated_answer,
+                    'usage': final_response.usage.__dict__ if final_response.usage else {},
+                    'cost': final_response.cost.__dict__ if final_response.cost else {},
+                    'model': final_response.model,
+                    'provider': final_response.provider
+                }))
+                break
 
 
 def create_agent(

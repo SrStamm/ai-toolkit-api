@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from dotenv import load_dotenv
+import asyncio
 from pydantic import BaseModel, ValidationError
 
 from ...infrastructure.logging import time_response
@@ -31,12 +32,25 @@ class LLMClient:
     ) -> LLMResponse:
         """
         Generate content using message history and optional system prompt.
-
+        
         Args:
             messages: List of messages with role and content.
             system_prompt: Optional system prompt to prepend.
         """
         return self.router.chat_with_messages(messages, system_prompt)
+    
+    async def generate_content_with_messages_async(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ) -> LLMResponse:
+        """
+        Async version of generate_content_with_messages.
+        Uses asyncio.to_thread to avoid blocking the event loop.
+        """
+        return await asyncio.to_thread(
+            self.generate_content_with_messages, messages, system_prompt
+        )
 
     @time_response
     def generate_structured_output(
@@ -81,6 +95,22 @@ class LLMClient:
         self, prompt: str
     ) -> AsyncIterator[tuple[str, LLMResponse[str] | None]]:
         async for chunk, final_response in self.router.chat_stream(prompt):
+            yield (chunk, final_response)
+
+    async def generate_content_with_messages_stream(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ) -> AsyncIterator[tuple[str, LLMResponse | None]]:
+        """
+        Generate content with message history using streaming.
+        
+        Yields (token, final_response).
+        final_response is None until the stream completes.
+        """
+        async for chunk, final_response in self.router.chat_with_messages_stream(
+            messages, system_prompt
+        ):
             yield (chunk, final_response)
 
 

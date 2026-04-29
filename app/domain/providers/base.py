@@ -46,3 +46,17 @@ class BaseLLMProvider(ABC):
     ) -> AsyncIterator[tuple[str, LLMResponse | None]]:
         """Streaming chat completion."""
         ...
+
+    @abstractmethod
+    async def chat_with_messages_stream(
+        self,
+        messages: list[Message],
+        system_prompt: str | None = None,
+    ) -> AsyncIterator[tuple[str, LLMResponse | None]]:
+        """
+        Streaming chat with message history.
+
+        Yields tuples of (token, final_response).
+        final_response is None until the last token.
+        """
+        ...
