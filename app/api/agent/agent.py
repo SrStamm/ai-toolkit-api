@@ -25,6 +25,46 @@ from ..llamaindex_adapter.orchestrator import (
 logger = structlog.get_logger()
 
 
+def extract_answer_from_json(content: str) -> str:
+    """
+    Extract answer from JSON wrapper if present.
+    Handles various JSON formats: {"answer": "..."}, {"response": "..."}, etc.
+    Also handles code block wrappers like ```json\n...\n```
+    """
+    import re
+    
+    if not content:
+        return content
+    
+    # Remove markdown code block wrapper if present
+    cleaned = content.strip()
+    # Regex to remove starting ```json or ```text or ```
+    cleaned = re.sub(r'^```(?:json|text)?\n?', '', cleaned)
+    # Remove trailing ```
+    cleaned = re.sub(r'```$', '', cleaned)
+    cleaned = cleaned.strip()
+    
+    # Try to parse as JSON
+    if cleaned.startswith('{') and cleaned.endswith('}'):
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict):
+                # Common field names that might contain the answer
+                for key in ['answer', 'response', 'text', 'content', 'message']:
+                    if key in parsed and isinstance(parsed[key], str):
+                        return parsed[key].strip()
+                # If single key, use its value
+                if len(parsed) == 1:
+                    value = list(parsed.values())[0]
+                    if isinstance(value, str):
+                        return value.strip()
+        except json.JSONDecodeError:
+            pass
+    
+    # Return original content if not JSON or parsing failed
+    return content.strip()
+
+
 class Agent:
     """
     Agente determinístico que usa LLM para decidir qué tool ejecutar.
@@ -154,7 +194,10 @@ class Agent:
         response = await self.llm.generate_content_with_messages_async(messages=messages)
         
         # Verify response is not empty - response.content is now the answer directly (no JSON wrapper)
-        answer = response.content.strip() if response.content and response.content.strip() else (state.context or "No se pudo generar una respuesta.")
+        raw_content = response.content.strip() if response.content and response.content.strip() else (state.context or "No se pudo generar una respuesta.")
+        
+        # Parse answer from JSON wrapper if present (robust parser)
+        answer = extract_answer_from_json(raw_content)
 
         logger.info(
             "llm_final_response",
@@ -286,16 +329,12 @@ class Agent:
                         yield sse_event("llm_token", json.dumps({'token': token_buffer}))
                         token_buffer = ""
                     
-                    # Parse answer from JSON wrapper if present
+                    # Parse answer from JSON wrapper if present (robust parser)
                     content = token_buffer.strip() if token_buffer else ""
                     if not content and final_response.content:
                         content = final_response.content.strip()
-                        if content.startswith('{"answer":'):
-                            try:
-                                parsed = json.loads(content)
-                                content = parsed.get("answer", content)
-                            except:
-                                pass
+                    # Apply robust JSON extraction
+                    content = extract_answer_from_json(content)
                     
                     self.session_memory.add(
                         state.session_id,
