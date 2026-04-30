@@ -21,25 +21,39 @@ interface Message {
 
 const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
-/** Parse answer - handles JSON wrapper like {"answer": "..."} and removes code block wrappers */
+/** Parse answer - handles JSON wrapper like {"answer": "..."} or {"response": "..."} and removes code block wrappers */
 function parseAnswer(answer: string): string {
   if (!answer) return "";
 
-  // Try to parse JSON wrapper if present
   let content = answer.trim();
-  if (content.startsWith('{"answer":')) {
+
+  // First, remove markdown code block wrapper if present (e.g., ```json\n...\n```)
+  // This must be done BEFORE checking for JSON, because the LLM might wrap the response
+  content = content.replace(/^```(?:json|text)?\n?/, "").replace(/```$/, "");
+
+  // Try to parse JSON wrapper if present (after code block removal)
+  if (content.startsWith('{') && content.endsWith('}')) {
     try {
       const parsed = JSON.parse(content);
-      if (parsed.answer) {
-        content = parsed.answer;
+      if (typeof parsed === 'object' && parsed !== null) {
+        // Common field names that might contain the answer
+        const possibleKeys = ['answer', 'response', 'text', 'content', 'message'];
+        for (const key of possibleKeys) {
+          if (key in parsed && typeof parsed[key] === 'string') {
+            content = parsed[key];
+            break;
+          }
+        }
+        // If single key, use its value
+        const keys = Object.keys(parsed);
+        if (keys.length === 1 && typeof parsed[keys[0]] === 'string') {
+          content = parsed[keys[0]];
+        }
       }
     } catch {
       // Not valid JSON, continue with original
     }
   }
-
-  // Remove markdown code block wrapper if present (e.g., ```json\n...\n```)
-  content = content.replace(/^```(?:json|text)?\n?/, "").replace(/```$/, "");
 
   return content.trim();
 }
