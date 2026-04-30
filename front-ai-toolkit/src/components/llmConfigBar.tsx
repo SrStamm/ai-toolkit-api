@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { getProviders } from "@/services/llmServices";
 import type { LLMProvider } from "@/types/llm";
 import { showToastError } from "./toast";
-import { cn } from "@/lib/utils";
 
 interface UseLLMConfigReturn {
   provider: string;
@@ -86,8 +85,6 @@ interface LLMSelectorProps {
   onProviderChange: (provider: string) => void;
   onModelChange: (model: string) => void;
   isLoading?: boolean;
-  useStream: boolean;
-  onStreamChange: (useStream: boolean) => void;
 }
 
 export function LLMSelector({
@@ -97,8 +94,6 @@ export function LLMSelector({
   onProviderChange,
   onModelChange,
   isLoading,
-  useStream,
-  onStreamChange,
 }: LLMSelectorProps) {
   const selectedProvider = providers.find((p) => p.name === provider);
   const models = selectedProvider?.models || [];
@@ -109,10 +104,6 @@ export function LLMSelector({
 
   const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     onModelChange(e.target.value);
-  };
-
-  const handleStreamToggle = () => {
-    onStreamChange(!useStream);
   };
 
   if (isLoading) {
@@ -146,22 +137,6 @@ export function LLMSelector({
           </option>
         ))}
       </select>
-
-      <span className="text-muted-foreground/50">/</span>
-
-      <button
-        onClick={handleStreamToggle}
-        className={cn(
-          "text-xs px-2 py-1 rounded border transition-colors",
-          useStream
-            ? "bg-primary/10 text-primary border-primary/20"
-            : "bg-muted/50 text-muted-foreground border-transparent hover:bg-muted"
-        )}
-        title={useStream ? "Streaming enabled" : "Streaming disabled"}
-      >
-        {useStream ? "Stream ON" : "Stream OFF"}
-      </button>
     </div>
   );
 }
-
