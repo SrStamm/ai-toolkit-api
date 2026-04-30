@@ -20,28 +20,28 @@ class Router:
     def __init__(self, llm_client: Any):
         self.llm = llm_client
         self.tools = None  # Se establece desde Agent
-    
+
     def _build_tool_list(self) -> str:
         """Construye lista legible de herramientas para el prompt."""
         if not self.tools:
             return "No tools available"
-        
+
         return "\n".join(
-f"- {name}: {defn.description}"
-            for name, defn in self.tools.items()
+            f"- {name}: {defn.description}"
+                for name, defn in self.tools.items()
         )
-    
+
     async def get_decision(self, state: AgentState) -> Decision:
         """Async method to get LLM decision.
-        
+
         Args:
             state: Current agent state
-              
+
         Returns:
             Decision with action to take
         """
         tools = self._build_tool_list()
-        
+
         # Build conversation history for context
         history_context = ""
         if state.history:
@@ -91,24 +91,6 @@ f"- {name}: {defn.description}"
             if decision_json.get('action') == "retrieve_context" and state.context:
                 logger.warning("Preventing repeated context retrieval")
                 return Decision(action=ActionType.FINAL_ANSWER)
-            
-            return Decision(
-                action=ActionType(decision_json.get("action", "final_answer")),
-                tool_name=decision_json.get("tool_name"),
-                args=decision_json.get("args", {})
-            )
-        except Exception:
-            logger.warning(f"Invalid JSON from router: {raw}")
-            return Decision(action=ActionType.FINAL_ANSWER)
-            
-            return Decision(
-                action=ActionType(decision_json.get("action", "final_answer")),
-                tool_name=decision_json.get("tool_name"),
-                args=decision_json.get("args", {})
-            )
-        except Exception:
-            logger.warning(f"Invalid JSON from router: {raw}")
-            return Decision(action=ActionType.FINAL_ANSWER)
             
             return Decision(
                 action=ActionType(decision_json.get("action", "final_answer")),
