@@ -112,8 +112,8 @@ class LlamaIndexOrchestrator:
         return query_engine.query(query)
 
     def get_context(
-        self, query: str, top_k: int, domain: str | None = None,  topic: str | None = None, 
-    ):
+        self, query: str, top_k: int, domain: str | None = None, topic: str | None = None,
+    ) -> tuple[str, list[Citation]]:
         # 1. Create filters
         query_filters = self._query_filters(domain, topic)
 
@@ -129,10 +129,20 @@ class LlamaIndexOrchestrator:
         nodes = retriever.retrieve(retrieval_query)
         nodes = self.rerank._postprocess_nodes(nodes, query_bundle=QueryBundle(query))
 
-        # 4. Create Context and call LLM
+        # 4. Create Context and Citations
         context_str = "\n\n".join([n.get_content() for n in nodes])
 
-        return context_str
+        citations = []
+        for i, node in enumerate(nodes):
+            citations.append(
+                Citation(
+                    source=node.metadata.get("filename", "unknown"),
+                    chunk_index=i,
+                    text=node.get_content(),
+                )
+            )
+
+        return context_str, citations
 
     def custom_query(
         self, query: str, domain: str | None = None, topic: str | None = None

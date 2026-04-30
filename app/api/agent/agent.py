@@ -84,7 +84,7 @@ class Agent:
         """Create a new session ID."""
         return str(uuid.uuid4())
 
-    async def agent_loop(self, query: str, session_id: Optional[str] = None):
+    async def agent_loop(self, query: str, session_id: Optional[str] = None, domain: Optional[str] = None):
         """Async main agent loop.
 
         Coordinates ToolRunner and Router to execute actions until FINAL_ANSWER.
@@ -94,7 +94,7 @@ class Agent:
             session_id = self._create_session_id()
 
         # Create state
-        state = AgentState(query=query, session_id=session_id)
+        state = AgentState(query=query, session_id=session_id, domain=domain)
 
         # Add user query to session history
         self.session_memory.add(session_id, "user", query)
@@ -132,6 +132,10 @@ class Agent:
 
             # Handle RETRIEVE_CONTEXT
             if decision.action == ActionType.RETRIEVE_CONTEXT:
+                # Inject domain from state if not provided by LLM
+                if state.domain and "domain" not in decision.args:
+                    decision.args["domain"] = state.domain
+                
                 result = self.tool_runner.run(
                     "retrieve_context",
                     decision.args,
@@ -139,13 +143,17 @@ class Agent:
                 )
                 # Guardar contexto obtenido
                 state.context = result.output
-                state.set_last_tool("retrieve_context", result.output)
+                
+                # Guardar citaciones si vienen en metadata
+                state.set_last_tool("retrieve_context", result.output, result.metadata)
+                
                 logger.info(
                     "agent_tool_executed",
                     step=step,
                     tool="retrieve_context",
                     args=decision.args,
                     result_preview=result.output[:300],
+                    has_citations=bool(result.metadata and "citations" in result.metadata),
                     session_id=session_id,
                 )
                 continue
@@ -225,11 +233,12 @@ class Agent:
                 'usage': response.usage,
                 'cost': response.cost,
                 'model': response.model,
-                'provider': response.provider
+                'provider': response.provider,
+                'citations': state.citations  # Include accumulated citations
             }
         )
 
-    async def agent_loop_stream(self, query: str, session_id: Optional[str] = None):
+    async def agent_loop_stream(self, query: str, session_id: Optional[str] = None, domain: Optional[str] = None):
         """
         Streaming version of agent_loop.
 
@@ -249,7 +258,7 @@ class Agent:
             if not session_id:
                 session_id = self._create_session_id()
 
-            state = AgentState(query=query, session_id=session_id)
+            state = AgentState(query=query, session_id=session_id, domain=domain)
             self.session_memory.add(session_id, "user", query)
             history = self.session_memory.get_history(session_id)
             state.history = history
@@ -270,15 +279,25 @@ class Agent:
                 if decision.action == ActionType.RETRIEVE_CONTEXT:
                     yield sse_event("tool_start", json.dumps({'tool': 'retrieve_context'}))
                     
+                    # Inject domain from state if not provided by LLM
+                    if state.domain and "domain" not in decision.args:
+                        decision.args["domain"] = state.domain
+                    
                     result = self.tool_runner.run(
                         "retrieve_context",
                         decision.args,
                         state
                     )
                     state.context = result.output
-                    state.set_last_tool("retrieve_context", result.output)
+                    # Save citations if available
+                    state.set_last_tool("retrieve_context", result.output, result.metadata)
                     
-                    yield sse_event("tool_done", json.dumps({'tool': 'retrieve_context', 'status': 'success'}))
+                    # Send tool_done with citation count
+                    tool_done_data = {'tool': 'retrieve_context', 'status': 'success'}
+                    if result.metadata and "citations" in result.metadata:
+                        tool_done_data['citations_count'] = len(result.metadata["citations"])
+                    
+                    yield sse_event("tool_done", json.dumps(tool_done_data))
                     continue
                 
                 if decision.action == ActionType.CALL_TOOL:
@@ -348,7 +367,8 @@ class Agent:
                         'usage': final_response.usage.__dict__ if final_response.usage else {},
                         'cost': final_response.cost.__dict__ if final_response.cost else {},
                         'model': final_response.model,
-                        'provider': final_response.provider
+                        'provider': final_response.provider,
+                        'citations': state.citations  # Include accumulated citations
                     }))
                     break
 
