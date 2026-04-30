@@ -105,7 +105,7 @@ class Agent:
 
         # Loop for agent - with step counter
         step = 0
-        while True:
+        while step < 5:
             step += 1
 
             # Get decision from router (async)
@@ -264,7 +264,7 @@ class Agent:
             state.history = history
 
             step = 0
-            while True:
+            while step < 5:
                 step += 1
                 # Get decision from router (now async)
                 decision = await self.router.get_decision(state)

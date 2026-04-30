@@ -58,7 +58,7 @@ def register_retrieve_context_tool() -> None:
                 },
                 "domain": {
                     "type": "string",
-                    "description": "Optional domain to filter results (e.g., 'libros', 'docs')",
+                    "description": "Optional domain to filter results (e.g., 'fastapi', 'docker')",
                 },
             },
             "required": ["query"],
