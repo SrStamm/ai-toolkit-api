@@ -1,12 +1,11 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import Markdown from "react-markdown";
 import { cn } from "@/lib/utils";
-import { SendHorizontal, Loader2, Bot, User } from "lucide-react";
+import { SendHorizontal, Loader2, Bot } from "lucide-react";
 import { useLLMConfig, LLMSelector } from "./llmConfigBar";
-import { useChatStream, type Message } from "@/hooks/useChatStream";
-import { markdownComponents } from "./markdownComponents";
+import { useChatStream } from "@/hooks/useChatStream";
+import { MessageBubble } from "./MessageBubble";
 
 export function ChatInterface() {
   const { provider, model, providers, isLoaded, setProvider, setModel } =
@@ -140,107 +139,6 @@ function EmptyState() {
             {suggestion}
           </button>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function MessageBubble({ message }: { message: Message }) {
-  const isUser = message.role === "user";
-
-  // Get unique sources from citations
-  const uniqueSources = useMemo(() => {
-    if (!message.citations || message.citations.length === 0) return [];
-    return [...new Set(message.citations.map((c) => c.source))];
-  }, [message.citations]);
-
-  return (
-    <div
-      className={cn(
-        "flex gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300",
-        isUser ? "flex-row-reverse" : "flex-row",
-      )}
-    >
-      {/* Avatar */}
-      <div
-        className={cn(
-          "shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
-          isUser ? "bg-primary/10" : "bg-muted",
-        )}
-      >
-        {isUser ? (
-          <User className="size-4 text-primary" />
-        ) : (
-          <Bot className="size-4 text-muted-foreground" />
-        )}
-      </div>
-
-      {/* Message */}
-      <div
-        className={cn(
-          "flex-1 max-w-[85%]",
-          isUser ? "items-end" : "items-start",
-        )}
-      >
-        {/* Tool Status (e.g., "Searching documents...") */}
-        {message.toolStatus && (
-          <div className="text-xs text-muted-foreground mb-1 italic">
-            {message.toolStatus}
-          </div>
-        )}
-
-        <div
-          className={cn(
-            "px-4 py-3 rounded-2xl",
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted/50 border-0",
-          )}
-        >
-          {message.isStreaming && !message.content ? (
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1">
-                <span
-                  className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
-                  style={{ animationDelay: "0ms" }}
-                />
-                <span
-                  className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
-                  style={{ animationDelay: "150ms" }}
-                />
-                <span
-                  className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
-                  style={{ animationDelay: "300ms" }}
-                />
-              </div>
-            </div>
-          ) : (
-            <div
-              className={cn(
-                "prose prose-sm max-w-none text-sm",
-                isUser ? "prose-invert" : "prose-neutral",
-              )}
-            >
-              <Markdown components={markdownComponents}>
-                {message.content}
-              </Markdown>
-            </div>
-          )}
-        </div>
-
-        {/* Citations - Unique Sources Only */}
-        {uniqueSources.length > 0 && (
-          <div className="mt-2 text-xs text-muted-foreground">
-            <p className="font-semibold mb-1">Sources:</p>
-            <ul className="list-disc list-outside pl-4 space-y-0.5">
-              {uniqueSources.map((source, idx) => (
-                <li key={idx} className="italic">
-                  {source}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     </div>
   );
