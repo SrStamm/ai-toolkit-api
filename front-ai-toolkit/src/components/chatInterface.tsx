@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { agentAsk, agentAskStream } from "@/services/agentServices";
@@ -11,12 +11,20 @@ import { cn } from "@/lib/utils";
 import { SendHorizontal, Loader2, Bot, User } from "lucide-react";
 import { useLLMConfig, LLMSelector } from "./llmConfigBar";
 
+interface Citation {
+  source: string;
+  chunk_index: number;
+  text: string;
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   isStreaming?: boolean;
   isStream?: boolean;
+  citations?: Citation[]; // Citations from the agent
+  toolStatus?: string; // Current tool being executed (e.g., "retrieve_context")
 }
 
 const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
@@ -114,17 +122,44 @@ export function ChatInterface() {
 
     if (useStream) {
       let accumulatedContent = "";
+      let currentTool = ""; // Track which tool is running
 
       agentAskStream(
         body,
         { provider, model, useStream },
         (event, data) => {
           if (event === "agent_decision") {
-            console.log("Agent decision:", data);
+            // Optional: show decision in UI if you want
           } else if (event === "tool_start") {
-            console.log("Tool started:", data);
+            currentTool = data.tool || "unknown";
+            // Update message to show current tool status
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessage.id 
+                  ? { ...msg, toolStatus: `Using ${currentTool}...` } 
+                  : msg
+              )
+            );
           } else if (event === "tool_done") {
-            console.log("Tool done:", data);
+            // Clear tool status or show completion
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessage.id 
+                  ? { ...msg, toolStatus: `Completed ${currentTool}` } 
+                  : msg
+              )
+            );
+            // Optionally clear after a delay
+            setTimeout(() => {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessage.id && msg.toolStatus?.includes('Completed')
+                    ? { ...msg, toolStatus: undefined } 
+                    : msg
+                )
+              );
+            }, 1500);
+            currentTool = "";
           } else if (event === "llm_token") {
             accumulatedContent += data.token || "";
             setMessages((prev) =>
@@ -141,7 +176,13 @@ export function ChatInterface() {
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === aiMessage.id
-                  ? { ...msg, content: parseAnswer(finalContent), isStreaming: false }
+                  ? { 
+                      ...msg, 
+                      content: parseAnswer(finalContent), 
+                      isStreaming: false,
+                      citations: data.citations || [], // Save citations from done event
+                      toolStatus: undefined // Clear any remaining tool status
+                    }
                   : msg
               )
             );
@@ -152,7 +193,7 @@ export function ChatInterface() {
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === aiMessage.id
-                  ? { ...msg, content: "Error: " + (data.error || "Unknown error"), isStreaming: false }
+                  ? { ...msg, content: "Error: " + (data.error || "Unknown error"), isStreaming: false, toolStatus: undefined }
                   : msg
               )
             );
@@ -298,6 +339,12 @@ function EmptyState() {
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
+  // Get unique sources from citations
+  const uniqueSources = useMemo(() => {
+    if (!message.citations || message.citations.length === 0) return [];
+    return [...new Set(message.citations.map(c => c.source))];
+  }, [message.citations]);
+
   return (
     <div className={cn("flex gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300", isUser ? "flex-row-reverse" : "flex-row")}>
       {/* Avatar */}
@@ -307,6 +354,13 @@ function MessageBubble({ message }: { message: Message }) {
 
       {/* Message */}
       <div className={cn("flex-1 max-w-[85%]", isUser ? "items-end" : "items-start")}>
+        {/* Tool Status (e.g., "Searching documents...") */}
+        {message.toolStatus && (
+          <div className="text-xs text-muted-foreground mb-1 italic">
+            {message.toolStatus}
+          </div>
+        )}
+
         <div className={cn("px-4 py-3 rounded-2xl", isUser ? "bg-primary text-primary-foreground" : "bg-muted/50 border-0")}>
           {message.isStreaming && !message.content ? (
             <div className="flex items-center gap-2">
@@ -375,6 +429,18 @@ function MessageBubble({ message }: { message: Message }) {
             </div>
           )}
         </div>
+
+        {/* Citations - Unique Sources Only */}
+        {uniqueSources.length > 0 && (
+          <div className="mt-2 text-xs text-muted-foreground">
+            <p className="font-semibold mb-1">Sources:</p>
+            <ul className="list-disc list-outside pl-4 space-y-0.5">
+              {uniqueSources.map((source, idx) => (
+                <li key={idx} className="italic">{source}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );
