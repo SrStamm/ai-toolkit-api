@@ -1,96 +1,22 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { agentAskStream } from "@/services/agentServices";
-import type { AgentQuestion } from "@/types/agent";
-import { showToastError } from "./toast";
-import Markdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { cn } from "@/lib/utils";
-import { SendHorizontal, Loader2, Bot, User } from "lucide-react";
+import { SendHorizontal, Loader2, Bot } from "lucide-react";
 import { useLLMConfig, LLMSelector } from "./llmConfigBar";
-
-interface Citation {
-  source: string;
-  chunk_index: number;
-  text: string;
-}
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  isStreaming?: boolean;
-  isStream?: boolean;
-  citations?: Citation[]; // Citations from the agent
-  toolStatus?: string; // Current tool being executed (e.g., "retrieve_context")
-}
-
-const generateId = () =>
-  `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-
-/** Parse answer - handles JSON wrapper like {"answer": "..."} or {"response": "..."} and removes code block wrappers */
-function parseAnswer(answer: string): string {
-  if (!answer) return "";
-
-  let content = answer.trim();
-
-  // First, remove markdown code block wrapper if present (e.g., ```json\n...\n```)
-  // This must be done BEFORE checking for JSON, because the LLM might wrap the response
-  content = content.replace(/^```(?:json|text)?\n?/, "").replace(/```$/, "");
-
-  // Try to parse JSON wrapper if present (after code block removal)
-  if (content.startsWith("{") && content.endsWith("}")) {
-    try {
-      const parsed = JSON.parse(content);
-      if (typeof parsed === "object" && parsed !== null) {
-        // Common field names that might contain the answer
-        const possibleKeys = [
-          "answer",
-          "response",
-          "text",
-          "content",
-          "message",
-        ];
-        for (const key of possibleKeys) {
-          if (key in parsed && typeof parsed[key] === "string") {
-            content = parsed[key];
-            break;
-          }
-        }
-        // If single key, use its value
-        const keys = Object.keys(parsed);
-        if (keys.length === 1 && typeof parsed[keys[0]] === "string") {
-          content = parsed[keys[0]];
-        }
-      }
-    } catch {
-      // Not valid JSON, continue with original
-    }
-  }
-
-  return content.trim();
-}
-
-const codeBlockStyle = {
-  background: "#1e1e1e",
-  whiteSpace: "pre-wrap" as const,
-  wordBreak: "break-word" as const,
-  borderRadius: "0.5rem",
-  padding: "1rem",
-  margin: "0.75rem 0",
-  fontSize: "0.875rem",
-};
+import { useChatStream } from "@/hooks/useChatStream";
+import { MessageBubble } from "./MessageBubble";
 
 export function ChatInterface() {
   const { provider, model, providers, isLoaded, setProvider, setModel } =
     useLLMConfig();
 
+  const { messages, isLoading, handleQuery } = useChatStream({
+    provider,
+    model,
+  });
+
   const [query, setQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -102,126 +28,16 @@ export function ChatInterface() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  const handleQuery = async () => {
-    if (!query.trim() || isLoading) return;
-
-    const userMessage: Message = {
-      id: generateId(),
-      role: "user",
-      content: query.trim(),
-    };
-
-    const aiMessage: Message = {
-      id: generateId(),
-      role: "assistant",
-      content: "",
-      isStreaming: true,
-    };
-
-    setMessages((prev) => [...prev, userMessage, aiMessage]);
-    setIsLoading(true);
+  const handleQueryWrapper = () => {
+    handleQuery(query);
     setQuery("");
-
-    const body: AgentQuestion = {
-      text: query.trim(),
-      session_id: sessionId || undefined,
-    };
-
-    let accumulatedContent = "";
-    let currentTool = "";
-
-    agentAskStream(
-      body,
-      { provider, model },
-      (event, data) => {
-        if (event === "agent_decision") {
-          // Router decision - optional UI update
-        } else if (event === "tool_start") {
-          currentTool = data.tool || "unknown";
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiMessage.id
-                ? { ...msg, toolStatus: `Using ${currentTool}...` }
-                : msg,
-            ),
-          );
-        } else if (event === "tool_done") {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiMessage.id
-                ? { ...msg, toolStatus: `Completed ${currentTool}` }
-                : msg,
-            ),
-          );
-          setTimeout(() => {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMessage.id && msg.toolStatus?.includes("Completed")
-                  ? { ...msg, toolStatus: undefined }
-                  : msg,
-              ),
-            );
-          }, 1500);
-          currentTool = "";
-        } else if (event === "llm_token") {
-          accumulatedContent += data.token || "";
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiMessage.id
-                ? { ...msg, content: accumulatedContent }
-                : msg,
-            ),
-          );
-        } else if (event === "done") {
-          if (data.session_id) {
-            setSessionId(data.session_id);
-          }
-          const finalContent = accumulatedContent || data.answer;
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiMessage.id
-                ? {
-                    ...msg,
-                    content: parseAnswer(finalContent),
-                    isStreaming: false,
-                    citations: data.citations || [],
-                    toolStatus: undefined,
-                  }
-                : msg,
-            ),
-          );
-          setIsLoading(false);
-          inputRef.current?.focus();
-        } else if (event === "error") {
-          console.error("Stream error:", data);
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiMessage.id
-                ? {
-                    ...msg,
-                    content: "Error: " + (data.error || "Unknown error"),
-                    isStreaming: false,
-                    toolStatus: undefined,
-                  }
-                : msg,
-            ),
-          );
-          setIsLoading(false);
-        }
-      },
-      (error) => {
-        console.error("Stream error:", error);
-        showToastError(error);
-        setMessages((prev) => prev.filter((msg) => msg.id !== aiMessage.id));
-        setIsLoading(false);
-      },
-    );
+    inputRef.current?.focus();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleQuery();
+      handleQueryWrapper();
     }
   };
 
@@ -273,7 +89,7 @@ export function ChatInterface() {
               />
             </div>
             <Button
-              onClick={handleQuery}
+              onClick={handleQueryWrapper}
               disabled={isLoading || !query.trim()}
               size="icon-lg"
               className={cn(
@@ -323,185 +139,6 @@ function EmptyState() {
             {suggestion}
           </button>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function MessageBubble({ message }: { message: Message }) {
-  const isUser = message.role === "user";
-
-  // Get unique sources from citations
-  const uniqueSources = useMemo(() => {
-    if (!message.citations || message.citations.length === 0) return [];
-    return [...new Set(message.citations.map((c) => c.source))];
-  }, [message.citations]);
-
-  return (
-    <div
-      className={cn(
-        "flex gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300",
-        isUser ? "flex-row-reverse" : "flex-row",
-      )}
-    >
-      {/* Avatar */}
-      <div
-        className={cn(
-          "shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
-          isUser ? "bg-primary/10" : "bg-muted",
-        )}
-      >
-        {isUser ? (
-          <User className="size-4 text-primary" />
-        ) : (
-          <Bot className="size-4 text-muted-foreground" />
-        )}
-      </div>
-
-      {/* Message */}
-      <div
-        className={cn(
-          "flex-1 max-w-[85%]",
-          isUser ? "items-end" : "items-start",
-        )}
-      >
-        {/* Tool Status (e.g., "Searching documents...") */}
-        {message.toolStatus && (
-          <div className="text-xs text-muted-foreground mb-1 italic">
-            {message.toolStatus}
-          </div>
-        )}
-
-        <div
-          className={cn(
-            "px-4 py-3 rounded-2xl",
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted/50 border-0",
-          )}
-        >
-          {message.isStreaming && !message.content ? (
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1">
-                <span
-                  className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
-                  style={{ animationDelay: "0ms" }}
-                />
-                <span
-                  className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
-                  style={{ animationDelay: "150ms" }}
-                />
-                <span
-                  className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
-                  style={{ animationDelay: "300ms" }}
-                />
-              </div>
-            </div>
-          ) : (
-            <div
-              className={cn(
-                "prose prose-sm max-w-none text-sm",
-                isUser ? "prose-invert" : "prose-neutral",
-              )}
-            >
-              <Markdown
-                components={{
-                  p: ({ children }) => (
-                    <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
-                  ),
-                  ul: ({ children }) => (
-                    <ul className="list-disc list-outside pl-5 mb-2 space-y-1">
-                      {children}
-                    </ul>
-                  ),
-                  ol: ({ children }) => (
-                    <ol className="list-decimal list-outside pl-5 mb-2 space-y-1">
-                      {children}
-                    </ol>
-                  ),
-                  li: ({ children }) => (
-                    <li className="leading-relaxed">{children}</li>
-                  ),
-                  strong: ({ children }) => (
-                    <strong className="font-semibold">{children}</strong>
-                  ),
-                  code: ({ className, children, ...props }) => {
-                    const match = /language-(\w+)/.exec(className || "");
-                    const isInline = !match && !className?.includes("language");
-
-                    if (isInline) {
-                      return (
-                        <code
-                          className={cn(
-                            "px-1.5 py-0.5 rounded text-xs font-mono",
-                            isUser ? "bg-primary-foreground/20" : "bg-muted",
-                          )}
-                          {...props}
-                        >
-                          {children}
-                        </code>
-                      );
-                    }
-
-                    return (
-                      <SyntaxHighlighter
-                        style={
-                          vscDarkPlus as { [key: string]: React.CSSProperties }
-                        }
-                        language={match ? match[1] : "text"}
-                        PreTag="div"
-                        customStyle={codeBlockStyle}
-                      >
-                        {String(children).replace(/\n$/, "")}
-                      </SyntaxHighlighter>
-                    );
-                  },
-                  pre: ({ children }) => <>{children}</>,
-                  h1: ({ children }) => (
-                    <h1 className="text-lg font-bold mb-2">{children}</h1>
-                  ),
-                  h2: ({ children }) => (
-                    <h2 className="text-base font-semibold mb-2">{children}</h2>
-                  ),
-                  h3: ({ children }) => (
-                    <h3 className="text-sm font-semibold mb-1">{children}</h3>
-                  ),
-                  blockquote: ({ children }) => (
-                    <blockquote className="border-l-2 pl-3 italic opacity-80 my-2">
-                      {children}
-                    </blockquote>
-                  ),
-                  a: ({ href, children }) => (
-                    <a
-                      href={href}
-                      className="text-primary underline underline-offset-2 hover:opacity-80"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {children}
-                    </a>
-                  ),
-                }}
-              >
-                {message.content}
-              </Markdown>
-            </div>
-          )}
-        </div>
-
-        {/* Citations - Unique Sources Only */}
-        {uniqueSources.length > 0 && (
-          <div className="mt-2 text-xs text-muted-foreground">
-            <p className="font-semibold mb-1">Sources:</p>
-            <ul className="list-disc list-outside pl-4 space-y-0.5">
-              {uniqueSources.map((source, idx) => (
-                <li key={idx} className="italic">
-                  {source}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     </div>
   );
