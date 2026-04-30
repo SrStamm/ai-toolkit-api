@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { agentAsk, agentAskStream } from "@/services/agentServices";
+import { agentAskStream } from "@/services/agentServices";
 import type { AgentQuestion } from "@/types/agent";
 import { showToastError } from "./toast";
 import Markdown from "react-markdown";
@@ -27,7 +27,8 @@ interface Message {
   toolStatus?: string; // Current tool being executed (e.g., "retrieve_context")
 }
 
-const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+const generateId = () =>
+  `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
 /** Parse answer - handles JSON wrapper like {"answer": "..."} or {"response": "..."} and removes code block wrappers */
 function parseAnswer(answer: string): string {
@@ -40,21 +41,27 @@ function parseAnswer(answer: string): string {
   content = content.replace(/^```(?:json|text)?\n?/, "").replace(/```$/, "");
 
   // Try to parse JSON wrapper if present (after code block removal)
-  if (content.startsWith('{') && content.endsWith('}')) {
+  if (content.startsWith("{") && content.endsWith("}")) {
     try {
       const parsed = JSON.parse(content);
-      if (typeof parsed === 'object' && parsed !== null) {
+      if (typeof parsed === "object" && parsed !== null) {
         // Common field names that might contain the answer
-        const possibleKeys = ['answer', 'response', 'text', 'content', 'message'];
+        const possibleKeys = [
+          "answer",
+          "response",
+          "text",
+          "content",
+          "message",
+        ];
         for (const key of possibleKeys) {
-          if (key in parsed && typeof parsed[key] === 'string') {
+          if (key in parsed && typeof parsed[key] === "string") {
             content = parsed[key];
             break;
           }
         }
         // If single key, use its value
         const keys = Object.keys(parsed);
-        if (keys.length === 1 && typeof parsed[keys[0]] === 'string') {
+        if (keys.length === 1 && typeof parsed[keys[0]] === "string") {
           content = parsed[keys[0]];
         }
       }
@@ -77,7 +84,8 @@ const codeBlockStyle = {
 };
 
 export function ChatInterface() {
-  const { provider, model, providers, isLoaded, setProvider, setModel, useStream, setUseStream } = useLLMConfig();
+  const { provider, model, providers, isLoaded, setProvider, setModel } =
+    useLLMConfig();
 
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -108,7 +116,6 @@ export function ChatInterface() {
       role: "assistant",
       content: "",
       isStreaming: true,
-      isStream: useStream,
     };
 
     setMessages((prev) => [...prev, userMessage, aiMessage]);
@@ -120,117 +127,95 @@ export function ChatInterface() {
       session_id: sessionId || undefined,
     };
 
-    if (useStream) {
-      let accumulatedContent = "";
-      let currentTool = ""; // Track which tool is running
+    let accumulatedContent = "";
+    let currentTool = "";
 
-      agentAskStream(
-        body,
-        { provider, model, useStream },
-        (event, data) => {
-          if (event === "agent_decision") {
-            // Optional: show decision in UI if you want
-          } else if (event === "tool_start") {
-            currentTool = data.tool || "unknown";
-            // Update message to show current tool status
+    agentAskStream(
+      body,
+      { provider, model },
+      (event, data) => {
+        if (event === "agent_decision") {
+          // Router decision - optional UI update
+        } else if (event === "tool_start") {
+          currentTool = data.tool || "unknown";
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessage.id
+                ? { ...msg, toolStatus: `Using ${currentTool}...` }
+                : msg,
+            ),
+          );
+        } else if (event === "tool_done") {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessage.id
+                ? { ...msg, toolStatus: `Completed ${currentTool}` }
+                : msg,
+            ),
+          );
+          setTimeout(() => {
             setMessages((prev) =>
               prev.map((msg) =>
-                msg.id === aiMessage.id 
-                  ? { ...msg, toolStatus: `Using ${currentTool}...` } 
-                  : msg
-              )
+                msg.id === aiMessage.id && msg.toolStatus?.includes("Completed")
+                  ? { ...msg, toolStatus: undefined }
+                  : msg,
+              ),
             );
-          } else if (event === "tool_done") {
-            // Clear tool status or show completion
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMessage.id 
-                  ? { ...msg, toolStatus: `Completed ${currentTool}` } 
-                  : msg
-              )
-            );
-            // Optionally clear after a delay
-            setTimeout(() => {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessage.id && msg.toolStatus?.includes('Completed')
-                    ? { ...msg, toolStatus: undefined } 
-                    : msg
-                )
-              );
-            }, 1500);
-            currentTool = "";
-          } else if (event === "llm_token") {
-            accumulatedContent += data.token || "";
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMessage.id ? { ...msg, content: accumulatedContent } : msg
-              )
-            );
-          } else if (event === "done") {
-            if (data.session_id) {
-              setSessionId(data.session_id);
-            }
-            // Use accumulated content from streaming, fallback to data.answer
-            const finalContent = accumulatedContent || data.answer;
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMessage.id
-                  ? { 
-                      ...msg, 
-                      content: parseAnswer(finalContent), 
-                      isStreaming: false,
-                      citations: data.citations || [], // Save citations from done event
-                      toolStatus: undefined // Clear any remaining tool status
-                    }
-                  : msg
-              )
-            );
-            setIsLoading(false);
-            inputRef.current?.focus();
-          } else if (event === "error") {
-            console.error("Stream error:", data);
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMessage.id
-                  ? { ...msg, content: "Error: " + (data.error || "Unknown error"), isStreaming: false, toolStatus: undefined }
-                  : msg
-              )
-            );
-            setIsLoading(false);
+          }, 1500);
+          currentTool = "";
+        } else if (event === "llm_token") {
+          accumulatedContent += data.token || "";
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessage.id
+                ? { ...msg, content: accumulatedContent }
+                : msg,
+            ),
+          );
+        } else if (event === "done") {
+          if (data.session_id) {
+            setSessionId(data.session_id);
           }
-        },
-        (error) => {
-          console.error("Stream error:", error);
-          showToastError(error);
-          setMessages((prev) => prev.filter((msg) => msg.id !== aiMessage.id));
+          const finalContent = accumulatedContent || data.answer;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessage.id
+                ? {
+                    ...msg,
+                    content: parseAnswer(finalContent),
+                    isStreaming: false,
+                    citations: data.citations || [],
+                    toolStatus: undefined,
+                  }
+                : msg,
+            ),
+          );
+          setIsLoading(false);
+          inputRef.current?.focus();
+        } else if (event === "error") {
+          console.error("Stream error:", data);
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessage.id
+                ? {
+                    ...msg,
+                    content: "Error: " + (data.error || "Unknown error"),
+                    isStreaming: false,
+                    toolStatus: undefined,
+                  }
+                : msg,
+            ),
+          );
           setIsLoading(false);
         }
-      );
-    } else {
-      try {
-        const response = await agentAsk(body, { provider, model });
-
-        if (response.session_id) {
-          setSessionId(response.session_id);
-        }
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMessage.id
-              ? { ...msg, content: parseAnswer(response.output), isStreaming: false }
-              : msg
-          )
-        );
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        showToastError(errorMessage);
+      },
+      (error) => {
+        console.error("Stream error:", error);
+        showToastError(error);
         setMessages((prev) => prev.filter((msg) => msg.id !== aiMessage.id));
-      } finally {
         setIsLoading(false);
-        inputRef.current?.focus();
-      }
-    }
+      },
+    );
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -255,8 +240,6 @@ export function ChatInterface() {
           onProviderChange={setProvider}
           onModelChange={setModel}
           isLoading={!isLoaded}
-          useStream={useStream}
-          onStreamChange={setUseStream}
         />
       </div>
 
@@ -293,9 +276,16 @@ export function ChatInterface() {
               onClick={handleQuery}
               disabled={isLoading || !query.trim()}
               size="icon-lg"
-              className={cn("shrink-0 transition-all", query.trim() && "bg-primary hover:bg-primary/90")}
+              className={cn(
+                "shrink-0 transition-all",
+                query.trim() && "bg-primary hover:bg-primary/90",
+              )}
             >
-              {isLoading ? <Loader2 className="size-5 animate-spin" /> : <SendHorizontal className="size-5" />}
+              {isLoading ? (
+                <Loader2 className="size-5 animate-spin" />
+              ) : (
+                <SendHorizontal className="size-5" />
+              )}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2 text-center">
@@ -316,21 +306,23 @@ function EmptyState() {
       <div className="space-y-2 max-w-md">
         <h3 className="text-xl font-semibold">¿En qué puedo ayudarte?</h3>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Hacé preguntas sobre tus documentos ingestados. El agente usará el contexto
-          disponible para darte respuestas precisas y detalladas.
+          Hacé preguntas sobre tus documentos ingestados. El agente usará el
+          contexto disponible para darte respuestas precisas y detalladas.
         </p>
       </div>
       <div className="flex flex-wrap justify-center gap-2">
-        {["¿Qué contiene este documento?", "Resume lo más importante", "Explica el concepto principal"].map(
-          (suggestion) => (
-            <button
-              key={suggestion}
-              className="text-xs px-3 py-1.5 rounded-full bg-muted/50 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground border border-transparent hover:border-border"
-            >
-              {suggestion}
-            </button>
-          )
-        )}
+        {[
+          "¿Qué contiene este documento?",
+          "Resume lo más importante",
+          "Explica el concepto principal",
+        ].map((suggestion) => (
+          <button
+            key={suggestion}
+            className="text-xs px-3 py-1.5 rounded-full bg-muted/50 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground border border-transparent hover:border-border"
+          >
+            {suggestion}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -342,18 +334,37 @@ function MessageBubble({ message }: { message: Message }) {
   // Get unique sources from citations
   const uniqueSources = useMemo(() => {
     if (!message.citations || message.citations.length === 0) return [];
-    return [...new Set(message.citations.map(c => c.source))];
+    return [...new Set(message.citations.map((c) => c.source))];
   }, [message.citations]);
 
   return (
-    <div className={cn("flex gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300", isUser ? "flex-row-reverse" : "flex-row")}>
+    <div
+      className={cn(
+        "flex gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300",
+        isUser ? "flex-row-reverse" : "flex-row",
+      )}
+    >
       {/* Avatar */}
-      <div className={cn("shrink-0 w-8 h-8 rounded-full flex items-center justify-center", isUser ? "bg-primary/10" : "bg-muted")}>
-        {isUser ? <User className="size-4 text-primary" /> : <Bot className="size-4 text-muted-foreground" />}
+      <div
+        className={cn(
+          "shrink-0 w-8 h-8 rounded-full flex items-center justify-center",
+          isUser ? "bg-primary/10" : "bg-muted",
+        )}
+      >
+        {isUser ? (
+          <User className="size-4 text-primary" />
+        ) : (
+          <Bot className="size-4 text-muted-foreground" />
+        )}
       </div>
 
       {/* Message */}
-      <div className={cn("flex-1 max-w-[85%]", isUser ? "items-end" : "items-start")}>
+      <div
+        className={cn(
+          "flex-1 max-w-[85%]",
+          isUser ? "items-end" : "items-start",
+        )}
+      >
         {/* Tool Status (e.g., "Searching documents...") */}
         {message.toolStatus && (
           <div className="text-xs text-muted-foreground mb-1 italic">
@@ -361,24 +372,59 @@ function MessageBubble({ message }: { message: Message }) {
           </div>
         )}
 
-        <div className={cn("px-4 py-3 rounded-2xl", isUser ? "bg-primary text-primary-foreground" : "bg-muted/50 border-0")}>
+        <div
+          className={cn(
+            "px-4 py-3 rounded-2xl",
+            isUser
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted/50 border-0",
+          )}
+        >
           {message.isStreaming && !message.content ? (
             <div className="flex items-center gap-2">
               <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                <span
+                  className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
+                  style={{ animationDelay: "0ms" }}
+                />
+                <span
+                  className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
+                  style={{ animationDelay: "150ms" }}
+                />
+                <span
+                  className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"
+                  style={{ animationDelay: "300ms" }}
+                />
               </div>
             </div>
           ) : (
-            <div className={cn("prose prose-sm max-w-none text-sm", isUser ? "prose-invert" : "prose-neutral")}>
+            <div
+              className={cn(
+                "prose prose-sm max-w-none text-sm",
+                isUser ? "prose-invert" : "prose-neutral",
+              )}
+            >
               <Markdown
                 components={{
-                  p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
-                  ul: ({ children }) => <ul className="list-disc list-outside pl-5 mb-2 space-y-1">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal list-outside pl-5 mb-2 space-y-1">{children}</ol>,
-                  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                  p: ({ children }) => (
+                    <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
+                  ),
+                  ul: ({ children }) => (
+                    <ul className="list-disc list-outside pl-5 mb-2 space-y-1">
+                      {children}
+                    </ul>
+                  ),
+                  ol: ({ children }) => (
+                    <ol className="list-decimal list-outside pl-5 mb-2 space-y-1">
+                      {children}
+                    </ol>
+                  ),
+                  li: ({ children }) => (
+                    <li className="leading-relaxed">{children}</li>
+                  ),
+                  strong: ({ children }) => (
+                    <strong className="font-semibold">{children}</strong>
+                  ),
                   code: ({ className, children, ...props }) => {
                     const match = /language-(\w+)/.exec(className || "");
                     const isInline = !match && !className?.includes("language");
@@ -386,7 +432,10 @@ function MessageBubble({ message }: { message: Message }) {
                     if (isInline) {
                       return (
                         <code
-                          className={cn("px-1.5 py-0.5 rounded text-xs font-mono", isUser ? "bg-primary-foreground/20" : "bg-muted")}
+                          className={cn(
+                            "px-1.5 py-0.5 rounded text-xs font-mono",
+                            isUser ? "bg-primary-foreground/20" : "bg-muted",
+                          )}
                           {...props}
                         >
                           {children}
@@ -396,7 +445,9 @@ function MessageBubble({ message }: { message: Message }) {
 
                     return (
                       <SyntaxHighlighter
-                        style={vscDarkPlus as { [key: string]: React.CSSProperties }}
+                        style={
+                          vscDarkPlus as { [key: string]: React.CSSProperties }
+                        }
                         language={match ? match[1] : "text"}
                         PreTag="div"
                         customStyle={codeBlockStyle}
@@ -406,11 +457,19 @@ function MessageBubble({ message }: { message: Message }) {
                     );
                   },
                   pre: ({ children }) => <>{children}</>,
-                  h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
-                  h2: ({ children }) => <h2 className="text-base font-semibold mb-2">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-sm font-semibold mb-1">{children}</h3>,
+                  h1: ({ children }) => (
+                    <h1 className="text-lg font-bold mb-2">{children}</h1>
+                  ),
+                  h2: ({ children }) => (
+                    <h2 className="text-base font-semibold mb-2">{children}</h2>
+                  ),
+                  h3: ({ children }) => (
+                    <h3 className="text-sm font-semibold mb-1">{children}</h3>
+                  ),
                   blockquote: ({ children }) => (
-                    <blockquote className="border-l-2 pl-3 italic opacity-80 my-2">{children}</blockquote>
+                    <blockquote className="border-l-2 pl-3 italic opacity-80 my-2">
+                      {children}
+                    </blockquote>
                   ),
                   a: ({ href, children }) => (
                     <a
@@ -436,7 +495,9 @@ function MessageBubble({ message }: { message: Message }) {
             <p className="font-semibold mb-1">Sources:</p>
             <ul className="list-disc list-outside pl-4 space-y-0.5">
               {uniqueSources.map((source, idx) => (
-                <li key={idx} className="italic">{source}</li>
+                <li key={idx} className="italic">
+                  {source}
+                </li>
               ))}
             </ul>
           </div>
