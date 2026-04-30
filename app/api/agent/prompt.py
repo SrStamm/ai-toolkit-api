@@ -17,12 +17,12 @@ Decision process:
 
 Examples:
 - Input: "hola como estas?" → Output: {{"action": "final_answer"}}
-- Input: "como uso FastAPI?" → Output: {{"action": "retrieve_context", "args": {{"top_k": 5}}}}
-- Input: "que es CORS?" → Output: {{"action": "retrieve_context", "args": {{"top_k": 5}}}}
+- Input: "como uso FastAPI?" → Output: {{"action": "retrieve_context", "args": {{"top_k": 5, "domain":"fastapi"}}}}
+- Input: "que es Docker?" → Output: {{"action": "retrieve_context", "args": {{"top_k": 5, "domain":"docker"}}}}
 - Input: tengo contexto ya → Output: {{"action": "final_answer"}}
 
 Return ONLY this JSON format:
-{{"action": "retrieve_context", "args": {{"top_k": 5}}}}
+{{"action": "retrieve_context", "args": {{"top_k": 5, "domain":"fastapi"}}}}
 {{"action": "final_answer"}}
 {{"action": "call_tool", "tool_name": "tool_name", "args": {{"param": "value"}}}}
 """
