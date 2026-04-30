@@ -26,9 +26,11 @@ class AgentState(BaseModel):
     query: str
     session_id: str
     top_k: int = 5
+    domain: Optional[str] = None  # Dominio opcional para filtrar búsquedas
     history: Optional[List[Message]] = None
     context: Optional[str] = None
     tool_results: List[str] = Field(default_factory=list)
+    citations: List[dict] = Field(default_factory=list)  # Citaciones acumuladas
     
     # Trazabilidad de herramientas
     last_tool: str | None = None
@@ -38,12 +40,16 @@ class AgentState(BaseModel):
     def add_tool_result(self, result: str) -> None:
         self.tool_results.append(result)
     
-    def set_last_tool(self, tool_name: str, result: str) -> None:
-        """Registra la última tool ejecutada."""
+    def set_last_tool(self, tool_name: str, result: str, metadata: dict | None = None) -> None:
+        """Registra la última tool ejecutada y sus metadatos."""
         self.last_tool = tool_name
         self.last_tool_result = result
         self.tool_execution_count += 1
         self.add_tool_result(result)
+        
+        # Si hay citaciones en el metadata, acumularlas
+        if metadata and "citations" in metadata:
+            self.citations.extend(metadata["citations"])
 
 
 class Decision(BaseModel):

@@ -15,6 +15,7 @@ logger = structlog.get_logger()
 def _retrieve_context_tool_handler(
     query: str,
     top_k: int = 5,
+    domain: Optional[str] = None,
     rag_orchestrator: Optional[LlamaIndexOrchestrator] = None,
     **kwargs
 ) -> ToolResponse:
@@ -25,13 +26,19 @@ def _retrieve_context_tool_handler(
             metadata={"error": "missing_dependency"},
         )
 
-    logger.info("tool_variables", query=query)
+    logger.info("tool_variables", query=query, domain=domain)
 
-    res = rag_orchestrator.get_context(query=query, top_k=top_k)
+    # get_context now returns (context_str, citations)
+    context_str, citations = rag_orchestrator.get_context(
+        query=query, top_k=top_k, domain=domain
+    )
+
+    # Convert citations to dicts for JSON serialization in metadata
+    citations_dict = [citation.model_dump() for citation in citations]
 
     return ToolResponse(
-        output=res,
-        # metadata={"citations": res.citations, "metadata": res.metadata},
+        output=context_str,
+        metadata={"citations": citations_dict},
     )
 
 
@@ -48,6 +55,10 @@ def register_retrieve_context_tool() -> None:
                     "type": "integer",
                     "description": "Quantity of results",
                     "default": 5,
+                },
+                "domain": {
+                    "type": "string",
+                    "description": "Optional domain to filter results (e.g., 'libros', 'docs')",
                 },
             },
             "required": ["query"],
