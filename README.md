@@ -1,6 +1,6 @@
 # ai-toolkit
 
-> **Versión actual:** `v4.2`  
+> **Versión actual:** `v4.3`  
 > **Estado:** estable (educacional / experimental, with contextual agent)
 
 **Herramientas de IA para backend (FastAPI)**
@@ -19,20 +19,28 @@
 
 ---
 
-## Estado actual – v4.2 (Agent State & Multi-Provider)
+## Estado actual – v4.3 (Citations & Stream-Only UI)
 
-La versión v4.2 extiende el agente de v4.1 con soporte para múltiples providers y mejor trazabilidad.
+La versión v4.3 mejora la transparencia del agente y simplifica el frontend, enfocándose en experiencia de usuario y trazabilidad.
 
-### Objetivos alcanzados en v4.2
+### Objetivos alcanzados en v4.3
 
-- Soporte para múltiples providers (groq, mistral, ollama)
-- Selección dinámica de modelo/provider por request (headers `x-provider`, `x-model`)
-- Eliminación de SDK mistral, uso de httpx directo
-- Estado del agente con `last_tool`, `last_tool_result`, `tool_execution_count`
-- Trazabilidad mejorada: cada paso del loop logged con step number
-- Few-shot examples en el prompt del router para mejores decisiones
+**Backend:**
 
-### Arquitectura v4.0
+- **Domain Filter:** `retrieve_context` acepta `domain` opcional para filtrar búsquedas en la base vectorial.
+- **Citations:** El agente devuelve fuentes (`source`, `chunk_index`, `text`) tanto en flujo normal como streaming.
+- **Step Limit:** Límite de pasos (`while step < 5`) para evitar loops infinitos.
+- **Markdown:** El agente formatea respuestas con Markdown (titulos, listas, código).
+- **JSON Robustness:** Parser resiliente que maneja múltiples formatos (`{"answer":...}`, `{"response":...}`).
+
+**Frontend:**
+
+- **Solo Stream:** Eliminación total de código no-streaming. El agente siempre usa Server-Sent Events (SSE).
+- **Citations UI:** Muestra fuentes únicas (sin duplicados) abajo del mensaje del asistente.
+- **Tool Status:** El usuario ve estados de carga (_"Using retrieve_context..."_, _"Completed"_).
+- **LLM Selector:** Simplificado, sin toggle de stream.
+
+### Arquitectura v4.3
 
 ```
 Cliente / Frontend
@@ -70,9 +78,9 @@ AgentResponse (output + session_id + metadata)
 
 ### Tools disponibles
 
-| Tool               | Descripción                                                   | Dependencias       |
-| ------------------ | ------------------------------------------------------------- | ------------------ |
-| `retrieve_context` | Busca en la base vectorial y construye respuesta con contexto | `rag_orchestrator` |
+| Tool               | Descripción                                                                 | Dependencias       |
+| ------------------ | --------------------------------------------------------------------------- | ------------------ |
+| `retrieve_context` | Busca en la base vectorial, soporta `domain` opcional y devuelve citaciones | `rag_orchestrator` |
 
 ---
 
@@ -147,7 +155,10 @@ Este proyecto demuestra:
 
 ### Agente
 
-- **Arquitectura de 3 componentes**: Agent (orchestrator), Router (LLM decision), ToolRunner (execution)
+- **Arquitectura de 3 componentes**:
+  - Agent (orchestrator)
+  - Router (LLM decision)
+  - ToolRunner (execution)
 - Tool registry centralizado con decorador `@register_tool`
 - Routing LLM hacia la tool adecuada con `Decision` tipada
 - `ActionType` enum: `RETRIEVE_CONTEXT`, `CALL_TOOL`, `FINAL_ANSWER`
@@ -256,20 +267,27 @@ Este proyecto demuestra:
 - Mejora de `retrieve_context`:
   - Filtros por dominio
   - Devolver citations
+- Streaming de respuesta del agente
+
+### V4.4 – Autonomous Ingestion & Simplification
+
+- Refactor del tool registry:
+  - Registro dinámico de tools
 - Documents management tools:
   - `delete_document`
   - `reindex_document`
   - `get_document_metadata`
-  - Uso de metadata (`document_name`) como identificador lógico
-- Streaming de respuesta del agente
-- Refactor del tool registry:
-  - Registro dinámico de tools
-
-### V4.4 – Autonomous Ingestion & Simplification
-
-- Nuevas tools:
   - `ingest_url`
   - `ingest_file`
+- Mejora del Router:
+  - Detección automática de input (URL vs archivo)
+  - Eliminación de argumentos innecesarios en `_final_answer_`
+- Simplificación del sistema:
+  - Eliminación de endpoints redundantes
+  - Eliminación de RAG manual (todo pasa por el agente)
+
+### V4.5 - Human-in-the-loop
+
 - Human-in-the-loop ingestion:
   - Las ingestas no se ejecutan automáticamente
   - Se encolan como `PENDING`
@@ -279,12 +297,6 @@ Este proyecto demuestra:
 - El agente solicita metadata al usuario:
   - `domain`
   - `topic`
-- Mejora del Router:
-  - Detección automática de input (URL vs archivo)
-  - Eliminación de argumentos innecesarios en `_final_answer_`
-- Simplificación del sistema:
-  - Eliminación de endpoints redundantes
-  - Eliminación de RAG manual (todo pasa por el agente)
 
 ---
 
