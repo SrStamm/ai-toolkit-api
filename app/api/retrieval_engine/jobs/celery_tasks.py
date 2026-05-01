@@ -122,7 +122,6 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
 def reindex_document_task(self, source: str, url: str, domain: str, topic: str):
     """Celery task to re-index a document."""
     from app.infrastructure.storage.qdrant_client import get_qdrant_store
-    from app.infrastructure.storage.hybrid_ai import get_hybrid_embedding_service
     from app.api.retrieval_engine.ingestion_service import IngestionService
     import asyncio
 
@@ -132,7 +131,9 @@ def reindex_document_task(self, source: str, url: str, domain: str, topic: str):
     try:
         # 1. Initialize dependencies
         vector_store = get_qdrant_store()
-        embed_service = get_hybrid_embedding_service()
+        # Note: function is named get_hybrid_embeddign_service (double d, ends in 'n')
+        from app.infrastructure.storage.hybrid_ai import get_hybrid_embeddign_service
+        embed_service = get_hybrid_embeddign_service()
         ingestion_svc = IngestionService(vector_store=vector_store, embed_service=embed_service)
 
         # 2. Delete old data
