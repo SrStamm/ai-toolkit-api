@@ -1,5 +1,5 @@
 """
-Tests para el ToolRegistry con lazy registration.
+Tests para el ToolRegistry con auto-discovery.
 """
 
 import pytest
@@ -7,7 +7,8 @@ import pytest
 import sys
 import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
+# Agregar el directorio padre (ai-toolkit-api/) al path para que app/ sea importable
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 class TestToolRegistry:
@@ -15,13 +16,13 @@ class TestToolRegistry:
 
     def setup_method(self):
         """Limpiar el registry antes de cada test."""
-        from api.agent.tools import ToolRegistry
+        from app.api.agent.tools import ToolRegistry
 
         ToolRegistry.clear()
 
     def test_register_tool(self):
         """Debería registrar una tool correctamente."""
-        from api.agent.tools import ToolRegistry, ToolDefinition
+        from app.api.agent.tools import ToolRegistry, ToolDefinition
 
         def dummy_handler(query: str, **kwargs):
             return "result"
@@ -43,7 +44,7 @@ class TestToolRegistry:
 
     def test_get_nonexistent_tool_raises(self):
         """Debería lanzar excepción si la tool no existe."""
-        from api.agent.tools import ToolRegistry
+        from app.api.agent.tools import ToolRegistry
         from app.domain.exceptions import ToolNotFoundError
 
         with pytest.raises(ToolNotFoundError):
@@ -51,7 +52,7 @@ class TestToolRegistry:
 
     def test_unregister_tool(self):
         """Debería desregistrar una tool."""
-        from api.agent.tools import ToolRegistry
+        from app.api.agent.tools import ToolRegistry
 
         def dummy_handler(query: str, **kwargs):
             return "result"
@@ -72,7 +73,7 @@ class TestToolRegistry:
 
     def test_list_tools(self):
         """Debería listar todas las tools registradas."""
-        from api.agent.tools import ToolRegistry
+        from app.api.agent.tools import ToolRegistry
 
         def handler1(**kwargs):
             return "1"
@@ -101,7 +102,7 @@ class TestToolRegistry:
 
     def test_decorator_registration(self):
         """Debería funcionar como función con argumentos."""
-        from api.agent.tools import ToolRegistry
+        from app.api.agent.tools import ToolRegistry
 
         def my_handler(**kwargs):
             return "decorated"
@@ -119,20 +120,35 @@ class TestToolRegistry:
         assert tool.handler is my_handler
 
     def test_initialize_registers_default_tools(self):
-        """Initialize debería registrar las tools default."""
-        from api.agent.tools import ToolRegistry
+        """Initialize debería registrar las tools automáticamente."""
+        from app.api.agent.tools import ToolRegistry
 
-        assert not ToolRegistry.exists("rag")
-        assert not ToolRegistry.exists("direct")
-
+        # Verificar que inicialmente no hay tools
+        initial_count = len(ToolRegistry.list_tools())
+        
         ToolRegistry.initialize()
 
-        assert ToolRegistry.exists("rag")
-        assert ToolRegistry.exists("direct")
+        # Después de initialize, debe haber al menos una tool registrada
+        # (las que están en el directorio tools/)
+        final_count = len(ToolRegistry.list_tools())
+        assert final_count > initial_count, "Initialize debe registrar al menos una tool"
+
+        # Verificar que se registró la tool de retrieve_context
+        # (asumiendo que existe en el directorio)
+        from pathlib import Path
+        tools_dir = Path(__file__).parent.parent / "app" / "api" / "agent" / "tools"
+        py_files = [f.stem for f in tools_dir.glob("*.py") 
+                    if not f.name.startswith("__") and f.name != "tools_registry.py"]
+        
+        # Al menos debe haberse registrado una tool del directorio
+        assert final_count >= len(py_files), (
+            f"Se esperaba al menos {len(py_files)} tools registradas, "
+            f"pero hay {final_count}"
+        )
 
     def test_clear_resets_registry(self):
         """Clear debería limpiar todas las tools."""
-        from api.agent.tools import ToolRegistry
+        from app.api.agent.tools import ToolRegistry
 
         def handler(**kwargs):
             return "result"

@@ -1,14 +1,20 @@
 """
-Tool Registry con lazy registration.
+Tool Registry con auto-discovery.
 
-Permite registrar tools en runtime en vez de al importar el módulo.
-Esto evita side effects al import y permite testing más fácil.
+Permite registrar tools en runtime y las descubre automáticamente
+desde el directorio tools/, sin necesidad de modificar
+initialize() cada vez que se agrega una tool nueva.
 """
 
+import importlib
+import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 from ....domain.exceptions import ToolNotFoundError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -127,18 +133,54 @@ class ToolRegistry:
     @classmethod
     def initialize(cls) -> None:
         """
-        Inicializa el registry con las tools default.
+        Inicializa el registry con auto-discovery.
 
-        Se llama explícitamente cuando se necesita,
-        no al importar el módulo.
+        Escanea el directorio tools/ buscando módulos que tengan
+        funciones de registro (register_<module_name>_tool o register_tool)
+        y las ejecuta automáticamente.
+
+        No es necesario modificar este método para agregar nuevas tools.
         """
         if cls._initialized:
             return
 
-        # Importar las tools lazily
-        from .retrieve_context import register_retrieve_context_tool
+        tools_dir = Path(__file__).parent
 
-        register_retrieve_context_tool()
+        for py_file in tools_dir.glob("*.py"):
+            # Saltar archivos especiales y el propio registry
+            if py_file.name.startswith("__") or py_file.name == "tools_registry.py":
+                continue
+
+            module_name = py_file.stem
+            try:
+                # Importar el módulo dinámicamente usando el package actual
+                module = importlib.import_module(
+                    f".{module_name}", package=__package__
+                )
+
+                # Buscar función de registro siguiendo convenciones
+                registered = False
+
+                # Convención 1: register_<module_name>_tool()
+                register_func_specific = f"register_{module_name}_tool"
+                if hasattr(module, register_func_specific):
+                    getattr(module, register_func_specific)()
+                    registered = True
+                    logger.info(f"Registered tool from {module_name} via {register_func_specific}")
+
+                # Convención 2: register_tool() genérico
+                elif hasattr(module, "register_tool"):
+                    module.register_tool()
+                    registered = True
+                    logger.info(f"Registered tool from {module_name} via register_tool")
+
+                if not registered:
+                    logger.debug(
+                        f"Module {module_name} has no registration function, skipping"
+                    )
+
+            except Exception as e:
+                logger.warning(f"Failed to load tool module {module_name}: {e}")
 
         cls._initialized = True
 
