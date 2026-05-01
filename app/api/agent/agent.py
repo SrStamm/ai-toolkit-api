@@ -389,15 +389,23 @@ class Agent:
                         content
                     )
                     
-                    yield sse_event("done", json.dumps({
+                    # Prepare final metadata, including task_id from tools
+                    final_metadata = {
                         'session_id': state.session_id,
                         'answer': content,
                         'usage': final_response.usage.__dict__ if final_response.usage else {},
                         'cost': final_response.cost.__dict__ if final_response.cost else {},
                         'model': final_response.model,
                         'provider': final_response.provider,
-                        'citations': state.citations  # Include accumulated citations
-                    }))
+                        'citations': state.citations,
+                    }
+                    
+                    # Include task_id if present (e.g., from reindex_document tool)
+                    if state.last_tool_metadata and 'task_id' in state.last_tool_metadata:
+                        final_metadata['task_id'] = state.last_tool_metadata['task_id']
+                        final_metadata['status'] = state.last_tool_metadata.get('status', 'processing')
+                    
+                    yield sse_event("done", json.dumps(final_metadata))
                     break
 
         except Exception as e:
