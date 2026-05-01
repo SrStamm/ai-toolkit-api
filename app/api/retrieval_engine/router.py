@@ -231,9 +231,44 @@ async def ingest_file_job_endpoint(
     "/job/{job_id}",
 )
 async def get_status_job(job_id: str, job_serv: JobService = Depends(JobService)):
+    # 1. Try legacy JobService (Redis)
     try:
         state = job_serv.get_state(job_id)
-
         return state
-    except ValueError as e:
-        return {"error": str(e)}, 404
+    except ValueError:
+        pass  # If not found in legacy, try Celery
+    
+    # 2. Try Celery task status
+    try:
+        from app.core.celery_app import celery_app
+        from celery.result import AsyncResult
+        
+        task_result = AsyncResult(job_id, app=celery_app)
+        
+        # Map Celery states to frontend-friendly states
+        status_map = {
+            'PENDING': 'queued',
+            'STARTED': 'running',
+            'SUCCESS': 'completed',
+            'FAILURE': 'failed',
+            'RETRY': 'running',
+            'REVOKED': 'failed',
+        }
+        
+        status = status_map.get(task_result.state, task_result.state.lower())
+        
+        response = {
+            "job_id": job_id,
+            "status": status,
+            "celery_state": task_result.state
+        }
+        
+        # If task failed, include error info
+        if task_result.state == 'FAILURE':
+            response["error"] = str(task_result.info) if task_result.info else "Unknown error"
+            
+        return response
+        
+    except Exception as e:
+        # If Celery also fails, return not found
+        return {"error": f"Job {job_id} not found"}, 404
