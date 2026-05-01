@@ -6,7 +6,6 @@ Busca en la base vectorial y construye respuesta con contexto.
 
 from typing import Optional
 from .tools_registry import ToolRegistry, ToolResponse
-from ...llamaindex_adapter.orchestrator import LlamaIndexOrchestrator
 import structlog
 
 logger = structlog.get_logger()
@@ -16,7 +15,7 @@ def _retrieve_context_tool_handler(
     query: str,
     top_k: int = 5,
     domain: Optional[str] = None,
-    rag_orchestrator: Optional[LlamaIndexOrchestrator] = None,
+    rag_orchestrator: Optional[object] = None,  # TYPE: Any para evitar import pesado
     **kwargs
 ) -> ToolResponse:
     """Handler para la tool RAG."""
