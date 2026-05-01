@@ -6,8 +6,10 @@ Elimina la versión anterior de un documento e ingesta la nueva.
 
 import asyncio
 from typing import Optional
-from .tools_registry import ToolRegistry, ToolResponse
 import structlog
+
+from .tools_registry import ToolRegistry, ToolResponse
+from ...retrieval_engine.ingestion_service import IngestionService
 
 logger = structlog.get_logger()
 
@@ -17,7 +19,7 @@ def _reindex_document_handler(
     url: str,
     domain: str,
     topic: str,
-    ingestion_service: Optional[object] = None,
+    ingestion_service: Optional[IngestionService] = None,
     **kwargs
 ) -> ToolResponse:
     """

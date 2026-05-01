@@ -5,15 +5,17 @@ Obtiene metadatos de un documento específico en el vector store.
 """
 
 from typing import Optional
-from .tools_registry import ToolRegistry, ToolResponse
 import structlog
+
+from .tools_registry import ToolRegistry, ToolResponse
+from ....infrastructure.storage.interfaces import VectorStoreInterface
 
 logger = structlog.get_logger()
 
 
 def _get_document_metadata_handler(
     source: str,
-    vector_store: Optional[object] = None,
+    vector_store: Optional[VectorStoreInterface] = None,
     **kwargs
 ) -> ToolResponse:
     """Handler para obtener metadatos de un documento."""

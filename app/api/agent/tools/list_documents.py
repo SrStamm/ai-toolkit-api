@@ -5,15 +5,17 @@ Lista todos los documentos disponibles en el vector store.
 """
 
 from typing import Optional
-from .tools_registry import ToolRegistry, ToolResponse
 import structlog
+
+from .tools_registry import ToolRegistry, ToolResponse
+from ....infrastructure.storage.interfaces import VectorStoreInterface
 
 logger = structlog.get_logger()
 
 
 def _list_documents_handler(
     domain: Optional[str] = None,
-    vector_store: Optional[object] = None,
+    vector_store: Optional[VectorStoreInterface] = None,
     **kwargs
 ) -> ToolResponse:
     """Handler para listar documentos disponibles."""
