@@ -1,10 +1,10 @@
 # Subida a Qdrant con LlamaIndex
 
-from core.settings import get_settings
+from ...core.settings import get_settings
+from ...infrastructure.storage.hybrid_ai import get_hybrid_embeddign_service
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from llama_index.core import StorageContext
 from qdrant_client import QdrantClient
-from app.infrastructure.storage.hybrid_ai import get_hybrid_embeddign_service
 
 _hybrid_service = get_hybrid_embeddign_service()
 
