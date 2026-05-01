@@ -116,3 +116,48 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
 
         task_end = time.perf_counter() - task_start
         celery_task_duration_seconds.labels("ingest_file_job").observe(task_end)
+
+
+@celery_app.task(bind=True)
+def reindex_document_task(self, source: str, url: str, domain: str, topic: str):
+    """Celery task to re-index a document."""
+    from app.infrastructure.storage.qdrant_client import get_qdrant_store
+    from app.infrastructure.storage.hybrid_ai import get_hybrid_embedding_service
+    from app.api.retrieval_engine.ingestion_service import IngestionService
+    import asyncio
+
+    task_start = time.perf_counter()
+    logger.info("reindex_task_started", source=source, url=url)
+
+    try:
+        # 1. Initialize dependencies
+        vector_store = get_qdrant_store()
+        embed_service = get_hybrid_embedding_service()
+        ingestion_svc = IngestionService(vector_store=vector_store, embed_service=embed_service)
+
+        # 2. Delete old data
+        logger.info("reindex_task_deleting", source=source)
+        vector_store.delete_by_filter({"source": source})
+
+        # 3. Ingest new data (wrap async in sync for Celery)
+        logger.info("reindex_task_ingesting", url=url)
+        
+        async def _do_ingest():
+            return await ingestion_svc.ingest_document(
+                url=url, source=source, domain=domain, topic=topic
+            )
+        
+        result = asyncio.run(_do_ingest())
+
+        logger.info("reindex_task_success", source=source, **result)
+        celery_tasks_total.labels("reindex_document_task", "success").inc()
+        
+        return {"status": "success", "source": source, **result}
+
+    except Exception as e:
+        celery_tasks_total.labels("reindex_document_task", "error").inc()
+        logger.error("reindex_task_failed", source=source, error=str(e), exc_info=True)
+        raise
+    finally:
+        task_end = time.perf_counter() - task_start
+        celery_task_duration_seconds.labels("reindex_document_task").observe(task_end)

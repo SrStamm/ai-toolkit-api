@@ -247,16 +247,23 @@ class Agent:
             answer
         )
 
+        # Merge tool metadata (e.g., task_id from reindex) into response metadata
+        final_metadata = {
+            'usage': response.usage,
+            'cost': response.cost,
+            'model': response.model,
+            'provider': response.provider,
+            'citations': state.citations,  # Include accumulated citations
+        }
+        
+        # If last tool returned specific metadata (like task_id), include it
+        if state.last_tool_metadata:
+            final_metadata.update(state.last_tool_metadata)
+
         return AgentResponse(
             output=answer,
             session_id=state.session_id,
-            metadata={
-                'usage': response.usage,
-                'cost': response.cost,
-                'model': response.model,
-                'provider': response.provider,
-                'citations': state.citations  # Include accumulated citations
-            }
+            metadata=final_metadata
         )
 
     async def agent_loop_stream(self, query: str, session_id: Optional[str] = None, domain: Optional[str] = None):
