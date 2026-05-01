@@ -2,13 +2,13 @@ from typing import List
 from qdrant_client import QdrantClient
 from qdrant_client import models
 import torch
-
-from app.infrastructure.embedding import get_rerank_model
-from app.infrastructure.logging import time_response
-from app.api.retrieval_engine.exceptions import VectorStoreError
-from .interfaces import HybridVector, VectorStoreInterface
-from app.core.settings import get_settings
 import structlog
+
+from .interfaces import HybridVector, VectorStoreInterface
+from ...infrastructure.embedding import get_rerank_model
+from ...infrastructure.logging import time_response
+from ...api.retrieval_engine.exceptions import VectorStoreError
+from ...core.settings import get_settings
 
 
 COLLECTION_NAME = "documents"
