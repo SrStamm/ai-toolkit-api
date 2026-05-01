@@ -21,6 +21,8 @@ from ..llamaindex_adapter.orchestrator import (
     get_orchestrator,
     get_llm_client,
 )
+from ..retrieval_engine.service import get_rag_service
+from .adapters.rag_adapter import create_query_adapter, QueryServiceAdapter
 
 logger = structlog.get_logger()
 
@@ -35,7 +37,7 @@ def extract_answer_from_json(content: str) -> str:
     
     if not content:
         return content
-    
+
     # Remove markdown code block wrapper if present
     cleaned = content.strip()
     # Regex to remove starting ```json or ```text or ```
@@ -72,7 +74,7 @@ class Agent:
     Ahora actúa como orchestrator que coordina ToolRunner y Router.
     """
 
-    def __init__(self, llm: LLMClient, rag: LlamaIndexOrchestrator):
+    def __init__(self, llm: LLMClient, rag: LlamaIndexOrchestrator | QueryServiceAdapter):
         # Inicializar componentes
         self.tool_runner = ToolRunner(deps={"rag_orchestrator": rag, "llm_client": llm})
         self.router = Router(llm_client=llm)
@@ -381,11 +383,25 @@ class Agent:
 def create_agent(
     provider: str | None = None,
     model: str | None = None,
+    use_rag_service: bool = False,  # Flag to use RAG service via adapter
 ) -> Agent:
-    """Factory function to create an Agent instance."""
-    return Agent(llm=get_llm_client(provider, model), rag=get_orchestrator())
+    """
+    Factory function to create an Agent instance.
+    """
+    llm = get_llm_client(provider, model)
+
+    if use_rag_service:
+        # Use RAG service with adapter (retrieval_engine/)
+        rag_service = get_rag_service()
+        rag_adapter = create_query_adapter(rag_service)
+        return Agent(llm=llm, rag=rag_adapter)
+    else:
+        # Use LlamaIndex orchestrator (llamaindex_adapter/)
+        return Agent(llm=llm, rag=get_orchestrator())
 
 
-def get_agent() -> Agent:
-    """Get or create agent singleton."""
-    return create_agent()
+def get_agent(use_rag_service: bool = False) -> Agent:
+    """
+    Get or create agent singleton.
+    """
+    return create_agent(use_rag_service=use_rag_service)
