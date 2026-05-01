@@ -1,4 +1,3 @@
-import { Loader2 } from "lucide-react";
 import Markdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { markdownComponents } from "./markdownComponents";
