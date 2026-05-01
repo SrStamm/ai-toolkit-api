@@ -4,7 +4,7 @@ Agent determinístico con tool registry.
 Orquestador que coordina ToolRunner y Router para ejecutar acciones.
 """
 
-from typing import Optional
+from typing import Any, Optional
 import structlog
 import uuid
 import json
@@ -23,6 +23,9 @@ from ..llamaindex_adapter.orchestrator import (
 )
 from ..retrieval_engine.service import get_rag_service
 from .adapters.rag_adapter import create_query_adapter, QueryServiceAdapter
+from ..retrieval_engine.ingestion_service import IngestionService
+from ...infrastructure.storage.qdrant_client import get_qdrant_store
+from ...infrastructure.storage.hybrid_ai import get_hybrid_embeddign_service as get_hybrid_embedding_service
 
 logger = structlog.get_logger()
 
@@ -74,9 +77,25 @@ class Agent:
     Ahora actúa como orchestrator que coordina ToolRunner y Router.
     """
 
-    def __init__(self, llm: LLMClient, rag: LlamaIndexOrchestrator | QueryServiceAdapter):
+    def __init__(
+        self, 
+        llm: LLMClient, 
+        rag: LlamaIndexOrchestrator | QueryServiceAdapter,
+        vector_store: Any = None,
+        ingestion_service: Any = None,
+    ):
+        # Inicializar dependencias de infraestructura
+        vs = vector_store or get_qdrant_store()
+        embed_svc = get_hybrid_embedding_service()
+        ing_svc = ingestion_service or IngestionService(vector_store=vs, embed_service=embed_svc)
+
         # Inicializar componentes
-        self.tool_runner = ToolRunner(deps={"rag_orchestrator": rag, "llm_client": llm})
+        self.tool_runner = ToolRunner(deps={
+            "rag_orchestrator": rag, 
+            "llm_client": llm,
+            "vector_store": vs,
+            "ingestion_service": ing_svc,
+        })
         self.router = Router(llm_client=llm)
         self.router.tools = ToolRegistry.list_tools()
         self.llm = llm
@@ -390,17 +409,22 @@ def create_agent(
     """
     llm = get_llm_client(provider, model)
 
+    # Initialize infrastructure dependencies
+    vector_store = get_qdrant_store()
+    embed_service = get_hybrid_embedding_service()
+    ingestion_svc = IngestionService(vector_store=vector_store, embed_service=embed_service)
+
     if use_rag_service:
         # Use RAG service with adapter (retrieval_engine/)
         rag_service = get_rag_service()
         rag_adapter = create_query_adapter(rag_service)
-        return Agent(llm=llm, rag=rag_adapter)
+        return Agent(llm=llm, rag=rag_adapter, vector_store=vector_store, ingestion_service=ingestion_svc)
     else:
         # Use LlamaIndex orchestrator (llamaindex_adapter/)
-        return Agent(llm=llm, rag=get_orchestrator())
+        return Agent(llm=llm, rag=get_orchestrator(), vector_store=vector_store, ingestion_service=ingestion_svc)
 
 
-def get_agent(use_rag_service: bool = False) -> Agent:
+def get_agent(use_rag_service: bool = True) -> Agent:
     """
     Get or create agent singleton.
     """
