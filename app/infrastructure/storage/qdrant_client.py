@@ -186,8 +186,15 @@ class QdrantStore(VectorStoreInterface):
     def delete_old_data(self, source: str, timestamp: int):
         """
         Delete old chunks with specific source.
-        Useful for re-ingest and keep only the most recent version
+        Useful for re-ingest and keep only the most recent version.
+        Delegates to delete_by_filter for consistency.
         """
+        conditions = {
+            "source": source,
+            "ingested_at_lt": timestamp  # Custom key to handle range
+        }
+        # We keep the old logic here to avoid breaking changes, 
+        # but ideally, we refactor this to use delete_by_filter
         deleted = self.client.delete(
             collection_name=COLLECTION_NAME,
             points_selector=models.FilterSelector(
@@ -204,6 +211,148 @@ class QdrantStore(VectorStoreInterface):
             ),
         )
         log.info("Old data cleaned", source=source, deleted_count=deleted.operation_id)
+
+    @time_response
+    def delete_by_filter(self, filter_conditions: dict) -> None:
+        """
+        Delete points matching a generic set of filter conditions.
+        
+        Args:
+            filter_conditions: Dict with field names and values.
+                            Use "field_lt", "field_gt" for range queries.
+                            Example: {"source": "url", "domain": "python"}
+        """
+        must_conditions = []
+        
+        for key, value in filter_conditions.items():
+            if key.endswith("_lt"):
+                field = key[:-3]
+                must_conditions.append(
+                    models.FieldCondition(key=field, range=models.Range(lt=value))
+                )
+            elif key.endswith("_gt"):
+                field = key[:-3]
+                must_conditions.append(
+                    models.FieldCondition(key=field, range=models.Range(gt=value))
+                )
+            else:
+                must_conditions.append(
+                    models.FieldCondition(key=key, match=models.MatchValue(value=value))
+                )
+        
+        if not must_conditions:
+            log.warning("delete_by_filter called with empty conditions, skipping")
+            return
+            
+        self.client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=models.FilterSelector(
+                filter=models.Filter(must=must_conditions)
+            ),
+        )
+        log.info("Deleted points by filter", conditions=filter_conditions)
+
+    @time_response
+    def list_sources(self, domain: str | None = None) -> list[dict]:
+        """
+        List unique sources with chunk counts.
+        Uses scroll API to iterate through points (since Qdrant doesn't have DISTINCT).
+        
+        Returns:
+            [{"source": "...", "domain": "...", "topic": "...", "chunk_count": N}, ...]
+        """
+        sources_map = {}  # source -> {domain, topic, count}
+        
+        # Build filter for domain if provided
+        scroll_filter = None
+        if domain:
+            scroll_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="domain", match=models.MatchValue(value=domain)
+                    )
+                ]
+            )
+        
+        # Scroll through all points
+        offset = None
+        while True:
+            points, offset = self.client.scroll(
+                collection_name=COLLECTION_NAME,
+                scroll_filter=scroll_filter,
+                limit=256,
+                with_payload=True,
+                with_vectors=False,
+            )
+            
+            for point in points:
+                payload = point.payload
+                source = payload.get("source")
+                if not source:
+                    continue
+                    
+                if source not in sources_map:
+                    sources_map[source] = {
+                        "source": source,
+                        "domain": payload.get("domain", "unknown"),
+                        "topic": payload.get("topic", "unknown"),
+                        "chunk_count": 0,
+                    }
+                sources_map[source]["chunk_count"] += 1
+            
+            if offset is None:
+                break
+                
+        return list(sources_map.values())
+
+    @time_response
+    def get_source_metadata(self, source: str) -> dict | None:
+        """
+        Get aggregated metadata for a specific source.
+        
+        Returns:
+            {"source": "...", "domain": "...", "topic": "...", 
+             "chunk_count": N, "last_ingested": timestamp} or None
+        """
+        # Query points with this source
+        points, _ = self.client.scroll(
+            collection_name=COLLECTION_NAME,
+            scroll_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="source", match=models.MatchValue(value=source)
+                    )
+                ]
+            ),
+            limit=1000,  # Assuming a source won't have more than 1000 chunks
+            with_payload=True,
+            with_vectors=False,
+        )
+        
+        if not points:
+            return None
+            
+        # Aggregate metadata
+        domains = set()
+        topics = set()
+        max_timestamp = 0
+        
+        for point in points:
+            payload = point.payload
+            if "domain" in payload:
+                domains.add(payload["domain"])
+            if "topic" in payload:
+                topics.add(payload["topic"])
+            if "ingested_at" in payload:
+                max_timestamp = max(max_timestamp, payload["ingested_at"])
+        
+        return {
+            "source": source,
+            "domain": next(iter(domains), "unknown"),
+            "topic": next(iter(topics), "unknown"),
+            "chunk_count": len(points),
+            "last_ingested": max_timestamp,
+        }
 
 
 _qdrant_store: QdrantStore | None = None
