@@ -1,5 +1,6 @@
 # Subida a Qdrant con LlamaIndex
 
+from core.settings import get_settings
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from llama_index.core import StorageContext
 from qdrant_client import QdrantClient
@@ -24,8 +25,13 @@ def sparse_query_fn(query):
 
 
 class LlamaIndexer:
-    def __init__(self, host="qdrant", port=6333, collection="documents_llama"):
-        self.client = QdrantClient(host=host, port=port)
+    def __init__(self, collection="documents_llama"):
+        self.settings = get_settings()
+
+        self.client = QdrantClient(
+            host=self.settings.qdrant_host,
+            port=self.settings.qdrant_port
+        )
 
         self.vectore_store = QdrantVectorStore(
             client=self.client,

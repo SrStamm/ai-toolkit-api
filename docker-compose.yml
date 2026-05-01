@@ -48,6 +48,7 @@ services:
       dockerfile: app/Dockerfile
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/backend/prometheus
+      - QDRANT_HOST=qdrant
     volumes:
       - hf_cache:/home/appuser/.cache/huggingface
       - .:/backend
