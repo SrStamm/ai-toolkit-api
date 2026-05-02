@@ -1,6 +1,6 @@
 # ai-toolkit
 
-> **Versión actual:** `v4.3`  
+> **Versión actual:** `v4.4`  
 > **Estado:** estable (educacional / experimental, with contextual agent)
 
 **Herramientas de IA para backend (FastAPI)**
@@ -19,28 +19,31 @@
 
 ---
 
-## Estado actual – v4.3 (Citations & Stream-Only UI)
+## Estado actual – v4.4 (Unified Task Architecture & Refactor)
 
-La versión v4.3 mejora la transparencia del agente y simplifica el frontend, enfocándose en experiencia de usuario y trazabilidad.
+La versión v4.4 unifica la arquitectura de tareas (ingesta y agente) y refactoriza el frontend para seguir el Principio de Responsabilidad Única (SRP).
 
-### Objetivos alcanzados en v4.3
+### Objetivos alcanzados en v4.4
 
 **Backend:**
 
-- **Domain Filter:** `retrieve_context` acepta `domain` opcional para filtrar búsquedas en la base vectorial.
-- **Citations:** El agente devuelve fuentes (`source`, `chunk_index`, `text`) tanto en flujo normal como streaming.
-- **Step Limit:** Límite de pasos (`while step < 5`) para evitar loops infinitos.
-- **Markdown:** El agente formatea respuestas con Markdown (titulos, listas, código).
-- **JSON Robustness:** Parser resiliente que maneja múltiples formatos (`{"answer":...}`, `{"response":...}`).
+- **Autonomous Ingestion:** El agente puede disparar tareas de ingesta (`reindex_document`) y gestión de documentos vía tools dedicadas.
+- **Unified Task Backend:** Todas las tareas (Celery o JobService) devuelven el mismo formato: `{ status, step, progress }`.
+- **Tool Registry Refactor:** Registro dinámico de tools con `@register_tool`.
+- **Documents Management Tools:** `delete_document`, `reindex_document`, `get_document_metadata`.
 
-**Frontend:**
+**Frontend (Arquitectura Unificada):**
 
-- **Solo Stream:** Eliminación total de código no-streaming. El agente siempre usa Server-Sent Events (SSE).
-- **Citations UI:** Muestra fuentes únicas (sin duplicados) abajo del mensaje del asistente.
-- **Tool Status:** El usuario ve estados de carga (_"Using retrieve_context..."_, _"Completed"_).
-- **LLM Selector:** Simplificado, sin toggle de stream.
+- **JobContext Global:** Estado centralizado para TODAS las tareas (ingesta UI y agente).
+- **IngestionInterface refactorizado:** Dividido en 4 componentes siguiendo SRP:
+  - `IngestionHeader`: Título y descripción.
+  - `SourceTabs`: Lógica de URL/PDF (drag & drop, handlers).
+  - `MetadataFields`: Formulario de dominio/tema.
+  - `ActiveJobsPanel`: Visualización de tareas activas desde el contexto.
+- **Formato Unificado:** Todas las tareas muestran `"step"` (ej. "Starting document reindexing") y barra de progreso, independientemente de quién las disparó.
+- **Cleanup:** Eliminación de código muerto (`ToolStatus.tsx`, `oldImplementations.ts`).
 
-### Arquitectura v4.3
+### Arquitectura v4.4
 
 ```
 Cliente / Frontend
@@ -63,60 +66,40 @@ Agent (orquestador)
 ↓
 Tools
   ├── retrieve_context  → RAG → Qdrant
+  ├── reindex_document → Ingestion Job (JobService/Celery)
   └── ...other_tools
 ↓
-AgentResponse (output + session_id + metadata)
+AgentResponse (output + session_id + metadata + task_id)
+
+Frontend
+↓
+JobContext (Global State)
+  └── Polling unificado (status, step, progress)
+↓
+IngestionInterface (Dashboard)
+  ├── SourceTabs (URL/PDF)
+  ├── MetadataFields
+  └── ActiveJobsPanel (All tasks visualized here)
 ```
 
 ### Components
 
-| Componente     | Responsabilidad                                                                          |
-| -------------- | ---------------------------------------------------------------------------------------- |
-| **Agent**      | Orchestrator: controla el flow, llama router, ejecuta tool_runner, decide siguiente paso |
-| **Router**     | LLM decide acción, devuelve `Decision` tipada con `ActionType` enum                      |
-| **ToolRunner** | Valida inputs, resuelve dependencias, mapea state → tool input, ejecuta la tool          |
+| Componente             | Responsabilidad                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| **Agent**              | Orchestrator: controla el flow, llama router, ejecuta tool_runner, decide siguiente paso |
+| **Router**             | LLM decide acción, devuelve `Decision` tipada con `ActionType` enum                      |
+| **ToolRunner**         | Valida inputs, resuelve dependencias, mapea state → tool input, ejecuta la tool          |
+| **JobContext**         | Global state para TODAS las tareas (ingesta/agente). Polling unificado.                  |
+| **IngestionInterface** | Dashboard orquestador que muestra tareas activas y controles de fuentes.                 |
 
 ### Tools disponibles
 
-| Tool               | Descripción                                                                 | Dependencias       |
-| ------------------ | --------------------------------------------------------------------------- | ------------------ |
-| `retrieve_context` | Busca en la base vectorial, soporta `domain` opcional y devuelve citaciones | `rag_orchestrator` |
-
----
-
-## Benchmarks reales (V2.2)
-
-Se realizaron pruebas controladas para medir:
-
-### LLM remoto (Mistral)
-
-- Latencia promedio: ~2–3s
-- Sin errores
-- Sin activación de circuit breaker
-
-### LLM local (Ollama)
-
-- Latencia promedio: 20–40s
-- CPU-bound
-- Validación de fallback automático
-
-### Ingestión masiva (Celery)
-
-- 40+ URLs técnicas
-- 4096 puntos vectoriales generados
-- Duración promedio de tasks: ~37–44s
-- 0 errores
-- Sistema estable bajo carga
-
-### Observaciones técnicas
-
-- El sistema se comporta como CPU-bound durante generación de embeddings (Sentence Transformers).
-- El aumento de latencia bajo carga es consistente con saturación controlada de CPU.
-- No se detectaron:
-  - deadlocks
-  - pérdida de tasks
-  - corrupción de vector store
-  - memory leaks evidentes
+| Tool                    | Descripción                                                                 | Dependencias       |
+| ----------------------- | --------------------------------------------------------------------------- | ------------------ |
+| `retrieve_context`      | Busca en la base vectorial, soporta `domain` opcional y devuelve citaciones | `rag_orchestrator` |
+| `delete_document`       | Elimina un documento de la base vectorial por `source` o `document_id`      | `rag_orchestrator` |
+| `reindex_document`      | Re-procesa un documento existente (dispara tarea de ingesta)                | `rag_orchestrator` |
+| `get_document_metadata` | Obtiene metadatos de un documento (chunks, dominio, tema)                   | `rag_orchestrator` |
 
 ---
 
@@ -186,115 +169,41 @@ Este proyecto demuestra:
 - Inputs opcionales: dominio, topic
 - Estado de carga y errores
 - Citations por chunk
-- Visualización parcial del progreso de tasks
+- **JobContext Global:** Estado unificado para todas las tareas (ingesta y agente)
+- **IngestionInterface Refactor:** Dividido en `SourceTabs`, `MetadataFields`, `ActiveJobsPanel` (SRP)
+- Visualización de progreso unificada: Todas las tareas muestran `step` y barra de progreso
 - Integración con endpoint del agente
 
 ---
 
-## Roadmap de versiones
+## Roadmap
 
-### V2.1 – Observabilidad avanzada (completado)
+### V4.4 – Unified Task Architecture & Frontend Refactor (COMPLETADO)
 
-- Histogram por etapa del RAG
-- Métricas específicas para Celery
-- Dashboard Grafana operativo
-- Percentiles P50, P95, P99
+- **Backend:**
+  - Unificación de tareas: Todas devuelven `{ status, step, progress }`
+  - Refactor del tool registry con `@register_tool`
+  - Nuevas tools: `delete_document`, `reindex_document`, `get_document_metadata`
+- **Frontend:**
+  - `JobContext` global para unificar estado de tareas (ingesta/agente)
+  - `IngestionInterface` refactorizado (SRP):
+    - `IngestionHeader`
+    - `SourceTabs` (URL/PDF logic)
+    - `MetadataFields`
+    - `ActiveJobsPanel` (all tasks displayed here)
+  - Eliminación de código muerto (`ToolStatus.tsx`, `oldImplementations.ts`)
 
-### V2.2 – Performance profiling (completado)
+### V4.5 – Agent-triggered ingestion with user metadata (PRÓXIMO)
 
-- Benchmark LLM remoto vs local
-- Validación empírica de circuit breaker
-- Medición de throughput Celery
-- Inserción masiva en Qdrant
-- Análisis CPU-bound vs I/O-bound
-
-### V3.0 – RAG avanzado y evaluación (completado)
-
-- Hybrid search (sparse + dense vectors)
-- Mejor estrategia de metadata
-- Mejora de filtros semánticos
-
-### V3.1 (completado)
-
-- Integrar RAGAS
-- Medir faithfulness
-- Medir answer relevancy
-- Medir context precision
-
-### V3.2 (completado)
-
-- Implementar versión con LlamaIndex
-- Comparar:
-  - Latencia
-  - Recall
-  - Calidad
-  - Complejidad de código
-
-### V4.0 – Agente determinístico (completado)
-
-- Tool registry con decorador `@register_tool`
-- Abstracción de herramientas (`ToolDefinition`, `ToolResponse`)
-- **Arquitectura de 3 componentes**: Agent, Router, ToolRunner
-- Router LLM con `Decision` tipada (`ActionType` enum)
-- Memoria de sesión por ventana deslizante
-- Tool: `retrieve_context`
-- Endpoint `/agent/agent-loop`
-
-### V4.1 – Agente contextual (completado)
-
-- Memoria de conversación en Redis con sliding window (5 mensajes)
-- TTL de 3 horas, renovado en cada interacción
-- Historial de conversación inyectado al LLM
-- El agente responde correctamente cuando el usuario hace referencia a información previa
-
-### V4.2 – Agent State & Multi-Provider (completado)
-
-- Soporte para múltiples providers:
-  - groq
-  - Selección dinámica de modelo/provider por request
-- Dynamic model selection:
-  - Configuración de providers (.yaml/.py)
-  - Selección via headers o request config
-  - `LLMFactory` resuelve provider activo
-- Evolución del estado del agente:
-  - `last_tool`
-  - `last_tool_result`
-  - `tool_execution_count`
-- Mejora en trazabilidad del reasoning del agente
-
-### V4.3 – Retrieval Quality & Streaming
-
-- Mejora de `retrieve_context`:
-  - Filtros por dominio
-  - Devolver citations
-- Streaming de respuesta del agente
-
-### V4.4 – Autonomous Ingestion & Simplification
-
-- Refactor del tool registry:
-  - Registro dinámico de tools
-- Documents management tools:
-  - `delete_document`
-  - `reindex_document`
-  - `get_document_metadata`
-  - `ingest_url`
-  - `ingest_file`
-- Mejora del Router:
-  - Eliminación de argumentos innecesarios en `_final_answer_`
-- Simplificación del sistema:
-  - Eliminación de endpoints redundantes
-
-### V4.5 - Human-in-the-loop
-
-- Human-in-the-loop ingestion:
-  - Las ingestas no se ejecutan automáticamente
-  - Se encolan como `PENDING`
-  - Nuevas tools:
-    - `list_pending_ingestions`
-    - `approve_ingestion`
-- El agente solicita metadata al usuario:
-  - `domain`
-  - `topic`
+- **Simplified Human-in-the-loop**:
+  - Agent detects new document and asks user for metadata via chat
+  - User provides `domain` and `topic`
+  - Agent triggers `reindex_document` → task appears in `IngestionInterface`
+- **No complex queues needed**: Uses existing `JobContext` + UI unification from v4.4
+- **Flow**:
+  1. Agent: "Found new doc. Want me to ingest it? Need domain & topic."
+  2. User: "Yes, domain='tech', topic='docs'"
+  3. Agent triggers task → visible in `ActiveJobsPanel`
 
 ---
 
