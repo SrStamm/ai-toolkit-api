@@ -1,7 +1,6 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { showToastError } from "@/components/toast";
 import { ingestFileJob, ingestURLJob } from "@/services/ragServices";
 import { useJobContext } from "@/contexts/JobContext";
@@ -17,6 +16,7 @@ import {
   XCircle,
   FileUp,
   ChevronRight,
+  Loader,
 } from "lucide-react";
 
 interface SourceTabsProps {
@@ -83,7 +83,7 @@ export function SourceTabs({
 
       if (!response.ok) throw new Error("Error en la subida");
 
-      const json = await response.json() as { job_id: string };
+      const json = (await response.json()) as { job_id: string };
       if (json.job_id) {
         addJob({
           id: json.job_id,
@@ -116,11 +116,17 @@ export function SourceTabs({
     <div className="px-4 pt-4">
       <Tabs defaultValue="url" className="w-full">
         <TabsList className="grid w-full grid-cols-2 bg-muted/50">
-          <TabsTrigger value="url" className="gap-2 data-[state=active]:bg-background">
+          <TabsTrigger
+            value="url"
+            className="gap-2 data-[state=active]:bg-background"
+          >
             <Link2 className="size-4" />
             URL
           </TabsTrigger>
-          <TabsTrigger value="pdf" className="gap-2 data-[state=active]:bg-background">
+          <TabsTrigger
+            value="pdf"
+            className="gap-2 data-[state=active]:bg-background"
+          >
             <FileText className="size-4" />
             PDF
           </TabsTrigger>
@@ -137,7 +143,9 @@ export function SourceTabs({
                 onChange={(e) => setUrl(e.target.value)}
                 className={cn(
                   "min-h-[100px] resize-none transition-all",
-                  url && !isValidUrl && "border-destructive focus:border-destructive"
+                  url &&
+                    !isValidUrl &&
+                    "border-destructive focus:border-destructive",
                 )}
               />
               {url && (
@@ -154,7 +162,9 @@ export function SourceTabs({
             {/* URL Examples */}
             {url === "" && (
               <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">Ejemplos de URLs válidas:</p>
+                <p className="text-xs text-muted-foreground">
+                  Ejemplos de URLs válidas:
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {[
                     "https://docs.python.org/3/tutorial/",
@@ -184,7 +194,7 @@ export function SourceTabs({
           >
             {loading ? (
               <>
-                <Loader2 className="size-4 animate-spin" />
+                <Loader className="size-4 animate-spin" />
                 Procesando...
               </>
             ) : (
@@ -212,9 +222,9 @@ export function SourceTabs({
               isDragging
                 ? "border-primary bg-primary/5 scale-[1.02]"
                 : file
-                ? "border-green-500/50 bg-green-500/5"
-                : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/30",
-              loading && "opacity-50 pointer-events-none"
+                  ? "border-green-500/50 bg-green-500/5"
+                  : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/30",
+              loading && "opacity-50 pointer-events-none",
             )}
           >
             <input
@@ -234,7 +244,7 @@ export function SourceTabs({
               <div
                 className={cn(
                   "p-4 rounded-full transition-colors",
-                  file ? "bg-green-500/10" : "bg-primary/10"
+                  file ? "bg-green-500/10" : "bg-primary/10",
                 )}
               >
                 {file ? (
@@ -280,7 +290,7 @@ export function SourceTabs({
           >
             {loading ? (
               <>
-                <Loader2 className="size-4 animate-spin" />
+                <Loader className="size-4 animate-spin" />
                 Procesando...
               </>
             ) : (

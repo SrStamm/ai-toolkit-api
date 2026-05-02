@@ -115,21 +115,12 @@ export function useChatStream({
       };
 
       let accumulatedContent = "";
-      let currentTool = "";
 
       agentAskStream(
         body,
         { provider, model },
         (event, data) => {
-          if (event === "agent_decision") {
-            // Router decision - optional UI update
-          } else if (event === "tool_start") {
-            currentTool = data.tool || "unknown";
-            // Tool status now handled by JobContext, no need to set in message
-          } else if (event === "tool_done") {
-            // Tool execution completed, status will be updated via JobContext
-            currentTool = "";
-          } else if (event === "llm_token") {
+          if (event === "llm_token") {
             accumulatedContent += data.token || "";
             setMessages((prev) =>
               prev.map((msg) =>
@@ -144,7 +135,7 @@ export function useChatStream({
             }
             const finalContent = accumulatedContent || data.answer;
             const currentTaskId = data.task_id || undefined;
-            
+
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === aiMessage.id
@@ -158,20 +149,20 @@ export function useChatStream({
                   : msg,
               ),
             );
-            
+
             // Add task to global context if task_id is present
             // Backend unified: all tasks use same format (status, step, progress)
             if (currentTaskId) {
               addJob({
                 id: currentTaskId,
-                type: "ingestion-job", // Same type, unified backend
+                type: "job",
                 source: "agent-chat",
                 status: "pending",
                 progress: 0,
                 message: "Iniciando...",
               });
             }
-            
+
             setIsLoading(false);
           } else if (event === "error") {
             console.error("Stream error:", data);

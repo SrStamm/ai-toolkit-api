@@ -7,24 +7,6 @@ interface AgentAskOptions {
   useStream?: boolean;
 }
 
-export const agentAsk = async (body: AgentQuestion, options: AgentAskOptions = {}): Promise<AgentResponse> => {
-  const headers: Record<string, string> = {};
-
-  if (options.provider) {
-    headers["x-llm-provider"] = options.provider;
-  }
-  if (options.model) {
-    headers["x-llm-model"] = options.model;
-  }
-
-  return await Fetch<AgentResponse>({
-    path: "/agent/agent-loop",
-    method: "POST",
-    body: body,
-    headers: Object.keys(headers).length > 0 ? headers : undefined,
-  });
-};
-
 export const agentAskStream = (
   body: AgentQuestion,
   options: AgentAskOptions = {},
@@ -32,7 +14,7 @@ export const agentAskStream = (
   onError?: (error: string) => void,
 ): void => {
   const headers: Record<string, string> = {
-    "Accept": "text/event-stream",
+    Accept: "text/event-stream",
     "Content-Type": "application/json",
   };
 
@@ -131,3 +113,4 @@ export const agentAskStream = (
       if (onError) onError(errorMessage);
     });
 };
+
