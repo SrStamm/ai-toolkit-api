@@ -418,7 +418,8 @@ class Agent:
                     # If last tool returned specific metadata (like task_id), include it
                     if state.last_tool_metadata:
                         final_metadata.update(state.last_tool_metadata)
-                        final_metadata['task_id'] = state.last_tool_metadata['task_id']
+                        if state.last_tool_metadata.get("task_id"):
+                            final_metadata['task_id'] = state.last_tool_metadata['task_id']
                         final_metadata['status'] = state.last_tool_metadata.get('status', 'processing')
                     
                     yield sse_event("done", json.dumps(final_metadata))
