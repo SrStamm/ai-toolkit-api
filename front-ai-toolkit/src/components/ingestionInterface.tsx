@@ -1,15 +1,15 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useState, useRef } from "react";
 import { Button } from "./ui/button";
 import { CardContent } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { Textarea } from "./ui/textarea";
 import { Input } from "./ui/input";
-import { showToast, showToastError, showToastSuccess } from "./toast";
-import { getJobStatus, ingestFileJob, ingestURLJob } from "@/services/ragServices";
-import type { JobStatusResponse } from "@/types/rag";
+import { showToast, showToastError } from "./toast";
+import { ingestFileJob, ingestURLJob } from "@/services/ragServices";
 import { Label } from "./ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "@/lib/utils";
+import { useJobContext } from "@/contexts/JobContext";
 import { 
   Globe, 
   FileText, 
@@ -28,76 +28,31 @@ export function IngestionInterface() {
   const [loading, setLoading] = useState(false);
   const [domain, setDomain] = useState("");
   const [topic, setTopic] = useState("");
-  const [progress, setProgress] = useState(0);
-  const [statusMessage, setStatusMessage] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [jobId, setActiveJobId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pollingTimerRef = useRef<number | null>(null);
+
+  const { activeJobs, addJob, removeJob } = useJobContext();
 
   const isValidUrl = url.startsWith("http://") || url.startsWith("https://");
-
-  const pollJobStatus = useCallback(async (id: string) => {
-    try {
-      const data: JobStatusResponse = await getJobStatus(id);
-
-      let nextMessage = "";
-
-      if (data.status === "completed") nextMessage = "¡Completado!";
-      else if (data.status === "running") nextMessage = data.step || "Procesando...";
-      else nextMessage = data.status;
-
-      setProgress(data.progress);
-      setStatusMessage(nextMessage);
-
-      if (data.status === "completed") {
-        setLoading(false);
-        setActiveJobId(null);
-        setProgress(100);
-        showToastSuccess("¡Ingesta completada con éxito!");
-        
-        setTimeout(() => {
-          setProgress(0);
-          setStatusMessage("");
-        }, 3000);
-      } else if (data.status === "failed") {
-        setLoading(false);
-        setActiveJobId(null);
-        showToastError(`Error: ${data.error || "Desconocido"}`);
-      } else {
-        pollingTimerRef.current = window.setTimeout(() => pollJobStatus(id), 2000);
-      }
-    } catch (error) {
-      setLoading(false);
-      setActiveJobId(null);
-      console.error("Polling error:", error);
-      showToastError("Error al obtener el estado del trabajo");
-    }
-  }, []);
-
-  useEffect(() => {
-    if (jobId) {
-      pollJobStatus(jobId);
-    }
-
-    return () => {
-      if (pollingTimerRef.current) {
-        clearTimeout(pollingTimerRef.current);
-      }
-    };
-  }, [jobId, pollJobStatus]);
 
   const handleIngestJob = async () => {
     if (!isValidUrl) return;
     setLoading(true);
-    setProgress(0);
-    setStatusMessage("Iniciando...");
 
     try {
       const response = await ingestURLJob({ url, domain, topic });
       if (response.job_id) {
-        setActiveJobId(response.job_id);
+        // Add to global context
+        addJob({
+          id: response.job_id,
+          type: "ingestion-job",
+          source: "ingestion-ui",
+          status: "pending",
+          progress: 0,
+          message: "Iniciando...",
+        });
+        setLoading(false); // Context handles polling now
         showToast({ msg: "Trabajo iniciado", type: "info" });
       }
     } catch {
@@ -113,8 +68,6 @@ export function IngestionInterface() {
     }
 
     setLoading(true);
-    setProgress(0);
-    setStatusMessage("Subiendo...");
 
     const formData = new FormData();
     formData.append("file", file);
@@ -129,7 +82,16 @@ export function IngestionInterface() {
 
       const json = await response.json() as { job_id: string };
       if (json.job_id) {
-        setActiveJobId(json.job_id);
+        // Add to global context
+        addJob({
+          id: json.job_id,
+          type: "ingestion-job",
+          source: "ingestion-ui",
+          status: "pending",
+          progress: 0,
+          message: "Subiendo...",
+        });
+        setLoading(false); // Context handles polling now
         showToast({ msg: "Archivo subido", type: "info" });
       }
     } catch {
@@ -383,40 +345,57 @@ export function IngestionInterface() {
         </div>
       </CardContent>
 
-      {/* Progress Section */}
-      {loading && (
-        <CardContent className="px-4 pb-4 animate-in slide-in-from-bottom-4 fade-in duration-300">
-          <div className="rounded-lg bg-muted/30 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {progress === 100 ? (
-                  <CheckCircle2 className="size-4 text-green-500" />
-                ) : (
-                  <Loader2 className="size-4 animate-spin text-primary" />
-                )}
-                <span className="text-sm font-medium">
-                  {progress === 100 ? "Completado" : statusMessage || "Procesando..."}
-                </span>
+       {/* Active Jobs from Context */}
+      {activeJobs.length > 0 && (
+        <CardContent className="px-4 pb-4 space-y-3 animate-in slide-in-from-bottom-4 fade-in duration-300">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground font-medium">Tareas activas</p>
+            <button
+              onClick={() => activeJobs.forEach(j => {
+                if (j.completedAt || j.status === "SUCCESS" || j.status === "FAILURE" || j.status === "completed" || j.status === "failed") {
+                  removeJob(j.id);
+                }
+              })}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Limpiar completadas
+            </button>
+          </div>
+          {activeJobs.map((job) => (
+            <div key={job.id} className="rounded-lg bg-muted/30 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {job.status === "completed" || job.status === "SUCCESS" ? (
+                    <CheckCircle2 className="size-4 text-green-500" />
+                  ) : job.status === "failed" || job.status === "FAILURE" ? (
+                    <XCircle className="size-4 text-destructive" />
+                  ) : (
+                    <Loader2 className="size-4 animate-spin text-primary" />
+                  )}
+                  <span className="text-sm font-medium">
+                    {job.message || job.status}
+                    {job.source === "agent-chat" && (
+                      <span className="ml-2 text-xs bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded">
+                        Agente
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <span className="text-sm text-muted-foreground">{job.progress}%</span>
               </div>
-              <span className="text-sm text-muted-foreground">{progress}%</span>
+              <Progress 
+                value={job.progress} 
+                className={cn("h-2", 
+                  job.status === "failed" || job.status === "FAILURE" 
+                    ? "[&_[data-slot=progress-indicator]]:bg-destructive" 
+                    : ""
+                )}
+              />
+              {job.error && (
+                <p className="text-xs text-destructive">{job.error}</p>
+              )}
             </div>
-            <Progress 
-              value={progress} 
-              className="h-2"
-            />
-          </div>
-        </CardContent>
-      )}
-
-      {/* Success State */}
-      {progress === 100 && !loading && (
-        <CardContent className="px-4 pb-4 animate-in slide-in-from-bottom-4 fade-in duration-300">
-          <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-4">
-            <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-              <CheckCircle2 className="size-5" />
-              <span className="text-sm font-medium">¡Documento ingestado!</span>
-            </div>
-          </div>
+          ))}
         </CardContent>
       )}
     </div>

@@ -2,6 +2,9 @@ import { useState, useCallback } from "react";
 import { agentAskStream } from "@/services/agentServices";
 import type { AgentQuestion } from "@/types/agent";
 import { showToastError } from "@/components/toast";
+import { useJobContext } from "@/contexts/JobContext";
+
+// Remove unused fields from Message interface - task status now lives in JobContext
 
 export interface Citation {
   source: string;
@@ -16,8 +19,6 @@ export interface Message {
   isStreaming?: boolean;
   isStream?: boolean;
   citations?: Citation[];
-  toolStatus?: string;
-  taskId?: string; // Celery task ID for background jobs (e.g., reindex)
 }
 
 const generateId = () =>
@@ -86,6 +87,7 @@ export function useChatStream({
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const { addJob } = useJobContext();
 
   const handleQuery = useCallback(
     (query: string) => {
@@ -123,31 +125,9 @@ export function useChatStream({
             // Router decision - optional UI update
           } else if (event === "tool_start") {
             currentTool = data.tool || "unknown";
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMessage.id
-                  ? { ...msg, toolStatus: `Using ${currentTool}...` }
-                  : msg,
-              ),
-            );
+            // Tool status now handled by JobContext, no need to set in message
           } else if (event === "tool_done") {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMessage.id
-                  ? { ...msg, toolStatus: `Completed ${currentTool}` }
-                  : msg,
-              ),
-            );
-            setTimeout(() => {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessage.id &&
-                  msg.toolStatus?.includes("Completed")
-                    ? { ...msg, toolStatus: undefined }
-                    : msg,
-                ),
-              );
-            }, 1500);
+            // Tool execution completed, status will be updated via JobContext
             currentTool = "";
           } else if (event === "llm_token") {
             accumulatedContent += data.token || "";
@@ -163,6 +143,8 @@ export function useChatStream({
               setSessionId(data.session_id);
             }
             const finalContent = accumulatedContent || data.answer;
+            const currentTaskId = data.task_id || undefined;
+            
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === aiMessage.id
@@ -171,13 +153,25 @@ export function useChatStream({
                       content: parseAnswer(finalContent),
                       isStreaming: false,
                       citations: data.citations || [],
-                      toolStatus: undefined,
-                      // Capture Celery task_id if present in metadata
-                      taskId: data.task_id || undefined, 
+                      // No more taskId in message - it goes to global context
                     }
                   : msg,
               ),
             );
+            
+            // Add task to global context if task_id is present
+            // Backend unified: all tasks use same format (status, step, progress)
+            if (currentTaskId) {
+              addJob({
+                id: currentTaskId,
+                type: "ingestion-job", // Same type, unified backend
+                source: "agent-chat",
+                status: "pending",
+                progress: 0,
+                message: "Iniciando...",
+              });
+            }
+            
             setIsLoading(false);
           } else if (event === "error") {
             console.error("Stream error:", data);
@@ -188,7 +182,6 @@ export function useChatStream({
                       ...msg,
                       content: "Error: " + (data.error || "Unknown error"),
                       isStreaming: false,
-                      toolStatus: undefined,
                     }
                   : msg,
               ),
