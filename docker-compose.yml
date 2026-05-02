@@ -37,6 +37,7 @@ services:
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/backend/prometheus
       - REDIS_URL=redis://redis:6379/0
+      - QDRANT_HOST=qdrant
     volumes:
       - .:/backend
       - shared_data:/backend/api_data
