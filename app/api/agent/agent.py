@@ -336,7 +336,8 @@ class Agent:
                         decision.args,
                         state
                     )
-                    state.set_last_tool(decision.tool_name, result.output)
+                    # CRITICAL FIX: Pass metadata (e.g., task_id) to state
+                    state.set_last_tool(decision.tool_name, result.output, result.metadata)
                     
                     yield sse_event("tool_done", json.dumps({'tool': decision.tool_name, 'status': 'success'}))
                     continue
@@ -389,19 +390,19 @@ class Agent:
                         content
                     )
                     
-                    # Prepare final metadata, including task_id from tools
+                    # Merge tool metadata (e.g., task_id from reindex) into response metadata
+                    # Convert objects to dicts for JSON serialization (fixes 'TokenUsage not serializable')
                     final_metadata = {
-                        'session_id': state.session_id,
-                        'answer': content,
                         'usage': final_response.usage.__dict__ if final_response.usage else {},
                         'cost': final_response.cost.__dict__ if final_response.cost else {},
                         'model': final_response.model,
                         'provider': final_response.provider,
-                        'citations': state.citations,
+                        'citations': state.citations,  # Include accumulated citations
                     }
                     
-                    # Include task_id if present (e.g., from reindex_document tool)
-                    if state.last_tool_metadata and 'task_id' in state.last_tool_metadata:
+                    # If last tool returned specific metadata (like task_id), include it
+                    if state.last_tool_metadata:
+                        final_metadata.update(state.last_tool_metadata)
                         final_metadata['task_id'] = state.last_tool_metadata['task_id']
                         final_metadata['status'] = state.last_tool_metadata.get('status', 'processing')
                     
