@@ -160,14 +160,15 @@ export function useChatStream({
             );
             
             // Add task to global context if task_id is present
+            // Backend unified: all tasks use same format (status, step, progress)
             if (currentTaskId) {
               addJob({
                 id: currentTaskId,
-                type: "celery-task",
+                type: "ingestion-job", // Same type, unified backend
                 source: "agent-chat",
-                status: "started",
+                status: "pending",
                 progress: 0,
-                message: `Task ${currentTaskId} started...`,
+                message: "Iniciando...",
               });
             }
             

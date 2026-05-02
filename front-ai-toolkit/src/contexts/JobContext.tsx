@@ -16,7 +16,7 @@ const baseUrl = import.meta.env.VITE_URL || "";
 const AUTO_CLEAN_UP_DELAY = 5000;
 
 export type JobSource = "ingestion-ui" | "agent-chat";
-export type JobType = "ingestion-job" | "celery-task";
+export type JobType = "job"; // Unified: backend now uses same format for all tasks
 
 export interface Job {
   id: string;
@@ -97,76 +97,40 @@ export function JobProvider({ children }: { children: ReactNode }) {
       if (pollingRefs.current.has(job.id)) return;
       if (job.completedAt) return;
 
-      // Start polling based on job type
-      if (job.type === "ingestion-job") {
-        const poll = async () => {
-          try {
-            const data = await getJobStatus(job.id);
-            updateJob(job.id, {
-              status: data.status,
-              progress: data.progress,
-              message:
-                data.status === "completed"
-                  ? "¡Completado!"
-                  : data.step || "Procesando...",
-              ...(data.status === "failed" ? { error: data.error } : {}),
-            });
+      // Unified polling: all jobs use same backend format
+      const poll = async () => {
+        try {
+          const data = await getJobStatus(job.id);
+          
+          const nextMessage = 
+            data.status === "completed" ? "¡Completado!" :
+            data.status === "failed" ? "Error" :
+            data.step || "Procesando...";
 
-            if (data.status === "completed") {
-              showToastSuccess("¡Ingesta completada con éxito!");
-            } else if (data.status === "failed") {
-              showToastError(`Error: ${data.error || "Desconocido"}`);
-            }
-          } catch (error) {
-            console.error("Polling error:", error);
+          updateJob(job.id, {
+            status: data.status,
+            progress: data.progress || 0,
+            message: nextMessage,
+            ...(data.status === "failed" ? { error: data.error } : {}),
+          });
+
+          if (data.status === "completed") {
+            showToastSuccess(
+              job.source === "agent-chat" 
+                ? "Tarea completada con éxito" 
+                : "¡Ingesta completada con éxito!"
+            );
+          } else if (data.status === "failed") {
+            showToastError(`Error: ${data.error || "Desconocido"}`);
           }
-        };
+        } catch (error) {
+          console.error("Polling error:", error);
+        }
+      };
 
-        poll(); // Initial poll
-        const intervalId = window.setInterval(poll, 2000);
-        pollingRefs.current.set(job.id, intervalId);
-      } else if (job.type === "celery-task") {
-        const pollCelery = async () => {
-          try {
-            const response = await fetch(`${baseUrl}/rag/job/${job.id}`);
-            if (!response.ok)
-              throw new Error(`HTTP error! status: ${response.status}`);
-            const data = await response.json();
-
-            if (data.celery_state) {
-              updateJob(job.id, {
-                status: data.celery_state,
-                message: `Task ${job.id}: ${data.celery_state}`,
-              });
-
-              if (
-                ["SUCCESS", "FAILURE", "REVOKED"].includes(data.celery_state)
-              ) {
-                if (data.celery_state === "SUCCESS") {
-                  updateJob(job.id, { progress: 100, message: "Completed" });
-                  showToastSuccess("Tarea completada");
-                } else {
-                  updateJob(job.id, { error: data.error || "Task failed" });
-                  showToastError(`Error: ${data.error || "Task failed"}`);
-                }
-              }
-            } else if (data.status) {
-              updateJob(job.id, {
-                status: data.status,
-                message: `Task ${job.id}: ${data.status}`,
-              });
-            }
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : "Polling error";
-            updateJob(job.id, { status: "FAILURE", error: msg });
-            showToastError(`Error: ${msg}`);
-          }
-        };
-
-        pollCelery(); // Initial poll
-        const intervalId = window.setInterval(pollCelery, 3000);
-        pollingRefs.current.set(job.id, intervalId);
-      }
+      poll(); // Initial poll
+      const intervalId = window.setInterval(poll, 2000);
+      pollingRefs.current.set(job.id, intervalId);
     });
 
     // Cleanup intervals for completed jobs
@@ -174,7 +138,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
       jobs.forEach((job) => {
         if (job.completedAt && pollingRefs.current.has(job.id)) {
           const intervalId = pollingRefs.current.get(job.id);
-          if (intervalId && intervalId !== -1) {
+          if (intervalId) {
             clearInterval(intervalId);
           }
           pollingRefs.current.delete(job.id);
