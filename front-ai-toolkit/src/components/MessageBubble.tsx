@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/hooks/useChatStream";
 import { MessageAvatar } from "./MessageAvatar";
-import { ToolStatus } from "./ToolStatus";
 import { MessageContent } from "./MessageContent";
 import { CitationsList } from "./CitationsList";
 
@@ -34,9 +33,6 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           isUser ? "items-end" : "items-start",
         )}
       >
-        {/* Tool Status (e.g., "Searching documents...") */}
-        {message.toolStatus && <ToolStatus status={message.toolStatus} taskId={message.taskId} />}
-
         <div
           className={cn(
             "px-4 py-3 rounded-2xl",

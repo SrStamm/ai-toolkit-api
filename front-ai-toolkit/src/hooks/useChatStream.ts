@@ -2,7 +2,9 @@ import { useState, useCallback } from "react";
 import { agentAskStream } from "@/services/agentServices";
 import type { AgentQuestion } from "@/types/agent";
 import { showToastError } from "@/components/toast";
-import { pollCeleryTask } from "@/services/oldImplementations";
+import { useJobContext } from "@/contexts/JobContext";
+
+// Remove unused fields from Message interface - task status now lives in JobContext
 
 export interface Citation {
   source: string;
@@ -17,8 +19,6 @@ export interface Message {
   isStreaming?: boolean;
   isStream?: boolean;
   citations?: Citation[];
-  toolStatus?: string;
-  taskId?: string; // Celery task ID for background jobs (e.g., reindex)
 }
 
 const generateId = () =>
@@ -87,6 +87,7 @@ export function useChatStream({
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const { addJob } = useJobContext();
 
   const handleQuery = useCallback(
     (query: string) => {
@@ -124,31 +125,9 @@ export function useChatStream({
             // Router decision - optional UI update
           } else if (event === "tool_start") {
             currentTool = data.tool || "unknown";
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMessage.id
-                  ? { ...msg, toolStatus: `Using ${currentTool}...` }
-                  : msg,
-              ),
-            );
+            // Tool status now handled by JobContext, no need to set in message
           } else if (event === "tool_done") {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMessage.id
-                  ? { ...msg, toolStatus: `Completed ${currentTool}` }
-                  : msg,
-              ),
-            );
-            setTimeout(() => {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessage.id &&
-                  msg.toolStatus?.includes("Completed")
-                    ? { ...msg, toolStatus: undefined }
-                    : msg,
-                ),
-              );
-            }, 1500);
+            // Tool execution completed, status will be updated via JobContext
             currentTool = "";
           } else if (event === "llm_token") {
             accumulatedContent += data.token || "";
@@ -174,56 +153,22 @@ export function useChatStream({
                       content: parseAnswer(finalContent),
                       isStreaming: false,
                       citations: data.citations || [],
-                      toolStatus: currentTaskId ? `Task ${currentTaskId} started...` : undefined,
-                      taskId: currentTaskId, 
+                      // No more taskId in message - it goes to global context
                     }
                   : msg,
               ),
             );
             
-            // Start Celery polling if task_id is present
+            // Add task to global context if task_id is present
             if (currentTaskId) {
-              let pollInterval: number | undefined;
-              
-              const stopPolling = pollCeleryTask(
-                currentTaskId,
-                (status, data) => {
-                  // Update message with task status
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.id === aiMessage.id
-                        ? { ...msg, toolStatus: `Task ${currentTaskId}: ${status}` }
-                        : msg
-                    )
-                  );
-                },
-                (data) => {
-                  // Task completed
-                  if (pollInterval) clearInterval(pollInterval);
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.id === aiMessage.id
-                        ? { ...msg, toolStatus: `Task ${currentTaskId}: Completed` }
-                        : msg
-                    )
-                  );
-                },
-                (error) => {
-                  // Task failed
-                  if (pollInterval) clearInterval(pollInterval);
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.id === aiMessage.id
-                        ? { ...msg, toolStatus: `Task ${currentTaskId}: Failed - ${error}` }
-                        : msg
-                    )
-                  );
-                }
-              );
-              
-              // Store interval ID to clear it if component unmounts
-              pollInterval = window.setInterval(() => {}, 0); // Dummy to store reference
-              // The real interval is inside pollCeleryTask
+              addJob({
+                id: currentTaskId,
+                type: "celery-task",
+                source: "agent-chat",
+                status: "started",
+                progress: 0,
+                message: `Task ${currentTaskId} started...`,
+              });
             }
             
             setIsLoading(false);
@@ -236,7 +181,6 @@ export function useChatStream({
                       ...msg,
                       content: "Error: " + (data.error || "Unknown error"),
                       isStreaming: false,
-                      toolStatus: undefined,
                     }
                   : msg,
               ),
