@@ -391,10 +391,25 @@ class Agent:
                     )
                     
                     # Merge tool metadata (e.g., task_id from reindex) into response metadata
-                    # Convert objects to dicts for JSON serialization (fixes 'TokenUsage not serializable')
+                    # Convert TokenUsage to simple dicts for JSON serialization
+                    usage_dict = {}
+                    if final_response.usage:
+                        # Manually create dict to avoid 'TokenUsage not JSON serializable'
+                        usage_dict = {
+                            'prompt_tokens': final_response.usage.prompt_tokens,
+                            'completion_tokens': final_response.usage.completion_tokens,
+                            'total_tokens': final_response.usage.total_tokens,
+                        }
+                    
+                    cost_dict = {}
+                    if final_response.cost:
+                        cost_dict = {
+                            'total_cost': final_response.cost.total_cost,
+                        }
+                    
                     final_metadata = {
-                        'usage': final_response.usage.__dict__ if final_response.usage else {},
-                        'cost': final_response.cost.__dict__ if final_response.cost else {},
+                        'usage': usage_dict,
+                        'cost': cost_dict,
                         'model': final_response.model,
                         'provider': final_response.provider,
                         'citations': state.citations,  # Include accumulated citations
