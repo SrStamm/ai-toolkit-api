@@ -280,11 +280,9 @@ Este proyecto demuestra:
   - `ingest_url`
   - `ingest_file`
 - Mejora del Router:
-  - Detección automática de input (URL vs archivo)
   - Eliminación de argumentos innecesarios en `_final_answer_`
 - Simplificación del sistema:
   - Eliminación de endpoints redundantes
-  - Eliminación de RAG manual (todo pasa por el agente)
 
 ### V4.5 - Human-in-the-loop
 
