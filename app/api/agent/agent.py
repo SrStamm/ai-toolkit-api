@@ -4,7 +4,7 @@ Agent determinístico con tool registry.
 Orquestador que coordina ToolRunner y Router para ejecutar acciones.
 """
 
-from typing import Optional
+from typing import Any, Optional
 import structlog
 import uuid
 import json
@@ -21,6 +21,11 @@ from ..llamaindex_adapter.orchestrator import (
     get_orchestrator,
     get_llm_client,
 )
+from ..retrieval_engine.service import get_rag_service
+from .adapters.rag_adapter import create_query_adapter, QueryServiceAdapter
+from ..retrieval_engine.ingestion_service import IngestionService
+from ...infrastructure.storage.qdrant_client import get_qdrant_store
+from ...infrastructure.storage.hybrid_ai import get_hybrid_embeddign_service as get_hybrid_embedding_service
 
 logger = structlog.get_logger()
 
@@ -35,7 +40,7 @@ def extract_answer_from_json(content: str) -> str:
     
     if not content:
         return content
-    
+
     # Remove markdown code block wrapper if present
     cleaned = content.strip()
     # Regex to remove starting ```json or ```text or ```
@@ -72,9 +77,25 @@ class Agent:
     Ahora actúa como orchestrator que coordina ToolRunner y Router.
     """
 
-    def __init__(self, llm: LLMClient, rag: LlamaIndexOrchestrator):
+    def __init__(
+        self, 
+        llm: LLMClient, 
+        rag: LlamaIndexOrchestrator | QueryServiceAdapter,
+        vector_store: Any = None,
+        ingestion_service: Any = None,
+    ):
+        # Inicializar dependencias de infraestructura
+        vs = vector_store or get_qdrant_store()
+        embed_svc = get_hybrid_embedding_service()
+        ing_svc = ingestion_service or IngestionService(vector_store=vs, embed_service=embed_svc)
+
         # Inicializar componentes
-        self.tool_runner = ToolRunner(deps={"rag_orchestrator": rag, "llm_client": llm})
+        self.tool_runner = ToolRunner(deps={
+            "rag_orchestrator": rag, 
+            "llm_client": llm,
+            "vector_store": vs,
+            "ingestion_service": ing_svc,
+        })
         self.router = Router(llm_client=llm)
         self.router.tools = ToolRegistry.list_tools()
         self.llm = llm
@@ -226,16 +247,23 @@ class Agent:
             answer
         )
 
+        # Merge tool metadata (e.g., task_id from reindex) into response metadata
+        final_metadata = {
+            'usage': response.usage,
+            'cost': response.cost,
+            'model': response.model,
+            'provider': response.provider,
+            'citations': state.citations,  # Include accumulated citations
+        }
+        
+        # If last tool returned specific metadata (like task_id), include it
+        if state.last_tool_metadata:
+            final_metadata.update(state.last_tool_metadata)
+
         return AgentResponse(
             output=answer,
             session_id=state.session_id,
-            metadata={
-                'usage': response.usage,
-                'cost': response.cost,
-                'model': response.model,
-                'provider': response.provider,
-                'citations': state.citations  # Include accumulated citations
-            }
+            metadata=final_metadata
         )
 
     async def agent_loop_stream(self, query: str, session_id: Optional[str] = None, domain: Optional[str] = None):
@@ -308,7 +336,8 @@ class Agent:
                         decision.args,
                         state
                     )
-                    state.set_last_tool(decision.tool_name, result.output)
+                    # CRITICAL FIX: Pass metadata (e.g., task_id) to state
+                    state.set_last_tool(decision.tool_name, result.output, result.metadata)
                     
                     yield sse_event("tool_done", json.dumps({'tool': decision.tool_name, 'status': 'success'}))
                     continue
@@ -361,15 +390,38 @@ class Agent:
                         content
                     )
                     
-                    yield sse_event("done", json.dumps({
-                        'session_id': state.session_id,
-                        'answer': content,
-                        'usage': final_response.usage.__dict__ if final_response.usage else {},
-                        'cost': final_response.cost.__dict__ if final_response.cost else {},
+                    # Merge tool metadata (e.g., task_id from reindex) into response metadata
+                    # Convert TokenUsage to simple dicts for JSON serialization
+                    usage_dict = {}
+                    if final_response.usage:
+                        # Manually create dict to avoid 'TokenUsage not JSON serializable'
+                        usage_dict = {
+                            'prompt_tokens': final_response.usage.prompt_tokens,
+                            'completion_tokens': final_response.usage.completion_tokens,
+                            'total_tokens': final_response.usage.total_tokens,
+                        }
+                    
+                    cost_dict = {}
+                    if final_response.cost:
+                        cost_dict = {
+                            'total_cost': final_response.cost.total_cost,
+                        }
+                    
+                    final_metadata = {
+                        'usage': usage_dict,
+                        'cost': cost_dict,
                         'model': final_response.model,
                         'provider': final_response.provider,
-                        'citations': state.citations  # Include accumulated citations
-                    }))
+                        'citations': state.citations,  # Include accumulated citations
+                    }
+                    
+                    # If last tool returned specific metadata (like task_id), include it
+                    if state.last_tool_metadata:
+                        final_metadata.update(state.last_tool_metadata)
+                        final_metadata['task_id'] = state.last_tool_metadata['task_id']
+                        final_metadata['status'] = state.last_tool_metadata.get('status', 'processing')
+                    
+                    yield sse_event("done", json.dumps(final_metadata))
                     break
 
         except Exception as e:
@@ -381,11 +433,30 @@ class Agent:
 def create_agent(
     provider: str | None = None,
     model: str | None = None,
+    use_rag_service: bool = False,  # Flag to use RAG service via adapter
 ) -> Agent:
-    """Factory function to create an Agent instance."""
-    return Agent(llm=get_llm_client(provider, model), rag=get_orchestrator())
+    """
+    Factory function to create an Agent instance.
+    """
+    llm = get_llm_client(provider, model)
+
+    # Initialize infrastructure dependencies
+    vector_store = get_qdrant_store()
+    embed_service = get_hybrid_embedding_service()
+    ingestion_svc = IngestionService(vector_store=vector_store, embed_service=embed_service)
+
+    if use_rag_service:
+        # Use RAG service with adapter (retrieval_engine/)
+        rag_service = get_rag_service()
+        rag_adapter = create_query_adapter(rag_service)
+        return Agent(llm=llm, rag=rag_adapter, vector_store=vector_store, ingestion_service=ingestion_svc)
+    else:
+        # Use LlamaIndex orchestrator (llamaindex_adapter/)
+        return Agent(llm=llm, rag=get_orchestrator(), vector_store=vector_store, ingestion_service=ingestion_svc)
 
 
-def get_agent() -> Agent:
-    """Get or create agent singleton."""
-    return create_agent()
+def get_agent(use_rag_service: bool = True) -> Agent:
+    """
+    Get or create agent singleton.
+    """
+    return create_agent(use_rag_service=use_rag_service)

@@ -12,14 +12,13 @@ from uuid import uuid5, NAMESPACE_DNS
 from fastapi import UploadFile
 import structlog
 
-from app.api.extraction.schema import ChunkWithMetadata
-from app.api.extraction.factory import SourceFactory
-from app.api.extraction.exceptions import EmptySourceContentError
-from app.api.retrieval_engine.exceptions import ChunkingError
-from app.api.retrieval_engine.schemas import Citation
-from app.infrastructure.storage.interfaces import FilterContext, VectorStoreInterface
-from app.infrastructure.storage.hybrid_ai import HybridEmbeddingService
-from app.infrastructure.metrics import (
+from ...api.extraction.schema import ChunkWithMetadata
+from ...api.extraction.factory import SourceFactory
+from ...api.extraction.exceptions import EmptySourceContentError
+from ...api.retrieval_engine.exceptions import ChunkingError
+from ...infrastructure.storage.interfaces import VectorStoreInterface
+from ...infrastructure.storage.hybrid_ai import HybridEmbeddingService
+from ...infrastructure.metrics import (
     documents_ingested_total,
     documents_chunks_total,
 )
@@ -263,7 +262,7 @@ class IngestionService:
         progress_callback: ProgressCallback | None = None,
     ) -> dict:
         """Synchronous URL ingestion."""
-        from app.api.extraction.exceptions import SourceException
+        from ...api.extraction.exceptions import SourceException
 
         extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
 

@@ -54,12 +54,19 @@ class Router:
             if prev_messages:
                 history_context = "\n\nPrevious conversation:\n" + "\n".join(prev_messages)
         
+        # Pass full tool result to prompt (critical for tool-based decisions)
+        # We truncate only if extremely long to avoid prompt overflow, but metadata is usually short
+        MAX_RESULT_LEN = 1000
+        tool_res = state.last_tool_result or "None"
+        if len(tool_res) > MAX_RESULT_LEN:
+            tool_res = tool_res[:MAX_RESULT_LEN] + "... [truncated]"
+            
         system_content = PROMPT_ROUTING_SYSTEM.format(
             tool_list=tools,
             context=bool(state.context),
             tool_execution_count=state.tool_execution_count,
             last_tool=state.last_tool or "None",
-            last_tool_result=(state.last_tool_result[:200] + "..." if len(state.last_tool_result or "") > 200 else state.last_tool_result) or "None",
+            last_tool_result=tool_res,
         )
         
         # Include history in the user message if available
@@ -91,6 +98,17 @@ class Router:
             if decision_json.get('action') == "retrieve_context" and state.context:
                 logger.warning("Preventing repeated context retrieval")
                 return Decision(action=ActionType.FINAL_ANSWER)
+            
+            # Prevent repeated tool execution
+            if decision_json.get('action') == "call_tool":
+                tool_name = decision_json.get("tool_name")
+                if tool_name and tool_name == state.last_tool:
+                    logger.warning(
+                        "Preventing repeated tool execution",
+                        tool=tool_name,
+                        last_tool=state.last_tool
+                    )
+                    return Decision(action=ActionType.FINAL_ANSWER)
             
             return Decision(
                 action=ActionType(decision_json.get("action", "final_answer")),

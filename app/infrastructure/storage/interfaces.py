@@ -42,6 +42,22 @@ class VectorStoreInterface(ABC):
 
     @abstractmethod
     def delete_old_data(self, source: str, timestamp: int) -> None:
+        """Delete old chunks for a specific source (legacy/compatibility)."""
+        pass
+
+    @abstractmethod
+    def delete_by_filter(self, filter_conditions: Dict[str, Any]) -> None:
+        """Delete points matching a generic set of filter conditions."""
+        pass
+
+    @abstractmethod
+    def list_sources(self, domain: str | None = None) -> List[Dict[str, Any]]:
+        """List unique sources with metadata using scroll (for document management)."""
+        pass
+
+    @abstractmethod
+    def get_source_metadata(self, source: str) -> Dict[str, Any] | None:
+        """Get aggregated metadata for a specific source (domain, topic, chunks count)."""
         pass
 
 

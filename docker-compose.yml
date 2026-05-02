@@ -36,6 +36,8 @@ services:
     env_file: .env
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/backend/prometheus
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_HOST=qdrant
     volumes:
       - .:/backend
       - shared_data:/backend/api_data
@@ -48,6 +50,8 @@ services:
       dockerfile: app/Dockerfile
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/backend/prometheus
+      - QDRANT_HOST=qdrant
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - hf_cache:/home/appuser/.cache/huggingface
       - .:/backend

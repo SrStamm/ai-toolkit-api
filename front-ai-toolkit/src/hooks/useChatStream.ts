@@ -17,6 +17,7 @@ export interface Message {
   isStream?: boolean;
   citations?: Citation[];
   toolStatus?: string;
+  taskId?: string; // Celery task ID for background jobs (e.g., reindex)
 }
 
 const generateId = () =>
@@ -171,6 +172,8 @@ export function useChatStream({
                       isStreaming: false,
                       citations: data.citations || [],
                       toolStatus: undefined,
+                      // Capture Celery task_id if present in metadata
+                      taskId: data.task_id || undefined, 
                     }
                   : msg,
               ),

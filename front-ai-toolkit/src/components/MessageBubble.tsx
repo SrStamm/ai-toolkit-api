@@ -35,7 +35,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         )}
       >
         {/* Tool Status (e.g., "Searching documents...") */}
-        {message.toolStatus && <ToolStatus status={message.toolStatus} />}
+        {message.toolStatus && <ToolStatus status={message.toolStatus} taskId={message.taskId} />}
 
         <div
           className={cn(

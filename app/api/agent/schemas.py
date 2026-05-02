@@ -35,6 +35,7 @@ class AgentState(BaseModel):
     # Trazabilidad de herramientas
     last_tool: str | None = None
     last_tool_result: str | None = None
+    last_tool_metadata: dict | None = None  # Metadatos crudos de la tool (ej: task_id)
     tool_execution_count: int = 0
 
     def add_tool_result(self, result: str) -> None:
@@ -44,6 +45,7 @@ class AgentState(BaseModel):
         """Registra la última tool ejecutada y sus metadatos."""
         self.last_tool = tool_name
         self.last_tool_result = result
+        self.last_tool_metadata = metadata  # Guardar metadatos crudos
         self.tool_execution_count += 1
         self.add_tool_result(result)
         
