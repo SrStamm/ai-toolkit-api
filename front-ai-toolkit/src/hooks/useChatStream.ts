@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { agentAskStream } from "@/services/agentServices";
 import type { AgentQuestion } from "@/types/agent";
 import { showToastError } from "@/components/toast";
+import { pollCeleryTask } from "@/services/oldImplementations";
 
 export interface Citation {
   source: string;
@@ -163,6 +164,8 @@ export function useChatStream({
               setSessionId(data.session_id);
             }
             const finalContent = accumulatedContent || data.answer;
+            const currentTaskId = data.task_id || undefined;
+            
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === aiMessage.id
@@ -171,13 +174,58 @@ export function useChatStream({
                       content: parseAnswer(finalContent),
                       isStreaming: false,
                       citations: data.citations || [],
-                      toolStatus: undefined,
-                      // Capture Celery task_id if present in metadata
-                      taskId: data.task_id || undefined, 
+                      toolStatus: currentTaskId ? `Task ${currentTaskId} started...` : undefined,
+                      taskId: currentTaskId, 
                     }
                   : msg,
               ),
             );
+            
+            // Start Celery polling if task_id is present
+            if (currentTaskId) {
+              let pollInterval: number | undefined;
+              
+              const stopPolling = pollCeleryTask(
+                currentTaskId,
+                (status, data) => {
+                  // Update message with task status
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === aiMessage.id
+                        ? { ...msg, toolStatus: `Task ${currentTaskId}: ${status}` }
+                        : msg
+                    )
+                  );
+                },
+                (data) => {
+                  // Task completed
+                  if (pollInterval) clearInterval(pollInterval);
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === aiMessage.id
+                        ? { ...msg, toolStatus: `Task ${currentTaskId}: Completed` }
+                        : msg
+                    )
+                  );
+                },
+                (error) => {
+                  // Task failed
+                  if (pollInterval) clearInterval(pollInterval);
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === aiMessage.id
+                        ? { ...msg, toolStatus: `Task ${currentTaskId}: Failed - ${error}` }
+                        : msg
+                    )
+                  );
+                }
+              );
+              
+              // Store interval ID to clear it if component unmounts
+              pollInterval = window.setInterval(() => {}, 0); // Dummy to store reference
+              // The real interval is inside pollCeleryTask
+            }
+            
             setIsLoading(false);
           } else if (event === "error") {
             console.error("Stream error:", data);
