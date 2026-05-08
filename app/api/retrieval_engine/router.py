@@ -1,186 +1,15 @@
-import asyncio
-import json
 import shutil
 from pathlib import Path
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 import structlog
 
-from app.api.retrieval_engine.jobs.celery_tasks import ingest_file_job, ingest_html_job
-from app.api.retrieval_engine.jobs.job_service import JobService
-from app.api.extraction.exceptions import EmptySourceContentError
-from app.api.retrieval_engine.exceptions import ChunkingError, EmbeddingError, error_event
-from app.api.retrieval_engine.schemas import IngestRequest, QueryRequest, QueryResponse
-from app.api.retrieval_engine.service import RAGService, get_rag_service
+from .jobs.celery_tasks import ingest_file_job, ingest_html_job
+from .jobs.job_service import JobService
+from .schemas import IngestRequest
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
 logger = structlog.getLogger()
-
-
-@router.post(
-    "/ingest",
-    description="""
-    It ingests documentation from a URL (it can be an HTML or a README) and adds it to a vector database.
-    The variables of 'domain' and 'topic' allows to better separate the topics and gives better context to later.
-    """,
-)
-async def ingest_document(
-    ingest: IngestRequest,
-    serv: RAGService = Depends(get_rag_service),
-):
-    await serv.ingest_document(
-        url=ingest.url, source=ingest.url, domain=ingest.domain, topic=ingest.topic
-    )
-
-    return {"status": "ingested", "url": ingest.url}
-
-
-@router.post(
-    "/ingest-stream",
-    description="""
-    It ingests documentation from a URL (it can be an HTML or a README) and adds it to a vector database.
-    The variables of 'domain' and 'topic' allows to better separate the topics and gives better context to later.
-    """,
-)
-async def ingest_document_stream(
-    ingest: IngestRequest,
-    serv: RAGService = Depends(get_rag_service),
-):
-    async def generate():
-        try:
-            async for event in serv.ingest_document_stream(
-                url=ingest.url,
-                source=ingest.url,
-                domain=ingest.domain,
-                topic=ingest.topic,
-            ):
-                yield f"data: {json.dumps(event)}\n\n"
-        except EmptySourceContentError:
-            yield error_event(
-                message="Document is empty after cleaning", recoverable=False
-            )
-
-        except ChunkingError:
-            yield error_event(message="Failed to split document", recoverable=False)
-
-        except EmbeddingError as e:
-            yield error_event(message=f"Embedding failed: {str(e)}", recoverable=True)
-
-        except asyncio.TimeoutError:
-            yield error_event(
-                message="Processing timed out, try a smaller document",
-                recoverable=False,
-            )
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
-
-
-@router.post("/ingest-pdf")
-async def ingest_pdf(
-    file: UploadFile = File(...),
-    source: str = Form(...),
-    domain: str = Form(...),
-    topic: str = Form(...),
-    serv: RAGService = Depends(get_rag_service),
-):
-    if not file.filename.lower().endswith(".pdf"):
-        return {"status": "error", "message": "File must be a PDF"}
-
-    await serv.ingest_pdf_file(file=file, source=source, domain=domain, topic=topic)
-
-    return {"status": "ingested", "filename": file.filename, "source": source}
-
-
-@router.post("/ingest-pdf-stream")
-async def ingest_pdf_stream(
-    file: UploadFile = File(...),
-    source: str = Form(...),
-    domain: str = Form(...),
-    topic: str = Form(...),
-    serv: RAGService = Depends(get_rag_service),
-):
-    # Validación
-    if not file.filename.lower().endswith(".pdf"):
-
-        async def error_gen():
-            yield error_event(message="File must be a PDF", recoverable=False)
-
-        return StreamingResponse(error_gen(), media_type="text/event-stream")
-
-    # Streaming
-    async def generate():
-        try:
-            async for event in serv.ingest_pdf_file_stream(
-                file=file, source=source, domain=domain, topic=topic
-            ):
-                yield f"data: {json.dumps(event)}\n\n"
-        except Exception as e:
-            yield error_event(message=str(e), recoverable=False)
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
-
-
-@router.post(
-    "/retrieve",
-    description="""
-    You can try to get context directly from the vector database.
-    It is filtered by 'domain' and 'topic' in the database to return data.
-    It is necessary to complete correctly.
-    """,
-)
-def retrieve_search(
-    query: QueryRequest,
-    serv: RAGService = Depends(get_rag_service),
-):
-    query_result = serv.query(text=query.text, domain=query.domain, topic=query.topic)
-
-    return {"status": "query", "Points": query_result}
-
-
-@router.post(
-    "/retrieve-v2",
-)
-def retrieve_and_rerank_search(
-    query: QueryRequest,
-    serv: RAGService = Depends(get_rag_service),
-):
-    query_result = serv.query(text=query.text, domain=query.domain, topic=query.topic)
-    rerank_result = serv.vector_store.rerank(query.text, query_result)
-
-    return {"status": "rerank", "Points": rerank_result}
-
-
-@router.post(
-    "/ask",
-    description="""
-    Ask to LLM about documentation previously charged and get a response with context
-    """,
-)
-def ask(
-    request: Request,
-    query: QueryRequest,
-    serv: RAGService = Depends(get_rag_service),
-) -> QueryResponse:
-    return serv.ask(request.state.session_id, query.text, query.domain, query.topic)
-
-
-@router.post("/ask-stream")
-async def ask_stream(
-    request: Request,
-    query: QueryRequest,
-    serv: RAGService = Depends(get_rag_service),
-):
-    return StreamingResponse(
-        serv.chat_stream(
-            request.state.session_id, query.text, query.domain, query.topic
-        ),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        },
-    )
 
 
 @router.post(
@@ -231,44 +60,8 @@ async def ingest_file_job_endpoint(
     "/job/{job_id}",
 )
 async def get_status_job(job_id: str, job_serv: JobService = Depends(JobService)):
-    # 1. Try legacy JobService (Redis)
     try:
         state = job_serv.get_state(job_id)
         return state
-    except ValueError:
-        pass  # If not found in legacy, try Celery
-    
-    # 2. Try Celery task status
-    try:
-        from app.core.celery_app import celery_app
-        from celery.result import AsyncResult
-        
-        task_result = AsyncResult(job_id, app=celery_app)
-        
-        # Map Celery states to frontend-friendly states
-        status_map = {
-            'PENDING': 'queued',
-            'STARTED': 'running',
-            'SUCCESS': 'completed',
-            'FAILURE': 'failed',
-            'RETRY': 'running',
-            'REVOKED': 'failed',
-        }
-        
-        status = status_map.get(task_result.state, task_result.state.lower())
-        
-        response = {
-            "job_id": job_id,
-            "status": status,
-            "celery_state": task_result.state
-        }
-        
-        # If task failed, include error info
-        if task_result.state == 'FAILURE':
-            response["error"] = str(task_result.info) if task_result.info else "Unknown error"
-            
-        return response
-        
     except Exception as e:
-        # If Celery also fails, return not found
         return {"error": f"Job {job_id} not found"}, 404

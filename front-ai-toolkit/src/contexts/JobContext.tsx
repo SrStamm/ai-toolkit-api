@@ -10,8 +10,6 @@ import {
 import { getJobStatus } from "@/services/ragServices";
 import { showToastError, showToastSuccess } from "@/components/toast";
 
-const baseUrl = import.meta.env.VITE_URL || "";
-
 // Auto-cleanup time for completed jobs (5 seconds)
 const AUTO_CLEAN_UP_DELAY = 5000;
 
@@ -101,11 +99,13 @@ export function JobProvider({ children }: { children: ReactNode }) {
       const poll = async () => {
         try {
           const data = await getJobStatus(job.id);
-          
-          const nextMessage = 
-            data.status === "completed" ? "¡Completado!" :
-            data.status === "failed" ? "Error" :
-            data.step || "Procesando...";
+
+          const nextMessage =
+            data.status === "completed"
+              ? "¡Completado!"
+              : data.status === "failed"
+                ? "Error"
+                : data.step || "Procesando...";
 
           updateJob(job.id, {
             status: data.status,
@@ -116,9 +116,9 @@ export function JobProvider({ children }: { children: ReactNode }) {
 
           if (data.status === "completed") {
             showToastSuccess(
-              job.source === "agent-chat" 
-                ? "Tarea completada con éxito" 
-                : "¡Ingesta completada con éxito!"
+              job.source === "agent-chat"
+                ? "Tarea completada con éxito"
+                : "¡Ingesta completada con éxito!",
             );
           } else if (data.status === "failed") {
             showToastError(`Error: ${data.error || "Desconocido"}`);

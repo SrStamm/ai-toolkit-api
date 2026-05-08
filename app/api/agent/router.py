@@ -1,23 +1,10 @@
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request
 from starlette.responses import StreamingResponse
 from .schemas import QueryAgentRequest
 from .agent import create_agent
-from ...core.settings import get_settings, YamlAppConfig
+from ...core.settings import get_settings
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
-
-
-@router.post("/agent-loop")
-async def agent_loop(query: QueryAgentRequest, request: Request):
-    """Main agent endpoint (async)."""
-    agent = create_agent(
-        provider=request.headers.get("x-llm-provider"),
-        model=request.headers.get("x-llm-model"),
-    )
-    return await agent.agent_loop(
-        query=query.text,
-        session_id=query.session_id
-    )
 
 
 @router.post("/agent-loop/stream")

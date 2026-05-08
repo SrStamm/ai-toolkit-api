@@ -1,10 +1,12 @@
 """
-Integration test: Agent with QueryServiceAdapter.
+Integration test: Agent with QueryServiceAdapter (streaming).
 
-Tests the full agent loop using the RAG manual service via adapter.
+Tests the full agent loop using the RAG manual service via adapter
+and the streaming response.
 """
 
 import asyncio
+import json
 import sys
 import os
 import tempfile
@@ -18,43 +20,59 @@ from app.api.agent.agent import create_agent
 
 
 async def test_agent_with_rag_adapter():
-    """Test agent loop with QueryServiceAdapter."""
+    """Test agent streaming loop with QueryServiceAdapter."""
     
     print("=" * 60)
-    print("INTEGRATION TEST: Agent with QueryServiceAdapter")
+    print("INTEGRATION TEST: Agent with QueryServiceAdapter (stream)")
     print("=" * 60)
     
     try:
         # 1. Create agent WITH RAG service adapter
         print("\n1. Creating Agent with use_rag_service=True...")
         agent = create_agent(
-            provider="mistral",  # or your preferred provider
+            provider="mistral",
             model=None,
             use_rag_service=True
         )
         print("   ✅ Agent created with RAG service adapter")
         
-        # 2. Run agent loop with a query
-        print("\n2. Running agent_loop() with a test query...")
-        print("   Query: 'What is RAG in AI?'")
+        # 2. Run agent streaming loop with a query
+        print("\n2. Running agent_loop_stream() with a test query...")
+        print("   Query: 'How can I use Middleware in FastAPI?'")
         
-        # Note: This requires documents to be ingested in Qdrant
-        # If no docs, agent should still respond (maybe without context)
-        response = await agent.agent_loop(
+        collected_tokens = []
+        final_done = None
+        
+        async for event in agent.agent_loop_stream(
             query="How can I use Middleware in FastAPI?",
             session_id="test-session-123",
             domain=None
-        )
+        ):
+            event_type = ""
+            data = {}
+            for line in event.split("\n"):
+                if line.startswith("event: "):
+                    event_type = line[7:]
+                elif line.startswith("data: "):
+                    data = json.loads(line[6:])
+            
+            if event_type == "llm_token":
+                collected_tokens.append(data["token"])
+            elif event_type == "done":
+                final_done = data
         
-        print(f"\n3. Response received:")
-        print(f"   Output: {response.output[:200]}..." if len(response.output) > 200 else f"   Output: {response.output}")
-        print(f"   Session ID: {response.session_id}")
+        full_response = "".join(collected_tokens)
         
-        if response.metadata:
-            print(f"   Metadata: {response.metadata}")
+        print(f"\n3. Streaming response received:")
+        print(f"   Tokens collected: {len(collected_tokens)}")
+        print(f"   Full output: {full_response[:200]}..." if len(full_response) > 200 else f"   Full output: {full_response}")
+        print(f"   Has done event: {final_done is not None}")
+        
+        if final_done:
+            print(f"   Metadata: {final_done}")
         
         print("\n" + "=" * 60)
-        print("RESULT: Agent with RAG adapter works! ✅")
+        print("RESULT: Agent streaming with RAG adapter works! ✅")
         print("=" * 60)
         
         return True
@@ -74,7 +92,7 @@ if __name__ == "__main__":
     success = asyncio.run(test_agent_with_rag_adapter())
     
     if success:
-        print("\n✅ SUCCESS: Agent works with QueryServiceAdapter!")
+        print("\n✅ SUCCESS: Agent streaming works with QueryServiceAdapter!")
         print("   You can now migrate tools to use retrieval_engine/")
         sys.exit(0)
     else:

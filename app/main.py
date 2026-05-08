@@ -9,7 +9,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from .infrastructure.logging import register_exceptions_handlers, logger
 from .infrastructure.metrics import http_requests_total, registry
-from .api.extraction.router import router as extraction_router
 from .infrastructure.storage.qdrant_client import get_qdrant_store
 from .api.retrieval_engine.router import router as rag_router
 from .api.llamaindex_adapter.router import router as llama_router
@@ -50,7 +49,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(extraction_router)
 app.include_router(rag_router)
 app.include_router(llama_router)
 app.include_router(agent_router)
