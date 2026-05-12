@@ -140,7 +140,22 @@ class Agent:
                 yield sse_event("agent_decision", json.dumps(decision.model_dump()))
                 
                 if decision.action == ActionType.FINAL_ANSWER:
-                    # Don't send done here - let the streaming code after the loop generate and send it
+                    # If router included a direct message (e.g., asking for metadata),
+                    # yield it immediately instead of generating a new LLM response
+                    if decision.args.get("message"):
+                        content = decision.args["message"]
+                        self.session_memory.add(state.session_id, "assistant", content)
+                        yield sse_event("llm_token", json.dumps({"token": content}))
+                        yield sse_event("done", json.dumps({
+                            "usage": {},
+                            "cost": {},
+                            "model": "",
+                            "provider": "",
+                            "citations": state.citations,
+                        }))
+                        return  # Exit the generator cleanly, skip LLM generation
+
+                    # No direct message — fall through to LLM generation (normal case: greetings, etc.)
                     break
                 
                 if decision.action == ActionType.RETRIEVE_CONTEXT:
@@ -181,6 +196,27 @@ class Agent:
                     yield sse_event("tool_done", json.dumps({'tool': decision.tool_name, 'status': 'success'}))
                     continue
             
+            # After the loop: if a non-RAG tool was executed and router acknowledged it,
+            # use the tool result directly instead of re-invoking the LLM
+            if (
+                not decision.args.get("message")
+                and state.last_tool
+                and state.last_tool != "retrieve_context"
+                and state.last_tool_result
+            ):
+                content = state.last_tool_result
+                self.session_memory.add(state.session_id, "assistant", content)
+                yield sse_event("llm_token", json.dumps({"token": content}))
+                yield sse_event("done", json.dumps({
+                    "usage": {},
+                    "cost": {},
+                    "model": "",
+                    "provider": "",
+                    "citations": state.citations,
+                    **(state.last_tool_metadata or {}),
+                }))
+                return
+
             # Generate final answer with streaming + buffering
             messages: list[dict] = []
             system_prompt = PROMPT_GENERATE_ANSWER
@@ -229,7 +265,7 @@ class Agent:
                         content
                     )
                     
-                    # Merge tool metadata (e.g., task_id from reindex) into response metadata
+                    # Merge tool metadata (e.g., task_id from ingestion) into response metadata
                     # Convert TokenUsage to simple dicts for JSON serialization
                     usage_dict = {}
                     if final_response.usage:

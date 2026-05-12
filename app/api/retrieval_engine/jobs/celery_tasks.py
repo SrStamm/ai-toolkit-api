@@ -59,7 +59,9 @@ def ingest_html_job(self, job_id: str, ingest_data: dict):
     except Exception as e:
         celery_tasks_total.labels("ingest_html_job", "error").inc()
         documents_ingested_total.labels(source_type="url", status="error").inc()
-        logger.error("ingest_job_failed", job_id=job_id, error=str(e), exc_info=True)
+        import traceback
+        tb_str = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error("ingest_job_failed", job_id=job_id, error=str(e), traceback=tb_str)
         job_service.fail(job_id, str(e))
         raise
     finally:
@@ -106,7 +108,9 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
         job_service.update_status(job_id, JobStatus.completed)
 
     except Exception as e:
-        logger.error("ingest_job_failed", job_id=job_id, error=str(e), exc_info=True)
+        import traceback
+        tb_str = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error("ingest_job_failed", job_id=job_id, error=str(e), traceback=tb_str)
         job_service.fail(job_id, str(e))
         celery_tasks_total.labels("ingest_file_job", "error").inc()
         documents_ingested_total.labels(source_type="pdf", status="error").inc()
@@ -164,7 +168,10 @@ def reindex_document_task(job_id: str, source: str, url: str, domain: str, topic
 
     except Exception as e:
         celery_tasks_total.labels("reindex_document_task", "error").inc()
-        logger.error("reindex_task_failed", source=source, error=str(e), exc_info=True)
+        # Avoid exc_info=True — structlog dev formatter crashes on chained exceptions in Python 3.11+
+        import traceback
+        tb_str = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error("reindex_task_failed", source=source, error=str(e), traceback=tb_str)
 
         job_service.update_progress(job_id, 100, "Error")
         job_service.update_status(job_id, JobStatus.fail)
