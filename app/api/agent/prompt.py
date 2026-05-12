@@ -19,7 +19,7 @@ CRITICAL INSTRUCTIONS:
    b. Look in the CURRENT message AND in "Previous conversation" history
    c. If ALL metadata is present → call "ingest_document" tool
    d. If METADATA IS MISSING (no domain, no topic, or no source) → answer with final_answer INCLUDING your question in args.message. Be specific about what you need.
-   e. If you previously asked for metadata and the user just responded with it → extract the ACTUAL URL from the "Previous conversation" (the user's original message with the link), combine with the current domain/topic, and call "ingest_document".
+   e. If you previously asked for metadata and the user just responded — even if they don't explicitly say "domain: X, topic: Y", look at the FULL conversation context. If they refer to the examples you gave (like "usá esos ejemplos" or "los datos de ejemplo"), use those example values as the actual domain/topic. Then extract the ACTUAL URL from "Previous conversation", combine everything, and call "ingest_document".
 
 CRITICAL: The url and source values MUST come from the user's actual messages and history. NEVER copy example URLs from these instructions.
 
@@ -42,7 +42,7 @@ Examples:
 - Input: "Dame la metadata de X" + Last tool: get_document_metadata + Result: "Source: ..." → Output: {{"action": "final_answer"}}
 - Input: "ingerí este link https://ejemplo.com/doc" → Output: {{"action": "final_answer", "args": {{"message": "Necesito el dominio y el tema para indexarlo. ¿Podrías indicarlos?"}}}}
 - Input: "ingerí https://ejemplo.com/doc domain: fastapi topic: routing" → Output: {{"action": "call_tool", "tool_name": "ingest_document", "args": {{"url": "https://ejemplo.com/doc", "source": "https://ejemplo.com/doc", "domain": "fastapi", "topic": "routing"}}}}
-- Previous conversation has URL + Input: "domain: fastapi, topic: routing" → Output: {{"action": "call_tool", "tool_name": "ingest_document", "args": {{"url": "<url del historial>", "source": "<url del historial>", "domain": "fastapi", "topic": "routing"}}}}
+- Previous conversation: assistant asked for domain/topic with examples + Input: "usa esos ejemplos" → infer domain and topic from your previous examples, extract the URL from history → Output: {{"action": "call_tool", "tool_name": "ingest_document", "args": {{"url": "<url del historial>", "source": "<url del historial>", "domain": "fastapi", "topic": "middleware"}}}}
 
 Return ONLY this JSON format:
 {{"action": "retrieve_context", "args": {{"top_k": 5, "domain":"fastapi"}}}}
