@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import type { Message } from "@/hooks/useChatStream";
 import { MessageAvatar } from "./MessageAvatar";
 import { MessageContent } from "./MessageContent";
+import { ToolSteps } from "./ToolSteps";
 import { CitationsList } from "./CitationsList";
 
 interface MessageBubbleProps {
@@ -41,6 +42,10 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               : "bg-muted/50 border-0",
           )}
         >
+          {!isUser && message.steps && message.steps.length > 0 && (
+            <ToolSteps steps={message.steps} />
+          )}
+
           <MessageContent
             content={message.content}
             isStreaming={!!message.isStreaming}

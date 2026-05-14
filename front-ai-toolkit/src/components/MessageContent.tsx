@@ -1,4 +1,5 @@
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { markdownComponents } from "./markdownComponents";
 
@@ -42,7 +43,7 @@ export function MessageContent({
         isUser ? "prose-invert" : "prose-neutral",
       )}
     >
-      <Markdown components={markdownComponents}>{content}</Markdown>
+      <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{content}</Markdown>
     </div>
   );
 }

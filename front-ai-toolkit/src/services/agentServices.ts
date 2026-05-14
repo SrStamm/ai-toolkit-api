@@ -1,12 +1,13 @@
-import type { AgentQuestion, AgentResponse } from "@/types/agent";
-import Fetch from "@/utils/api";
+import type { AgentQuestion } from "@/types/agent";
 
 interface UploadFileResponse {
   file_uuid: string;
   filename: string;
 }
 
-export const uploadAgentFile = async (file: File): Promise<UploadFileResponse> => {
+export const uploadAgentFile = async (
+  file: File,
+): Promise<UploadFileResponse> => {
   const baseUrl = import.meta.env.VITE_URL || "";
   const formData = new FormData();
   formData.append("file", file);
@@ -135,4 +136,3 @@ export const agentAskStream = (
       if (onError) onError(errorMessage);
     });
 };
-

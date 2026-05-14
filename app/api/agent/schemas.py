@@ -8,6 +8,7 @@ from .session_memory import Message
 class ActionType(str, Enum):
     RETRIEVE_CONTEXT = "retrieve_context"
     CALL_TOOL = "call_tool"
+    ASK_USER = "ask_user"
     FINAL_ANSWER = "final_answer"
 
 
