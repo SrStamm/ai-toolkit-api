@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { agentAskStream } from "@/services/agentServices";
+import { agentAskStream, uploadAgentFile } from "@/services/agentServices";
 import type { AgentQuestion } from "@/types/agent";
 import { showToastError } from "@/components/toast";
 import { useJobContext } from "@/contexts/JobContext";
@@ -77,7 +77,7 @@ interface UseChatStreamReturn {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   isLoading: boolean;
   sessionId: string | null;
-  handleQuery: (queryText: string) => void;
+  handleQuery: (queryText: string, file?: File | null) => void;
 }
 
 export function useChatStream({
@@ -90,13 +90,31 @@ export function useChatStream({
   const { addJob } = useJobContext();
 
   const handleQuery = useCallback(
-    (query: string) => {
+    async (query: string, file?: File | null) => {
       if (!query.trim() || isLoading) return;
+
+      // If a file is attached, upload it first to get a UUID
+      let fileUuid: string | undefined;
+      let fileName: string | undefined;
+
+      if (file) {
+        try {
+          const result = await uploadAgentFile(file);
+          fileUuid = result.file_uuid;
+          fileName = result.filename;
+        } catch (err) {
+          showToastError("Error al subir el archivo");
+          setIsLoading(false);
+          return;
+        }
+      }
 
       const userMessage: Message = {
         id: generateId(),
         role: "user",
-        content: query.trim(),
+        content: file
+          ? `[PDF: ${fileName}]\n${query.trim()}`
+          : query.trim(),
       };
 
       const aiMessage: Message = {
@@ -112,6 +130,8 @@ export function useChatStream({
       const body: AgentQuestion = {
         text: query.trim(),
         session_id: sessionId || undefined,
+        file_uuid: fileUuid,
+        filename: fileName,
       };
 
       let accumulatedContent = "";
@@ -188,7 +208,7 @@ export function useChatStream({
         },
       );
     },
-    [isLoading, provider, model, sessionId],
+    [isLoading, provider, model, sessionId, addJob],
   );
 
   return {

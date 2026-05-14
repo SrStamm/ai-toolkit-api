@@ -1,6 +1,28 @@
 import type { AgentQuestion, AgentResponse } from "@/types/agent";
 import Fetch from "@/utils/api";
 
+interface UploadFileResponse {
+  file_uuid: string;
+  filename: string;
+}
+
+export const uploadAgentFile = async (file: File): Promise<UploadFileResponse> => {
+  const baseUrl = import.meta.env.VITE_URL || "";
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${baseUrl}/agent/upload-file`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Upload failed: ${response.statusText}`);
+  }
+
+  return response.json() as Promise<UploadFileResponse>;
+};
+
 interface AgentAskOptions {
   provider?: string;
   model?: string;
