@@ -1,6 +1,6 @@
 # ai-toolkit
 
-> **Versión actual:** `v4.4`  
+> **Versión actual:** `v4.5`  
 > **Estado:** estable (educacional / experimental, with contextual agent)
 
 **Herramientas de IA para backend (FastAPI)**
@@ -19,59 +19,65 @@
 
 ---
 
-## Estado actual – v4.4 (Unified Task Architecture & Refactor)
+## Estado actual – v4.5 (Autonomous Ingestion & Simplification)
 
-La versión v4.4 unifica la arquitectura de tareas (ingesta y agente) y refactoriza el frontend para seguir el Principio de Responsabilidad Única (SRP).
+La versión v4.5 simplifica el flujo de ingestión y refina el router del agente para una experiencia más autónoma.
 
-### Objetivos alcanzados en v4.4
+### Objetivos alcanzados en v4.5
 
-**Backend:**
+**Human-in-the-loop ingestion:**
 
-- **Autonomous Ingestion:** El agente puede disparar tareas de ingesta (`reindex_document`) y gestión de documentos vía tools dedicadas.
-- **Unified Task Backend:** Todas las tareas (Celery o JobService) devuelven el mismo formato: `{ status, step, progress }`.
-- **Tool Registry Refactor:** Registro dinámico de tools con `@register_tool`.
-- **Documents Management Tools:** `delete_document`, `reindex_document`, `get_document_metadata`.
+- El agente detecta cuándo un nuevo documento (URL o PDF adjunto) no tiene metadata suficiente y pregunta al usuario directamente en el chat.
+- El usuario responde con dominio y tema, y el agente dispara `ingest_document` automáticamente.
+- Nuevo `ActionType.ASK_USER` separado de `FINAL_ANSWER` para eliminar ambigüedad en el routing.
 
-**Frontend (Arquitectura Unificada):**
+**Mejora del Router:**
 
-- **JobContext Global:** Estado centralizado para TODAS las tareas (ingesta UI y agente).
-- **IngestionInterface refactorizado:** Dividido en 4 componentes siguiendo SRP:
-  - `IngestionHeader`: Título y descripción.
-  - `SourceTabs`: Lógica de URL/PDF (drag & drop, handlers).
-  - `MetadataFields`: Formulario de dominio/tema.
-  - `ActiveJobsPanel`: Visualización de tareas activas desde el contexto.
-- **Formato Unificado:** Todas las tareas muestran `"step"` (ej. "Starting document reindexing") y barra de progreso, independientemente de quién las disparó.
-- **Cleanup:** Eliminación de código muerto (`ToolStatus.tsx`, `oldImplementations.ts`).
+- Detección automática de input: el router distingue entre URLs, archivos PDF adjuntos y preguntas normales.
+- Eliminación de `args.message` en `final_answer` — ahora `FINAL_ANSWER` solo significa "respuesta final".
+- El router usa `ask_user` exclusivamente para preguntar al usuario, simplificando la lógica del agente.
 
-### Arquitectura v4.4
+**Simplificación del sistema:**
+
+- Eliminación de endpoints redundantes (non-stream endpoints).
+- Refactor del tool registry: `reindex_document` → `ingest_document`, nueva tool `ingest_pdf_file`.
+- Flujo de ingestión unificado vía herramientas del agente en vez de endpoints separados.
+
+**Frontend:**
+
+- **Tool Steps display:** El chat muestra en tiempo real qué herramientas ejecuta el agente (`retrieve_context`, `ingest_document`, etc.) con chips colapsables.
+- **Markdown tables:** Renderizado completo de tablas GFM con `remark-gfm`.
+- **Simplificación:** Eliminación de código muerto y componentes obsoletos.
+
+### Arquitectura v4.5
 
 ```
 Cliente / Frontend
 ↓
-FastAPI – /agent/agent-loop
+FastAPI – /agent/agent-loop/stream
   - Validación de request
   - Gestión de session_id
 ↓
 Agent (orquestador)
   - SessionMemory (historial por sesión)
-  - while True loop
+  - while loop (max 5 steps)
       ↓
     Router.get_decision() → Decision(ActionType)
-      ↓
-    ToolRunner.run() → ToolResponse
-      ↓
-    Tool (pure function)
+      ├── RETRIEVE_CONTEXT → ToolRunner → RAG → Qdrant
+      ├── CALL_TOOL       → ToolRunner → ingest/delete/metadata
+      ├── ASK_USER        → yield pregunta al usuario + return
+      └── FINAL_ANSWER    → break → LLM generation o tool short-circuit
       ↓
   State actualizado
 ↓
-Tools
-  ├── retrieve_context  → RAG → Qdrant
-  ├── reindex_document → Ingestion Job (JobService/Celery)
-  └── ...other_tools
-↓
-AgentResponse (output + session_id + metadata + task_id)
+SSE Events: agent_decision | tool_start | tool_done | llm_token | done
 
 Frontend
+↓
+useChatStream (SSE consumer)
+  ├── tool_start / tool_done → ToolSteps collapsible
+  ├── llm_token              → streaming content
+  └── done                   → final content + citations
 ↓
 JobContext (Global State)
   └── Polling unificado (status, step, progress)
@@ -91,14 +97,16 @@ IngestionInterface (Dashboard)
 | **ToolRunner**         | Valida inputs, resuelve dependencias, mapea state → tool input, ejecuta la tool          |
 | **JobContext**         | Global state para TODAS las tareas (ingesta/agente). Polling unificado.                  |
 | **IngestionInterface** | Dashboard orquestador que muestra tareas activas y controles de fuentes.                 |
+| **ToolSteps**          | Componente colapsable que muestra herramientas ejecutadas por el agente paso a paso.     |
 
 ### Tools disponibles
 
 | Tool                    | Descripción                                                                 | Dependencias       |
 | ----------------------- | --------------------------------------------------------------------------- | ------------------ |
 | `retrieve_context`      | Busca en la base vectorial, soporta `domain` opcional y devuelve citaciones | `rag_orchestrator` |
+| `ingest_document`       | Ingiere un documento desde una URL (dispara tarea de ingesta)               | `rag_orchestrator` |
+| `ingest_pdf_file`       | Ingiere un archivo PDF subido por el usuario                                | `rag_orchestrator` |
 | `delete_document`       | Elimina un documento de la base vectorial por `source` o `document_id`      | `rag_orchestrator` |
-| `reindex_document`      | Re-procesa un documento existente (dispara tarea de ingesta)                | `rag_orchestrator` |
 | `get_document_metadata` | Obtiene metadatos de un documento (chunks, dominio, tema)                   | `rag_orchestrator` |
 
 ---
@@ -144,7 +152,7 @@ Este proyecto demuestra:
   - ToolRunner (execution)
 - Tool registry centralizado con decorador `@register_tool`
 - Routing LLM hacia la tool adecuada con `Decision` tipada
-- `ActionType` enum: `RETRIEVE_CONTEXT`, `CALL_TOOL`, `FINAL_ANSWER`
+- `ActionType` enum: `RETRIEVE_CONTEXT`, `CALL_TOOL`, `ASK_USER`, `FINAL_ANSWER`
 - Memoria de sesión con ventana deslizante
 - Inyección de dependencias declarativa por tool
 - Respuesta estructurada con `AgentResponse`
@@ -178,32 +186,28 @@ Este proyecto demuestra:
 
 ## Roadmap
 
-### V4.4 – Unified Task Architecture & Frontend Refactor (COMPLETADO)
+### V4.5 – Autonomous Ingestion & Simplification (ACTUAL)
 
-- **Backend:**
-  - Unificación de tareas: Todas devuelven `{ status, step, progress }`
-  - Refactor del tool registry con `@register_tool`
-  - Nuevas tools: `delete_document`, `reindex_document`, `get_document_metadata`
+- **Human-in-the-loop ingestion:**
+  - Agente detecta nuevo documento y pregunta por metadata en chat
+  - Agent triggerea `ingest_document` automáticamente
+  - Nuevo `ActionType.ASK_USER` para flujos de pregunta/respuesta
+- **Mejora del Router:**
+  - Detección automática de input (URL vs archivo vs pregunta)
+  - Eliminación de `args.message` en `final_answer`
+- **Simplificación del sistema:**
+  - Eliminación de endpoints redundantes (non-stream)
+  - `reindex_document` → `ingest_document`, nueva tool `ingest_pdf_file`
 - **Frontend:**
-  - `JobContext` global para unificar estado de tareas (ingesta/agente)
-  - `IngestionInterface` refactorizado (SRP):
-    - `IngestionHeader`
-    - `SourceTabs` (URL/PDF logic)
-    - `MetadataFields`
-    - `ActiveJobsPanel` (all tasks displayed here)
-  - Eliminación de código muerto (`ToolStatus.tsx`, `oldImplementations.ts`)
+  - Tool Steps display en chat con componente colapsable
+  - Renderizado de tablas markdown con `remark-gfm`
 
-### V4.5 – Agent-triggered ingestion with user metadata (PRÓXIMO)
+### V4.6 – Foundational (PRÓXIMO)
 
-- **Simplified Human-in-the-loop**:
-  - Agent detects new document and asks user for metadata via chat
-  - User provides `domain` and `topic`
-  - Agent triggers `reindex_document` → task appears in `IngestionInterface`
-- **No complex queues needed**: Uses existing `JobContext` + UI unification from v4.4
-- **Flow**:
-  1. Agent: "Found new doc. Want me to ingest it? Need domain & topic."
-  2. User: "Yes, domain='tech', topic='docs'"
-  3. Agent triggers task → visible in `ActiveJobsPanel`
+- Separar Runtime Loop de Agent
+- Clase `ToolExecutionResult` para contrato de resultados
+- Enum de todos los estados del agente
+- Tool Contract para cada tool
 
 ---
 
