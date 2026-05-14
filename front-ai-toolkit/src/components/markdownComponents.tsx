@@ -83,4 +83,30 @@ export const markdownComponents: Components = {
       {children}
     </a>
   ),
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-3">
+      <table className="w-full text-sm border-collapse border border-border">
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead className="bg-muted/50">{children}</thead>
+  ),
+  tbody: ({ children }) => <tbody>{children}</tbody>,
+  tr: ({ children }) => (
+    <tr className="border-b border-border last:border-b-0 even:bg-muted/20">
+      {children}
+    </tr>
+  ),
+  th: ({ children }) => (
+    <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wider border-r border-border last:border-r-0">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="px-3 py-2 border-r border-border last:border-r-0">
+      {children}
+    </td>
+  ),
 };

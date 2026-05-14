@@ -12,6 +12,11 @@ export interface Citation {
   text: string;
 }
 
+export interface ToolStep {
+  tool: string;
+  status: "running" | "completed";
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
@@ -19,6 +24,7 @@ export interface Message {
   isStreaming?: boolean;
   isStream?: boolean;
   citations?: Citation[];
+  steps?: ToolStep[];
 }
 
 const generateId = () =>
@@ -135,12 +141,38 @@ export function useChatStream({
       };
 
       let accumulatedContent = "";
+      const accumulatedSteps: ToolStep[] = [];
 
       agentAskStream(
         body,
         { provider, model },
         (event, data) => {
-          if (event === "llm_token") {
+          if (event === "tool_start") {
+            const toolName: string = data.tool || data.tool_name || "unknown";
+            accumulatedSteps.push({ tool: toolName, status: "running" });
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessage.id
+                  ? { ...msg, steps: [...accumulatedSteps] }
+                  : msg,
+              ),
+            );
+          } else if (event === "tool_done") {
+            const toolName: string = data.tool || data.tool_name || "unknown";
+            const idx = accumulatedSteps.findLastIndex(
+              (s) => s.tool === toolName && s.status === "running",
+            );
+            if (idx !== -1) {
+              accumulatedSteps[idx] = { ...accumulatedSteps[idx], status: "completed" };
+            }
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessage.id
+                  ? { ...msg, steps: [...accumulatedSteps] }
+                  : msg,
+              ),
+            );
+          } else if (event === "llm_token") {
             accumulatedContent += data.token || "";
             setMessages((prev) =>
               prev.map((msg) =>
