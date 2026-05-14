@@ -181,24 +181,24 @@ class Agent:
                 # Yield decision event
                 yield sse_event("agent_decision", json.dumps(decision.model_dump()))
                 
-                if decision.action == ActionType.FINAL_ANSWER:
-                    # If router included a direct message (e.g., asking for metadata),
-                    # yield it immediately instead of generating a new LLM response
-                    if decision.args.get("message"):
-                        content = decision.args["message"]
-                        self.session_memory.add(state.session_id, "assistant", content)
-                        yield sse_event("llm_token", json.dumps({"token": content}))
-                        yield sse_event("done", json.dumps({
-                            "usage": {},
-                            "cost": {},
-                            "model": "",
-                            "provider": "",
-                            "citations": state.citations,
-                            "session_id": state.session_id,
-                        }))
-                        return  # Exit the generator cleanly, skip LLM generation
+                if decision.action == ActionType.ASK_USER:
+                    # Router needs to ask the user a question (e.g., missing metadata).
+                    content = decision.args.get("message", "")
+                    self.session_memory.add(state.session_id, "assistant", content)
+                    yield sse_event("llm_token", json.dumps({"token": content}))
+                    yield sse_event("done", json.dumps({
+                        "usage": {},
+                        "cost": {},
+                        "model": "",
+                        "provider": "",
+                        "citations": state.citations,
+                        "session_id": state.session_id,
+                    }))
+                    return  # Exit the generator cleanly, user needs to respond
 
-                    # No direct message — fall through to LLM generation (normal case: greetings, etc.)
+                if decision.action == ActionType.FINAL_ANSWER:
+                    # Truly done — break out of the loop to generate or
+                    # short-circuit via tool result.
                     break
                 
                 if decision.action == ActionType.RETRIEVE_CONTEXT:
