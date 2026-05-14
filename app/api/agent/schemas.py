@@ -20,6 +20,8 @@ class AgentResponse(BaseModel):
 class QueryAgentRequest(BaseModel):
     text: str = Field(max_length=1000)
     session_id: str | None = Field(default=None)
+    file_uuid: str | None = Field(default=None)
+    filename: str | None = Field(default=None)
 
 
 class AgentState(BaseModel):
@@ -31,6 +33,10 @@ class AgentState(BaseModel):
     context: Optional[str] = None
     tool_results: List[str] = Field(default_factory=list)
     citations: List[dict] = Field(default_factory=list)  # Citaciones acumuladas
+    
+    # Archivos adjuntos (PDF)
+    file_uuid: str | None = None
+    filename: str | None = None
     
     # Trazabilidad de herramientas
     last_tool: str | None = None

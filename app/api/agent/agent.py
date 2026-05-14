@@ -105,7 +105,14 @@ class Agent:
         """Create a new session ID."""
         return str(uuid.uuid4())
 
-    async def agent_loop_stream(self, query: str, session_id: Optional[str] = None, domain: Optional[str] = None):
+    async def agent_loop_stream(
+        self,
+        query: str,
+        session_id: Optional[str] = None,
+        domain: Optional[str] = None,
+        file_uuid: Optional[str] = None,
+        filename: Optional[str] = None,
+    ):
         """
         Streaming version of agent_loop.
 
@@ -125,9 +132,44 @@ class Agent:
             if not session_id:
                 session_id = self._create_session_id()
 
-            state = AgentState(query=query, session_id=session_id, domain=domain)
+            # If a file was attached, prepend its info to the query so the
+            # Router can see it and decide which tool to call.
+            if file_uuid and filename:
+                query = f"[Archivo adjunto: {filename} (UUID: {file_uuid})]\n\n{query}"
+
             self.session_memory.add(session_id, "user", query)
             history = self.session_memory.get_history(session_id)
+
+            # ── PDF follow-up: re-inject file info from history ──────────
+            # If this message has NO file attached but the conversation
+            # history contains a previous PDF upload, re-inject the file
+            # prefix so the Router sees CASE A (not CASE B).
+            if not file_uuid and not filename:
+                import re
+                for msg in reversed(history):
+                    if msg.role == "user" and "[Archivo adjunto:" in msg.content:
+                        match = re.search(
+                            r'\[Archivo adjunto: (.+?) \(UUID: ([a-f0-9-]+)\)\]',
+                            msg.content,
+                        )
+                        if match:
+                            hist_filename = match.group(1)
+                            hist_file_uuid = match.group(2)
+                            query = (
+                                f"[Archivo adjunto: {hist_filename} "
+                                f"(UUID: {hist_file_uuid})]\n\n{query}"
+                            )
+                            file_uuid = hist_file_uuid
+                            filename = hist_filename
+                        break
+
+            state = AgentState(
+                query=query,
+                session_id=session_id,
+                domain=domain,
+                file_uuid=file_uuid,
+                filename=filename,
+            )
             state.history = history
 
             step = 0
@@ -152,6 +194,7 @@ class Agent:
                             "model": "",
                             "provider": "",
                             "citations": state.citations,
+                            "session_id": state.session_id,
                         }))
                         return  # Exit the generator cleanly, skip LLM generation
 
@@ -213,6 +256,7 @@ class Agent:
                     "model": "",
                     "provider": "",
                     "citations": state.citations,
+                    "session_id": state.session_id,
                     **(state.last_tool_metadata or {}),
                 }))
                 return
@@ -288,6 +332,7 @@ class Agent:
                         'model': final_response.model,
                         'provider': final_response.provider,
                         'citations': state.citations,  # Include accumulated citations
+                        'session_id': state.session_id,
                     }
                     
                     # If last tool returned specific metadata (like task_id), include it
@@ -303,7 +348,11 @@ class Agent:
         except Exception as e:
             logger.error("agent_loop_stream_error", error=str(e))
             yield sse_event("error", json.dumps({'error': str(e)}))
-            yield sse_event("done", json.dumps({'status': 'error', 'error': str(e)}))
+            yield sse_event("done", json.dumps({
+                'status': 'error',
+                'error': str(e),
+                'session_id': session_id,
+            }))
 
 
 def create_agent(
