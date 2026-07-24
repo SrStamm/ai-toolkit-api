@@ -4,11 +4,11 @@ import { Input } from "./ui/input";
 import { cn } from "@/lib/utils";
 import {
   SendHorizontal,
-  Loader2,
   Bot,
   Paperclip,
   FileText,
   X,
+  StopCircle,
 } from "lucide-react";
 import { useLLMConfig, LLMSelector } from "./llmConfigBar";
 import { useChatStream } from "@/hooks/useChatStream";
@@ -18,7 +18,7 @@ export function ChatInterface() {
   const { provider, model, providers, isLoaded, setProvider, setModel } =
     useLLMConfig();
 
-  const { messages, isLoading, handleQuery } = useChatStream({
+  const { messages, isLoading, handleQuery, cancelQuery } = useChatStream({
     provider,
     model,
   });
@@ -42,6 +42,14 @@ export function ChatInterface() {
     handleQuery(query, attachedFile);
     setQuery("");
     setAttachedFile(null);
+    inputRef.current?.focus();
+  };
+
+  const handleCancel = () => {
+    const restoredQuery = cancelQuery();
+    if (restoredQuery) {
+      setQuery(restoredQuery);
+    }
     inputRef.current?.focus();
   };
 
@@ -170,16 +178,17 @@ export function ChatInterface() {
               />
             </div>
             <Button
-              onClick={handleQueryWrapper}
-              disabled={isLoading || !query.trim()}
+              onClick={isLoading ? handleCancel : handleQueryWrapper}
+              disabled={!isLoading && (!query.trim())}
               size="icon-lg"
               className={cn(
                 "shrink-0 transition-all",
-                query.trim() && "bg-primary hover:bg-primary/90",
+                !isLoading && query.trim() && "bg-primary hover:bg-primary/90",
+                isLoading && "bg-destructive hover:bg-destructive/90 text-destructive-foreground",
               )}
             >
               {isLoading ? (
-                <Loader2 className="size-5 animate-spin" />
+                <StopCircle className="size-5" />
               ) : (
                 <SendHorizontal className="size-5" />
               )}

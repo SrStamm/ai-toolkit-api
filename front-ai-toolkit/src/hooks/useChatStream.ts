@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { agentAskStream, uploadAgentFile } from "@/services/agentServices";
 import type { AgentQuestion } from "@/types/agent";
 import { showToastError } from "@/components/toast";
@@ -84,6 +84,7 @@ interface UseChatStreamReturn {
   isLoading: boolean;
   sessionId: string | null;
   handleQuery: (queryText: string, file?: File | null) => void;
+  cancelQuery: () => string | null;
 }
 
 export function useChatStream({
@@ -94,10 +95,19 @@ export function useChatStream({
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const { addJob } = useJobContext();
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const pendingQueryRef = useRef<string | null>(null);
 
   const handleQuery = useCallback(
     async (query: string, file?: File | null) => {
       if (!query.trim() || isLoading) return;
+
+      // Store query so cancelQuery can restore it
+      pendingQueryRef.current = query.trim();
+
+      // Create abort controller for this request
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
       // If a file is attached, upload it first to get a UUID
       let fileUuid: string | undefined;
@@ -145,7 +155,7 @@ export function useChatStream({
 
       agentAskStream(
         body,
-        { provider, model },
+        { provider, model, signal: controller.signal },
         (event, data) => {
           if (event === "tool_start") {
             const toolName: string = data.tool || data.tool_name || "unknown";
@@ -243,11 +253,32 @@ export function useChatStream({
     [isLoading, provider, model, sessionId, addJob],
   );
 
+  const cancelQuery = useCallback((): string | null => {
+    // Abort the in-flight fetch
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+
+    // Remove the last user message AND the streaming assistant placeholder
+    setMessages((prev) => {
+      const lastUserIdx = prev.findLastIndex((msg) => msg.role === "user");
+      if (lastUserIdx === -1) return prev.filter((msg) => msg.isStreaming !== true);
+      // Remove user message at lastUserIdx and everything after (the AI placeholder)
+      return prev.slice(0, lastUserIdx);
+    });
+    setIsLoading(false);
+
+    // Return the pending query text so the caller can restore it to the input
+    const queryText = pendingQueryRef.current;
+    pendingQueryRef.current = null;
+    return queryText;
+  }, []);
+
   return {
     messages,
     setMessages,
     isLoading,
     sessionId,
     handleQuery,
+    cancelQuery,
   };
 }
