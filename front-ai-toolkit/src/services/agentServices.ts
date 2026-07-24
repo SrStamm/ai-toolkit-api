@@ -28,6 +28,7 @@ interface AgentAskOptions {
   provider?: string;
   model?: string;
   useStream?: boolean;
+  signal?: AbortSignal;
 }
 
 export const agentAskStream = (
@@ -55,6 +56,7 @@ export const agentAskStream = (
     method: "POST",
     headers: headers,
     body: JSON.stringify(body),
+    signal: options.signal,
   })
     .then((response) => {
       if (!response.ok) {
@@ -132,6 +134,8 @@ export const agentAskStream = (
       return readStream();
     })
     .catch((err) => {
+      // AbortError is expected when user cancels — don't propagate as error
+      if (err instanceof DOMException && err.name === "AbortError") return;
       const errorMessage = err instanceof Error ? err.message : "Stream error";
       if (onError) onError(errorMessage);
     });
