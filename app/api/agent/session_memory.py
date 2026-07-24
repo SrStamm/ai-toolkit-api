@@ -8,14 +8,13 @@ This enables:
 - Configurable TTL for automatic session expiration
 """
 
+import structlog
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TypedDict
 
-import structlog
-
-from app.core.redis import get_redis
+from ...core.redis import get_redis
 
 
 log = structlog.get_logger()
@@ -154,14 +153,6 @@ def get_session_memory() -> RedisSessionMemory:
     if _session_memory is None:
         _session_memory = RedisSessionMemory()
     return _session_memory
-
-
-# Backwards compatibility: allow injection of custom memory implementation
-def set_session_memory(memory: RedisSessionMemory) -> None:
-    """Set a custom session memory instance (for testing)."""
-    global _session_memory
-    _session_memory = memory
-
 
 # Alias for the type used by Agent
 SessionMemory = RedisSessionMemory

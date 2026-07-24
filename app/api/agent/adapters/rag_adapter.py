@@ -7,7 +7,6 @@ The agent's retrieve_context tool expects an object with:
 This adapter wraps QueryService and provides that interface.
 """
 
-from collections.abc import Iterable
 from typing import Optional
 
 from app.api.retrieval_engine.query_service import QueryService

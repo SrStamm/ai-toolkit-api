@@ -185,10 +185,6 @@ class ToolRegistry:
         cls._initialized = True
 
 
-# Alias para backwards compatibility
-TOOL_REGISTRY = ToolRegistry
-
-
 def register_tool(
     name: str,
     description: str,
