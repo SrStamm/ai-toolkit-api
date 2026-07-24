@@ -1,11 +1,9 @@
 import re
-from app.api.extraction.schema import ChunkWithMetadata
-from app.api.extraction.interface import CleanerInterface
+from ..schema import ChunkWithMetadata
+from ..interface import CleanerInterface
 
 
 class PDFCleaner(CleanerInterface):
-    MIN_CHUNK_LEN = 80
-
     def clean(self, raw_content: str) -> str:
         if not raw_content:
             return ""

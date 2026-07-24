@@ -1,4 +1,3 @@
-import os
 import uuid
 import asyncio
 import structlog
@@ -34,16 +33,17 @@ app = FastAPI(lifespan=lifespan)
 
 # CORS origins from environment variable (comma-separated)
 # Default to localhost only in development
-DEFAULT_ORIGINS = "http://localhost:8000,http://localhost:8080,http://localhost:5173,http://localhost:3000,http://front:80"
-origins = [
-    origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", DEFAULT_ORIGINS).split(",")
-    if origin.strip()
+DEFAULT_ORIGINS = [
+        "http://localhost:8000",
+        "http://localhost:8080",
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://front:80"
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=DEFAULT_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

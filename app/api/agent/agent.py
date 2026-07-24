@@ -380,8 +380,8 @@ def create_agent(
         return Agent(llm=llm, rag=get_orchestrator(), vector_store=vector_store, ingestion_service=ingestion_svc)
 
 
-def get_agent(use_rag_service: bool = True) -> Agent:
+def get_agent(provider: str | None = None, model: str | None = None, use_rag_service: bool = True) -> Agent:
     """
     Get or create agent singleton.
     """
-    return create_agent(use_rag_service=use_rag_service)
+    return create_agent(provider, model, use_rag_service=use_rag_service)
