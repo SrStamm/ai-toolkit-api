@@ -2,11 +2,11 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from enum import Enum
 
+from .tools.tools_registry import ToolResponse
 from .session_memory import Message
 
 
 class ActionType(str, Enum):
-    RETRIEVE_CONTEXT = "retrieve_context"
     CALL_TOOL = "call_tool"
     ASK_USER = "ask_user"
     FINAL_ANSWER = "final_answer"
@@ -60,8 +60,33 @@ class AgentState(BaseModel):
         if metadata and "citations" in metadata:
             self.citations.extend(metadata["citations"])
 
+    def apply(self, response: ToolResponse):
+        self.context = response.output
+
+        self.last_tool = response.tool_name
+        self.last_tool_result = response.output
+        self.last_tool_metadata = response.metadata
+        self.tool_execution_count += 1
+        self.add_tool_result(response.output)
+
+        # Si hay citaciones en el metadata, acumularlas
+        if response.metadata and "citations" in response.metadata:
+            self.citations.extend(response.metadata["citations"])
+
 
 class Decision(BaseModel):
     action: ActionType
     tool_name: str | None = None
     args: dict = Field(default_factory=dict)
+
+
+class EventType(str, Enum):
+    LLM_TOKEN = "llm_token" 
+    DONE = 'done'
+
+
+class AgentEvent(BaseModel):
+    type: EventType
+    content: str | None = None
+    token: str | None = None
+    metadata: dict = Field(default_factory=dict)
