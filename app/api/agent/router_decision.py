@@ -93,12 +93,12 @@ class Router:
         
         try:
             decision_json = json.loads(raw)
-            
+
             # Prevent repeated context retrieval
-            if decision_json.get('action') == "retrieve_context" and state.context:
+            if decision_json.get('tool_name') == "retrieve_context" and state.context :
                 logger.warning("Preventing repeated context retrieval")
                 return Decision(action=ActionType.FINAL_ANSWER)
-            
+
             # Prevent repeated tool execution
             if decision_json.get('action') == "call_tool":
                 tool_name = decision_json.get("tool_name")
@@ -109,7 +109,7 @@ class Router:
                         last_tool=state.last_tool
                     )
                     return Decision(action=ActionType.FINAL_ANSWER)
-            
+
             return Decision(
                 action=ActionType(decision_json.get("action", "final_answer")),
                 tool_name=decision_json.get("tool_name"),
