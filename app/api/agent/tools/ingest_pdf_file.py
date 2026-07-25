@@ -6,9 +6,10 @@ Si el archivo ya existe en el vector store (mismo source), se re-indexa automát
 """
 
 from pathlib import Path
+import time
 import structlog
 
-from .tools_registry import ToolRegistry, ToolResponse
+from .tools_registry import ToolRegistry, ToolExecutionResult, ToolStatus
 from ...retrieval_engine.jobs.celery_tasks import ingest_file_job
 
 logger = structlog.get_logger()
@@ -22,7 +23,9 @@ def _ingest_pdf_file_handler(
     domain: str,
     topic: str,
     **kwargs,
-) -> ToolResponse:
+) -> ToolExecutionResult:
+    start = time.perf_counter()
+
     """
     Handler para ingestar un archivo PDF.
 
@@ -45,9 +48,12 @@ def _ingest_pdf_file_handler(
             "Please provide them and try again."
         )
         logger.warning("tool_ingest_pdf_missing_metadata", missing=missing, filename=filename)
-        return ToolResponse(
+        return ToolExecutionResult(
+            tool_name="ingest_pdf_file",
             output=msg,
             metadata={"error": "missing_metadata", "missing_fields": missing},
+            status=ToolStatus.FAILED,
+            execution_time_ms=int(time.perf_counter() - start)
         )
 
     # ── Validar que el archivo exista en disco ──────────────────────────
@@ -56,9 +62,12 @@ def _ingest_pdf_file_handler(
     if not file_path.exists():
         msg = f"File '{filename}' not found on server (UUID: {file_uuid}). It may have expired."
         logger.error("tool_ingest_pdf_file_not_found", file_uuid=file_uuid, path=str(file_path))
-        return ToolResponse(
+        return ToolExecutionResult(
+            tool_name="ingest_pdf_file",
             output=msg,
             metadata={"error": "file_not_found", "file_uuid": file_uuid},
+            status=ToolStatus.FAILED,
+            execution_time_ms=int(time.perf_counter() - start)
         )
 
     try:
@@ -86,20 +95,26 @@ def _ingest_pdf_file_handler(
         )
         logger.info("tool_ingest_pdf_dispatched", filename=filename, job_id=job_id)
 
-        return ToolResponse(
+        return ToolExecutionResult(
+            tool_name="ingest_pdf_file",
             output=msg,
             metadata={
                 "task_id": job_id,
                 "status": "processing",
                 "source": filename,
             },
+            status=ToolStatus.SUCCESS,
+            execution_time_ms=int(time.perf_counter() - start)
         )
 
     except Exception as e:
         logger.error("tool_ingest_pdf_error", filename=filename, error=str(e))
-        return ToolResponse(
+        return ToolExecutionResult(
+            tool_name="ingest_pdf_file",
             output=f"Error starting ingestion: {str(e)}",
             metadata={"error": str(e)},
+            status=ToolStatus.FAILED,
+            execution_time_ms=int(time.perf_counter() - start)
         )
 
 

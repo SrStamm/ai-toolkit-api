@@ -4,10 +4,11 @@ List Documents Tool.
 Lista todos los documentos disponibles en el vector store.
 """
 
+import time
 from typing import Optional
 import structlog
 
-from .tools_registry import ToolRegistry, ToolResponse
+from .tools_registry import ToolRegistry, ToolExecutionResult, ToolStatus
 from ....infrastructure.storage.interfaces import VectorStoreInterface
 
 logger = structlog.get_logger()
@@ -17,20 +18,28 @@ def _list_documents_handler(
     domain: Optional[str] = None,
     vector_store: Optional[VectorStoreInterface] = None,
     **kwargs
-) -> ToolResponse:
+) -> ToolExecutionResult:
+    start = time.perf_counter()
+
     """Handler para listar documentos disponibles."""
     if vector_store is None:
-        return ToolResponse(
+        return ToolExecutionResult(
+            tool_name="list_documents",
             output="Error: Vector store not available",
             metadata={"error": "missing_dependency"},
+            status=ToolStatus.FAILED,
+            execution_time_ms=int(time.perf_counter() - start)
         )
 
     try:
         sources = vector_store.list_sources(domain=domain)
         if not sources:
-            return ToolResponse(
+            return ToolExecutionResult(
+                tool_name="list_documents",
                 output="No documents found.",
                 metadata={"count": 0},
+            status=ToolStatus.FAILED,
+            execution_time_ms=int(time.perf_counter() - start)
             )
 
         output_lines = [f"Found {len(sources)} document(s):"]
@@ -39,15 +48,21 @@ def _list_documents_handler(
                 f"- {src['source']} ({src['domain']}/{src['topic']}) - {src['chunk_count']} chunks"
             )
 
-        return ToolResponse(
+        return ToolExecutionResult(
+            tool_name="list_documents",
             output="\n".join(output_lines),
             metadata={"documents": sources, "count": len(sources)},
+            status=ToolStatus.SUCCESS,
+            execution_time_ms=int(time.perf_counter() - start)
         )
     except Exception as e:
         logger.error("tool_list_documents_error", error=str(e))
-        return ToolResponse(
+        return ToolExecutionResult(
+            tool_name="list_documents",
             output=f"Error listing documents: {str(e)}",
             metadata={"error": str(e)},
+            status=ToolStatus.FAILED,
+            execution_time_ms=int(time.perf_counter() - start)
         )
 
 

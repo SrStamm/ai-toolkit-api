@@ -2,7 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from enum import Enum
 
-from .tools.tools_registry import ToolResponse
+from .tools.tools_registry import ToolExecutionResult
 from .session_memory import Message
 
 
@@ -61,7 +61,7 @@ class AgentState(BaseModel):
         if metadata and "citations" in metadata:
             self.citations.extend(metadata["citations"])
 
-    def apply(self, response: ToolResponse):
+    def apply(self, response: ToolExecutionResult):
         self.context = response.output
 
         self.last_tool = response.tool_name

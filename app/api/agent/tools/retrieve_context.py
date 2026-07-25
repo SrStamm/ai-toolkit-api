@@ -4,8 +4,9 @@ RAG Tool para el agente.
 Busca en la base vectorial y construye respuesta con contexto.
 """
 
+import time
 from typing import Optional
-from .tools_registry import ToolRegistry, ToolResponse
+from .tools_registry import ToolRegistry, ToolExecutionResult, ToolStatus
 import structlog
 
 logger = structlog.get_logger()
@@ -17,13 +18,17 @@ def _retrieve_context_tool_handler(
     domain: Optional[str] = None,
     rag_orchestrator: Optional[object] = None,  # TYPE: Any para evitar import pesado
     **kwargs
-) -> ToolResponse:
+) -> ToolExecutionResult:
+    start = time.perf_counter()
+
     """Handler para la tool RAG."""
     if rag_orchestrator is None:
-        return ToolResponse(
+        return ToolExecutionResult(
         tool_name="retrieve_context",
             output="Error: RAG orchestrator not available",
             metadata={"error": "missing_dependency"},
+            status=ToolStatus.FAILED,
+            execution_time_ms=int(time.perf_counter() - start)
         )
 
     logger.info("tool_variables", query=query, domain=domain)
@@ -36,10 +41,12 @@ def _retrieve_context_tool_handler(
     # Convert citations to dicts for JSON serialization in metadata
     citations_dict = [citation.model_dump() for citation in citations]
 
-    return ToolResponse(
+    return ToolExecutionResult(
         tool_name="retrieve_context",
         output=context_str,
         metadata={"citations": citations_dict},
+        status=ToolStatus.SUCCESS,
+        execution_time_ms=int(time.perf_counter() - start)
     )
 
 
