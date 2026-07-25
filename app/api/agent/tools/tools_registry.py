@@ -32,6 +32,7 @@ class ToolDefinition:
 class ToolResponse:
     """Respuesta de una tool ejecutada."""
 
+    tool_name: str
     output: str
     metadata: dict | None = None
 

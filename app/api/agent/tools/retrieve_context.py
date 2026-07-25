@@ -21,6 +21,7 @@ def _retrieve_context_tool_handler(
     """Handler para la tool RAG."""
     if rag_orchestrator is None:
         return ToolResponse(
+        tool_name="retrieve_context",
             output="Error: RAG orchestrator not available",
             metadata={"error": "missing_dependency"},
         )
@@ -36,6 +37,7 @@ def _retrieve_context_tool_handler(
     citations_dict = [citation.model_dump() for citation in citations]
 
     return ToolResponse(
+        tool_name="retrieve_context",
         output=context_str,
         metadata={"citations": citations_dict},
     )
