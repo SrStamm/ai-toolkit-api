@@ -39,8 +39,69 @@ class Runtime:
         self.session_memory: SessionMemory = get_session_memory()
         self.agent = Agent(llm)
 
-    def loop(self):
-        pass
+    async def execution_loop(
+        self,
+        state: AgentState,
+        max_step: int = 5,
+    ):
+        for _ in range(max_step):
+            # Get decision from agent
+            decision = await self.agent.decide(state)
+
+            # Yield decision event
+            yield self.emit_events("agent_decision", json.dumps(decision.model_dump()))
+
+            if decision.action == ActionType.ASK_USER:
+                # Router needs to ask the user a question (e.g., missing metadata).
+                content = decision.args.get("message", "")
+                self.session_memory.add(state.session_id, "assistant", content)
+                yield self.emit_events("llm_token", json.dumps({"token": content}))
+                yield self.emit_events("done", json.dumps({
+                    "usage": {},
+                    "cost": {},
+                    "model": "",
+                    "provider": "",
+                    "citations": state.citations,
+                    "session_id": state.session_id,
+                }))
+                state.complete = True
+                return  # Exit the generator cleanly, user needs to respond
+
+            if decision.action == ActionType.FINAL_ANSWER:
+                return
+
+            if decision.action == ActionType.CALL_TOOL and decision.tool_name:
+                yield self.emit_events("tool_start", json.dumps({'tool': decision.tool_name}))
+
+                result = self.execute_tool(
+                    decision.tool_name,
+                    state,
+                    decision.args,
+                )
+
+                # CRITICAL FIX: Pass metadata (e.g., task_id) to state
+                state.apply(result)
+
+                yield self.emit_events("tool_done", json.dumps({'tool': decision.tool_name, 'status': 'success'}))
+
+                if state.last_tool != "retrieve_context" and state.last_tool_result:
+                    content = state.last_tool_result
+                    self.session_memory.add(state.session_id, "assistant", content)
+                    state.complete = True
+                    yield self.emit_events("llm_token", json.dumps({"token": content}))
+                    yield self.emit_events("done", json.dumps({
+                        "usage": {},
+                        "cost": {},
+                        "model": "",
+                        "provider": "",
+                        "citations": state.citations,
+                        "session_id": state.session_id,
+                        **(state.last_tool_metadata or {}),
+                    }))
+                    return
+
+                continue
+
 
     def execute_step(self):
         pass
@@ -53,44 +114,58 @@ class Runtime:
         """Format SSE event."""
         return f"event: {event}\ndata: {data}\n\n"
 
-    def retry(self):
-        pass
-
-    def cancellation(self):
-        pass
-
-
     def _create_session_id(self) -> str:
         """Create a new session ID."""
         return str(uuid.uuid4())
 
+    def resolve_file_context(
+            self,
+            history: List[Message],
+            query: str,
+            file_uuid: Optional[str] = None,
+            filename: Optional[str] = None,
+    ):
+        # If a file was attached, prepend its info to the query so the
+        # Router can see it and decide which tool to call.
+        if file_uuid and filename:
+            query = f"[Archivo adjunto: {filename} (UUID: {file_uuid})]\n\n{query}"
 
-    def pdf_follow_up(self, history: List[Message], query: str):
-        # ── PDF follow-up: re-inject file info from history ──────────
-        # If this message has NO file attached but the conversation
-        # history contains a previous PDF upload, re-inject the file
-        # prefix so the Router sees CASE A (not CASE B).
+            return file_uuid, filename, query
 
-        for msg in reversed(history):
-            if msg.role == "user" and "[Archivo adjunto:" in msg.content:
-                match = re.search(
-                    r'\[Archivo adjunto: (.+?) \(UUID: ([a-f0-9-]+)\)\]',
-                    msg.content,
-                )
-                if match:
-                    hist_filename = match.group(1)
-                    hist_file_uuid = match.group(2)
-                    query = (
-                        f"[Archivo adjunto: {hist_filename} "
-                        f"(UUID: {hist_file_uuid})]\n\n{query}"
+        else:
+            for msg in reversed(history):
+                if msg.role == "user" and "[Archivo adjunto:" in msg.content:
+                    match = re.search(
+                        r'\[Archivo adjunto: (.+?) \(UUID: ([a-f0-9-]+)\)\]',
+                        msg.content,
                     )
-                    file_uuid = hist_file_uuid
-                    filename = hist_filename
-                    return file_uuid, filename, query
-                return "", "", ""
+                    if match:
+                        hist_filename = match.group(1)
+                        hist_file_uuid = match.group(2)
+                        query = (
+                            f"[Archivo adjunto: {hist_filename} "
+                            f"(UUID: {hist_file_uuid})]\n\n{query}"
+                        )
+                        file_uuid = hist_file_uuid
+                        filename = hist_filename
+                        return file_uuid, filename, query
+                    return "", "", ""
 
         return "", "", ""
 
+    async def stream_final_answer(self, state: AgentState):
+        async for event in self.agent.generate_answer(state):
+            if event.type == EventType.LLM_TOKEN:
+                yield self.emit_events("llm_token", json.dumps({'token': event.token}))
+
+            elif event.type == EventType.DONE:
+                self.session_memory.add(
+                    state.session_id,
+                    "assistant",
+                    event.content
+                )
+
+                yield self.emit_events("done", json.dumps(event.metadata))
 
     async def run_stream(
         self,
@@ -104,16 +179,15 @@ class Runtime:
             if not session_id:
                 session_id = self._create_session_id()
 
-            # If a file was attached, prepend its info to the query so the
-            # Router can see it and decide which tool to call.
-            if file_uuid and filename:
-                query = f"[Archivo adjunto: {filename} (UUID: {file_uuid})]\n\n{query}"
-
             self.session_memory.add(session_id, "user", query)
             history = self.session_memory.get_history(session_id)
 
-            if not file_uuid and not filename:
-                file_uuid, filename, query = self.pdf_follow_up(history, query)
+            file_uuid, filename, query = self.resolve_file_context(
+                history,
+                query,
+                file_uuid,
+                filename,
+            )
 
             state = AgentState(
                 query=query,
@@ -124,87 +198,14 @@ class Runtime:
             )
             state.history = history
 
-            step = 0
-            while step < 5:
-                step += 1
+            async for event in self.execution_loop(state):
+                yield event
 
-                # Get decision from agent
-                decision = await self.agent.decide(state)
+            if state.complete:
+                return
 
-                # Yield decision event
-                yield self.emit_events("agent_decision", json.dumps(decision.model_dump()))
-
-                if decision.action == ActionType.ASK_USER:
-                    # Router needs to ask the user a question (e.g., missing metadata).
-                    content = decision.args.get("message", "")
-                    self.session_memory.add(state.session_id, "assistant", content)
-                    yield self.emit_events("llm_token", json.dumps({"token": content}))
-                    yield self.emit_events("done", json.dumps({
-                        "usage": {},
-                        "cost": {},
-                        "model": "",
-                        "provider": "",
-                        "citations": state.citations,
-                        "session_id": state.session_id,
-                    }))
-                    return  # Exit the generator cleanly, user needs to respond
-
-                if decision.action == ActionType.FINAL_ANSWER:
-                    # Truly done — break out of the loop to generate or
-                    # short-circuit via tool result.
-                    break
-
-                if decision.action == ActionType.CALL_TOOL and decision.tool_name:
-                    yield self.emit_events("tool_start", json.dumps({'tool': decision.tool_name}))
-
-                    result = self.execute_tool(
-                        decision.tool_name,
-                        state,
-                        decision.args,
-                    )
-
-                    # CRITICAL FIX: Pass metadata (e.g., task_id) to state
-                    state.apply(result)
-
-                    yield self.emit_events("tool_done", json.dumps({'tool': decision.tool_name, 'status': 'success'}))
-                    continue
-
-
-                # After the loop: if a non-RAG tool was executed and router acknowledged it,
-                # use the tool result directly instead of re-invoking the LLM
-                if (
-                    not decision.args.get("message")
-                    and state.last_tool
-                    and state.last_tool != "retrieve_context"
-                    and state.last_tool_result
-                ):
-                    content = state.last_tool_result
-                    self.session_memory.add(state.session_id, "assistant", content)
-                    yield self.emit_events("llm_token", json.dumps({"token": content}))
-                    yield self.emit_events("done", json.dumps({
-                        "usage": {},
-                        "cost": {},
-                        "model": "",
-                        "provider": "",
-                        "citations": state.citations,
-                        "session_id": state.session_id,
-                        **(state.last_tool_metadata or {}),
-                    }))
-                    return
-
-            # Generate final answer with streaming + buffering
-            async for event in self.agent.generate_answer(state):
-                if event.type == EventType.LLM_TOKEN:
-                    yield self.emit_events("llm_token", json.dumps({'token': event.token}))
-
-                elif event.type == EventType.DONE:
-                    self.session_memory.add(
-                        state.session_id,
-                        "assistant",
-                        event.content
-                    )
-
-                    yield self.emit_events("done", json.dumps(event.metadata))
+            async for event in self.stream_final_answer(state):
+                yield event
 
         except Exception as e:
             logger.error("runtime_stream_error", error=str(e))

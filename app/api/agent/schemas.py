@@ -34,6 +34,7 @@ class AgentState(BaseModel):
     context: Optional[str] = None
     tool_results: List[str] = Field(default_factory=list)
     citations: List[dict] = Field(default_factory=list)  # Citaciones acumuladas
+    complete: bool = False
     
     # Archivos adjuntos (PDF)
     file_uuid: str | None = None
