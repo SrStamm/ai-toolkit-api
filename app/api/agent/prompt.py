@@ -30,22 +30,26 @@ CRITICAL INSTRUCTIONS:
 CRITICAL: The url and source values MUST come from the user's actual messages and history. NEVER copy example URLs from these instructions.
 
 Decision process:
-1. If user greeting ("hola", "hello", "buenas", etc) → final_answer (no args needed)
-2. If user needs knowledge base docs → retrieve_context
-3. If user gives a URL for ingestion → follow URL INGESTION FLOW (instruction 3)
-4. If query starts with "[Archivo adjunto:" → follow PDF INGESTION FLOW (instruction 4)
-5. If question needs a specific tool → call_tool with the tool name
-6. If you already have context → final_answer
-7. If simple question/opinion → final_answer
-8. If tool was ALREADY EXECUTED and you have the result → final_answer (DO NOT REPEAT TOOL)
+1. If Have context = True:
+- NEVER call retrieve_context again.
+- NEVER call the same retrieval tool twice.
+- Your next action MUST be final_answer.
+2. If Last tool executed = retrieve_context AND Last tool result is not empty:
+- You already have all the information.
+- Respond with final_answer.
+3. If user greeting or its simple question/opinion → final_answer (no args needed)
+4. If user needs knowledge base docs → retrieve_context
+5. If user gives a URL for ingestion → follow URL INGESTION FLOW (instruction 3)
+6. If query starts with "[Archivo adjunto:" → follow PDF INGESTION FLOW (instruction 4)
+7. If question needs a specific tool → call_tool with the tool name
 
 Use "ask_user" when you NEED TO ASK the user a question (like missing metadata). The message goes in args.message.
 Use "final_answer" ONLY when you're TRULY DONE — no args needed, no message.
 
 Examples:
 - Input: "hola como estas?" → Output: {{"action": "final_answer"}}
-- Input: "como uso FastAPI?" → Output: {{"action": "retrieve_context", "args": {{"top_k": 5, "domain":"fastapi"}}}}
-- Input: "que es Docker?" → Output: {{"action": "retrieve_context", "args": {{"top_k": 5, "domain":"docker"}}}}
+- Input: "como uso FastAPI?" → Output: {{"action": "call_tool", "tool_name":"retrieve_context", "args": {{"top_k": 5, "domain":"fastapi"}}}}
+- Input: "que es Docker?" → Output: {{"action": "call_tool", "tool_name":"retrieve_context" , "args": {{"top_k": 5, "domain":"docker"}}}}
 - Input: "Dame la metadata de X" + Last tool: get_document_metadata + Result: "Source: ..." → Output: {{"action": "final_answer"}}
 - Input: "ingerí este link https://ejemplo.com/doc" → Output: {{"action": "ask_user", "args": {{"message": "Necesito el dominio y el tema para indexarlo. ¿Podrías indicarlos?"}}}}
 - Input: "ingerí https://ejemplo.com/doc domain: fastapi topic: routing" → Output: {{"action": "call_tool", "tool_name": "ingest_document", "args": {{"url": "https://ejemplo.com/doc", "source": "https://ejemplo.com/doc", "domain": "fastapi", "topic": "routing"}}}}
@@ -55,7 +59,7 @@ Examples:
 
 
 Return ONLY this JSON format:
-{{"action": "retrieve_context", "args": {{"top_k": 5, "domain":"fastapi"}}}}
+{{"action": "call_tool", "tool_name":"retrieve_context", "args": {{"top_k": 5, "domain":"fastapi"}}}}
 {{"action": "final_answer"}}
 {{"action": "ask_user", "args": {{"message": "your question here"}}}}
 {{"action": "call_tool", "tool_name": "tool_name", "args": {{"param": "value"}}}}

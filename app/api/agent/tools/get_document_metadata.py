@@ -21,6 +21,7 @@ def _get_document_metadata_handler(
     """Handler para obtener metadatos de un documento."""
     if vector_store is None:
         return ToolResponse(
+            tool_name="get_document_metadata",
             output="Error: Vector store not available",
             metadata={"error": "missing_dependency"},
         )
@@ -29,6 +30,7 @@ def _get_document_metadata_handler(
         metadata = vector_store.get_source_metadata(source)
         if metadata is None:
             return ToolResponse(
+            tool_name="get_document_metadata",
                 output=f"Document '{source}' not found.",
                 metadata={"source": source, "found": False},
             )
@@ -40,10 +42,11 @@ def _get_document_metadata_handler(
             f"Chunks: {metadata['chunk_count']}\n"
             f"Last Ingested: {metadata['last_ingested']}"
         )
-        return ToolResponse(output=output_str, metadata=metadata)
+        return ToolResponse(tool_name="get_document_metadata", output=output_str, metadata=metadata)
     except Exception as e:
         logger.error("tool_get_metadata_error", source=source, error=str(e))
         return ToolResponse(
+            tool_name="get_document_metadata",
             output=f"Error getting metadata: {str(e)}",
             metadata={"error": str(e)},
         )

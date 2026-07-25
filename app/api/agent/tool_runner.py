@@ -37,15 +37,15 @@ class ToolRunner:
         """
         if tool_name not in self.tools:
             raise ToolNotFoundError(f"Tool '{tool_name}' not found")
-        
+
         tool_def = self.tools[tool_name]
-        
+
         # Resolver dependencias (explícitas)
         relevant_deps = {
             k: v for k, v in self.deps.items()
             if k in tool_def.dependencies
         }
-        
+
         # Mapear state a tool params (explícito)
         state_params = {}
         if state:
@@ -53,17 +53,17 @@ class ToolRunner:
             for param_name in tool_params:
                 if hasattr(state, param_name):
                     state_params[param_name] = getattr(state, param_name)
-        
+
         # Construir kwargs: state_params + args override, luego deps
         final_kwargs = {
             **state_params,
             **(args or {}),
             **relevant_deps
         }
-        
+
         # Ejecutar la herramienta
         result = tool_def.handler(**final_kwargs)
-        
+
         # Log de trazabilidad: decisión del agente
         log.info(
             "agent_tool_executed",

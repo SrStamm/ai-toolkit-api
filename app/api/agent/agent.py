@@ -4,28 +4,14 @@ Agent determinístico con tool registry.
 Orquestador que coordina ToolRunner y Router para ejecutar acciones.
 """
 
-from typing import Any, Optional
 import structlog
-import uuid
 import json
 
-from .session_memory import get_session_memory, SessionMemory
-from .schemas import AgentState, ActionType
-from .tools import ToolRegistry
+from .schemas import AgentEvent, AgentState, Decision, EventType
 from .prompt import PROMPT_GENERATE_ANSWER
-from .tool_runner import ToolRunner
 from .router_decision import Router
-from ..llamaindex_adapter.orchestrator import (
-    LLMClient,
-    LlamaIndexOrchestrator,
-    get_orchestrator,
-    get_llm_client,
-)
-from ..retrieval_engine.service import get_rag_service
-from .adapters.rag_adapter import create_query_adapter, QueryServiceAdapter
-from ..retrieval_engine.ingestion_service import IngestionService
-from ...infrastructure.storage.qdrant_client import get_qdrant_store
-from ...infrastructure.storage.hybrid_ai import get_hybrid_embeddign_service as get_hybrid_embedding_service
+from .tools import ToolRegistry
+from ..llamaindex_adapter.orchestrator import LLMClient
 
 logger = structlog.get_logger()
 
@@ -77,311 +63,105 @@ class Agent:
     Ahora actúa como orchestrator que coordina ToolRunner y Router.
     """
 
-    def __init__(
-        self, 
-        llm: LLMClient, 
-        rag: LlamaIndexOrchestrator | QueryServiceAdapter,
-        vector_store: Any = None,
-        ingestion_service: Any = None,
-    ):
-        # Inicializar dependencias de infraestructura
-        vs = vector_store or get_qdrant_store()
-        embed_svc = get_hybrid_embedding_service()
-        ing_svc = ingestion_service or IngestionService(vector_store=vs, embed_service=embed_svc)
-
-        # Inicializar componentes
-        self.tool_runner = ToolRunner(deps={
-            "rag_orchestrator": rag, 
-            "llm_client": llm,
-            "vector_store": vs,
-            "ingestion_service": ing_svc,
-        })
+    def __init__(self, llm: LLMClient):
         self.router = Router(llm_client=llm)
         self.router.tools = ToolRegistry.list_tools()
         self.llm = llm
-        self.session_memory: SessionMemory = get_session_memory()
 
-    def _create_session_id(self) -> str:
-        """Create a new session ID."""
-        return str(uuid.uuid4())
+    async def decide(self, state: AgentState) -> Decision:
+        return await self.router.get_decision(state)
 
-    async def agent_loop_stream(
-        self,
-        query: str,
-        session_id: Optional[str] = None,
-        domain: Optional[str] = None,
-        file_uuid: Optional[str] = None,
-        filename: Optional[str] = None,
-    ):
-        """
-        Streaming version of agent_loop.
 
-        Yields SSE events:
-        - agent_decision: Router decision
-        - tool_start: Tool execution started
-        - tool_done: Tool execution completed
-        - llm_token: LLM response token (buffered)
-        - done: Final response with metadata
-        - error: Error occurred
-        """
-        def sse_event(event: str, data: str) -> str:
-            """Format SSE event."""
-            return f"event: {event}\ndata: {data}\n\n"
+    async def generate_answer(self, state: AgentState):
+        # Generate final answer with streaming + buffering
+        messages: list[dict] = []
+        system_prompt = PROMPT_GENERATE_ANSWER
+        messages.append({"role": "system", "content": system_prompt})
+        
+        if state.history:
+            for msg in state.history[:-1]:
+                messages.append({"role": msg.role, "content": msg.content})
+        
+        user_content = state.query
+        if state.context:
+            user_content = f"Context from knowledge base:\n{state.context}\n\nQuestion: {state.query}"
+        messages.append({"role": "user", "content": user_content})
+        
+        # Buffer for tokens
+        token_buffer = ""
+        BUFFER_SIZE = 30  # chars
+        
+        async for token, final_response in self.llm.generate_content_with_messages_stream(messages=messages):
+            if token:
+                token_buffer += token
 
-        try:
-            if not session_id:
-                session_id = self._create_session_id()
-
-            # If a file was attached, prepend its info to the query so the
-            # Router can see it and decide which tool to call.
-            if file_uuid and filename:
-                query = f"[Archivo adjunto: {filename} (UUID: {file_uuid})]\n\n{query}"
-
-            self.session_memory.add(session_id, "user", query)
-            history = self.session_memory.get_history(session_id)
-
-            # ── PDF follow-up: re-inject file info from history ──────────
-            # If this message has NO file attached but the conversation
-            # history contains a previous PDF upload, re-inject the file
-            # prefix so the Router sees CASE A (not CASE B).
-            if not file_uuid and not filename:
-                import re
-                for msg in reversed(history):
-                    if msg.role == "user" and "[Archivo adjunto:" in msg.content:
-                        match = re.search(
-                            r'\[Archivo adjunto: (.+?) \(UUID: ([a-f0-9-]+)\)\]',
-                            msg.content,
-                        )
-                        if match:
-                            hist_filename = match.group(1)
-                            hist_file_uuid = match.group(2)
-                            query = (
-                                f"[Archivo adjunto: {hist_filename} "
-                                f"(UUID: {hist_file_uuid})]\n\n{query}"
-                            )
-                            file_uuid = hist_file_uuid
-                            filename = hist_filename
-                        break
-
-            state = AgentState(
-                query=query,
-                session_id=session_id,
-                domain=domain,
-                file_uuid=file_uuid,
-                filename=filename,
-            )
-            state.history = history
-
-            step = 0
-            while step < 5:
-                step += 1
-                # Get decision from router (now async)
-                decision = await self.router.get_decision(state)
-
-                # Yield decision event
-                yield sse_event("agent_decision", json.dumps(decision.model_dump()))
-                
-                if decision.action == ActionType.ASK_USER:
-                    # Router needs to ask the user a question (e.g., missing metadata).
-                    content = decision.args.get("message", "")
-                    self.session_memory.add(state.session_id, "assistant", content)
-                    yield sse_event("llm_token", json.dumps({"token": content}))
-                    yield sse_event("done", json.dumps({
-                        "usage": {},
-                        "cost": {},
-                        "model": "",
-                        "provider": "",
-                        "citations": state.citations,
-                        "session_id": state.session_id,
-                    }))
-                    return  # Exit the generator cleanly, user needs to respond
-
-                if decision.action == ActionType.FINAL_ANSWER:
-                    # Truly done — break out of the loop to generate or
-                    # short-circuit via tool result.
-                    break
-                
-                if decision.action == ActionType.RETRIEVE_CONTEXT:
-                    yield sse_event("tool_start", json.dumps({'tool': 'retrieve_context'}))
-                    
-                    # Inject domain from state if not provided by LLM
-                    if state.domain and "domain" not in decision.args:
-                        decision.args["domain"] = state.domain
-                    
-                    result = self.tool_runner.run(
-                        "retrieve_context",
-                        decision.args,
-                        state
+                # Send buffer when full or at punctuation
+                if len(token_buffer) >= BUFFER_SIZE or token in '.!?\n':
+                    yield AgentEvent(
+                        type=EventType.LLM_TOKEN,
+                        token=token_buffer
                     )
-                    state.context = result.output
-                    # Save citations if available
-                    state.set_last_tool("retrieve_context", result.output, result.metadata)
-                    
-                    # Send tool_done with citation count
-                    tool_done_data = {'tool': 'retrieve_context', 'status': 'success'}
-                    if result.metadata and "citations" in result.metadata:
-                        tool_done_data['citations_count'] = len(result.metadata["citations"])
-                    
-                    yield sse_event("tool_done", json.dumps(tool_done_data))
-                    continue
-                
-                if decision.action == ActionType.CALL_TOOL:
-                    yield sse_event("tool_start", json.dumps({'tool': decision.tool_name}))
-                    
-                    result = self.tool_runner.run(
-                        decision.tool_name,
-                        decision.args,
-                        state
-                    )
-                    # CRITICAL FIX: Pass metadata (e.g., task_id) to state
-                    state.set_last_tool(decision.tool_name, result.output, result.metadata)
-                    
-                    yield sse_event("tool_done", json.dumps({'tool': decision.tool_name, 'status': 'success'}))
-                    continue
-            
-            # After the loop: if a non-RAG tool was executed and router acknowledged it,
-            # use the tool result directly instead of re-invoking the LLM
-            if (
-                not decision.args.get("message")
-                and state.last_tool
-                and state.last_tool != "retrieve_context"
-                and state.last_tool_result
-            ):
-                content = state.last_tool_result
-                self.session_memory.add(state.session_id, "assistant", content)
-                yield sse_event("llm_token", json.dumps({"token": content}))
-                yield sse_event("done", json.dumps({
-                    "usage": {},
-                    "cost": {},
-                    "model": "",
-                    "provider": "",
-                    "citations": state.citations,
-                    "session_id": state.session_id,
-                    **(state.last_tool_metadata or {}),
-                }))
-                return
 
-            # Generate final answer with streaming + buffering
-            messages: list[dict] = []
-            system_prompt = PROMPT_GENERATE_ANSWER
-            messages.append({"role": "system", "content": system_prompt})
-            
-            if state.history:
-                for msg in state.history[:-1]:
-                    messages.append({"role": msg.role, "content": msg.content})
-            
-            user_content = state.query
-            if state.context:
-                user_content = f"Context from knowledge base:\n{state.context}\n\nQuestion: {state.query}"
-            messages.append({"role": "user", "content": user_content})
-            
-            # Buffer for tokens
-            token_buffer = ""
-            BUFFER_SIZE = 30  # chars
-            
-            async for token, final_response in self.llm.generate_content_with_messages_stream(
-                messages=messages
-            ):
-                if token:
-                    token_buffer += token
-                    
-                    # Send buffer when full or at punctuation
-                    if len(token_buffer) >= BUFFER_SIZE or token in '.!?\n':
-                        yield sse_event("llm_token", json.dumps({'token': token_buffer}))
-                        token_buffer = ""
-                
-                if final_response:
-                    # Send remaining buffer
-                    if token_buffer:
-                        yield sse_event("llm_token", json.dumps({'token': token_buffer}))
-                        token_buffer = ""
-                    
-                    # Parse answer from JSON wrapper if present (robust parser)
-                    content = token_buffer.strip() if token_buffer else ""
-                    if not content and final_response.content:
-                        content = final_response.content.strip()
-                    # Apply robust JSON extraction
-                    content = extract_answer_from_json(content)
-                    
-                    self.session_memory.add(
-                        state.session_id,
-                        "assistant",
-                        content
+                    token_buffer = ""
+
+            if final_response:
+                # Send remaining buffer
+                if token_buffer:
+                    yield AgentEvent(
+                        type=EventType.LLM_TOKEN, 
+                        token=token_buffer,
                     )
-                    
-                    # Merge tool metadata (e.g., task_id from ingestion) into response metadata
-                    # Convert TokenUsage to simple dicts for JSON serialization
-                    usage_dict = {}
-                    if final_response.usage:
-                        # Manually create dict to avoid 'TokenUsage not JSON serializable'
-                        usage_dict = {
-                            'prompt_tokens': final_response.usage.prompt_tokens,
-                            'completion_tokens': final_response.usage.completion_tokens,
-                            'total_tokens': final_response.usage.total_tokens,
-                        }
-                    
-                    cost_dict = {}
-                    if final_response.cost:
-                        cost_dict = {
-                            'total_cost': final_response.cost.total_cost,
-                        }
-                    
-                    final_metadata = {
-                        'usage': usage_dict,
-                        'cost': cost_dict,
-                        'model': final_response.model,
-                        'provider': final_response.provider,
-                        'citations': state.citations,  # Include accumulated citations
-                        'session_id': state.session_id,
+                    token_buffer = ""
+
+                # Parse answer from JSON wrapper if present (robust parser)
+                content = token_buffer.strip() if token_buffer else ""
+                if not content and final_response.content:
+                    content = final_response.content.strip()
+                # Apply robust JSON extraction
+                content = extract_answer_from_json(content)
+
+                # Merge tool metadata (e.g., task_id from ingestion) into response metadata
+                # Convert TokenUsage to simple dicts for JSON serialization
+                usage_dict = {}
+                if final_response.usage:
+                    # Manually create dict to avoid 'TokenUsage not JSON serializable'
+                    usage_dict = {
+                        'prompt_tokens': final_response.usage.prompt_tokens,
+                        'completion_tokens': final_response.usage.completion_tokens,
+                        'total_tokens': final_response.usage.total_tokens,
                     }
-                    
-                    # If last tool returned specific metadata (like task_id), include it
-                    if state.last_tool_metadata:
-                        final_metadata.update(state.last_tool_metadata)
-                        if state.last_tool_metadata.get("task_id"):
-                            final_metadata['task_id'] = state.last_tool_metadata['task_id']
-                        final_metadata['status'] = state.last_tool_metadata.get('status', 'processing')
-                    
-                    yield sse_event("done", json.dumps(final_metadata))
-                    break
 
-        except Exception as e:
-            logger.error("agent_loop_stream_error", error=str(e))
-            yield sse_event("error", json.dumps({'error': str(e)}))
-            yield sse_event("done", json.dumps({
-                'status': 'error',
-                'error': str(e),
-                'session_id': session_id,
-            }))
+                cost_dict = {}
+                if final_response.cost:
+                    cost_dict = {
+                        'total_cost': final_response.cost.total_cost,
+                    }
 
+                final_metadata = {
+                    'usage': usage_dict,
+                    'cost': cost_dict,
+                    'model': final_response.model,
+                    'provider': final_response.provider,
+                    'citations': state.citations,  # Include accumulated citations
+                    'session_id': state.session_id,
+                }
 
-def create_agent(
-    provider: str | None = None,
-    model: str | None = None,
-    use_rag_service: bool = False,  # Flag to use RAG service via adapter
-) -> Agent:
-    """
-    Factory function to create an Agent instance.
-    """
-    llm = get_llm_client(provider, model)
+                # If last tool returned specific metadata (like task_id), include it
+                if state.last_tool_metadata:
+                    final_metadata.update(state.last_tool_metadata)
+                    if state.last_tool_metadata.get("task_id"):
+                        final_metadata['task_id'] = state.last_tool_metadata['task_id']
+                    final_metadata['status'] = state.last_tool_metadata.get('status', 'processing')
 
-    # Initialize infrastructure dependencies
-    vector_store = get_qdrant_store()
-    embed_service = get_hybrid_embedding_service()
-    ingestion_svc = IngestionService(vector_store=vector_store, embed_service=embed_service)
+                yield AgentEvent(
+                    type=EventType.DONE,
+                    content=content,
+                    metadata=final_metadata
+                )
 
-    if use_rag_service:
-        # Use RAG service with adapter (retrieval_engine/)
-        rag_service = get_rag_service()
-        rag_adapter = create_query_adapter(rag_service)
-        return Agent(llm=llm, rag=rag_adapter, vector_store=vector_store, ingestion_service=ingestion_svc)
-    else:
-        # Use LlamaIndex orchestrator (llamaindex_adapter/)
-        return Agent(llm=llm, rag=get_orchestrator(), vector_store=vector_store, ingestion_service=ingestion_svc)
+                break
 
 
-def get_agent(provider: str | None = None, model: str | None = None, use_rag_service: bool = True) -> Agent:
-    """
-    Get or create agent singleton.
-    """
-    return create_agent(provider, model, use_rag_service=use_rag_service)
+def create_agent(llm: LLMClient) -> Agent:
+    return Agent(llm=llm)
+

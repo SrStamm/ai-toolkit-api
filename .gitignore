@@ -221,3 +221,6 @@ openspec/
 DESIGN_YAML_CONFIG.md
 TASKS_YAML_CONFIG.md
 docs/
+
+.atl/
+.codegraph/

@@ -6,7 +6,7 @@ from fastapi import APIRouter, File, UploadFile, Request
 from starlette.responses import StreamingResponse
 
 from .schemas import QueryAgentRequest
-from .agent import get_agent
+from .runtime import create_runtimer
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
@@ -14,13 +14,13 @@ router = APIRouter(prefix="/agent", tags=["Agent"])
 @router.post("/agent-loop/stream")
 async def agent_loop_stream(query: QueryAgentRequest, request: Request):
     """Streaming version of agent-loop using Server-Sent Events."""
-    agent = get_agent(
+    runtimer = create_runtimer(
         provider=request.headers.get("x-llm-provider"),
         model=request.headers.get("x-llm-model"),
     )
 
     async def generate():
-        async for event in agent.agent_loop_stream(
+        async for event in runtimer.run_stream(
             query=query.text,
             session_id=query.session_id,
             file_uuid=query.file_uuid,
