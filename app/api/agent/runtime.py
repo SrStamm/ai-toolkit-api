@@ -6,7 +6,7 @@ import re
 
 from .adapters.rag_adapter import QueryServiceAdapter, create_query_adapter
 from .agent import Agent
-from .schemas import ActionType, AgentState, EventType
+from .schemas import ActionType, AgentState, EventType, RuntimeState
 from .tool_runner import ToolRunner
 from ..llamaindex_adapter.orchestrator import LlamaIndexOrchestrator
 from ..retrieval_engine.ingestion_service import IngestionService
@@ -38,6 +38,12 @@ class Runtime:
         })
         self.session_memory: SessionMemory = get_session_memory()
         self.agent = Agent(llm)
+        self._state: RuntimeState = RuntimeState.THINKING
+
+    def _transition_to(self, new_state: RuntimeState, **metadata) -> str:
+        self._state = new_state
+        payload = {"state": new_state.value, **metadata}
+        return self.emit_events(EventType.STATE_CHANGED, json.dumps(payload))
 
     async def execution_loop(
         self,
@@ -45,18 +51,21 @@ class Runtime:
         max_step: int = 5,
     ):
         for _ in range(max_step):
+            yield self._transition_to(RuntimeState.THINKING)
             # Get decision from agent
             decision = await self.agent.decide(state)
 
             # Yield decision event
-            yield self.emit_events("agent_decision", json.dumps(decision.model_dump()))
+            yield self.emit_events(EventType.AGENT_DECISION, json.dumps(decision.model_dump()))
 
             if decision.action == ActionType.ASK_USER:
+                yield self._transition_to(RuntimeState.WAITING_USER)
+
                 # Router needs to ask the user a question (e.g., missing metadata).
                 content = decision.args.get("message", "")
                 self.session_memory.add(state.session_id, "assistant", content)
-                yield self.emit_events("llm_token", json.dumps({"token": content}))
-                yield self.emit_events("done", json.dumps({
+                yield self.emit_events(EventType.LLM_TOKEN, json.dumps({"token": content}))
+                yield self.emit_events(EventType.DONE, json.dumps({
                     "usage": {},
                     "cost": {},
                     "model": "",
@@ -71,25 +80,21 @@ class Runtime:
                 return
 
             if decision.action == ActionType.CALL_TOOL and decision.tool_name:
-                yield self.emit_events("tool_start", json.dumps({'tool': decision.tool_name}))
-
-                result = self.execute_tool(
-                    decision.tool_name,
-                    state,
-                    decision.args,
-                )
+                yield self._transition_to(RuntimeState.EXECUTING_TOOL, tool=decision.tool_name)
+                result = self.execute_tool(decision.tool_name, state, decision.args)
 
                 # CRITICAL FIX: Pass metadata (e.g., task_id) to state
                 state.apply(result)
 
-                yield self.emit_events("tool_done", json.dumps({'tool': decision.tool_name, 'status': 'success'}))
+                yield self.emit_events(EventType.TOOL_DONE, json.dumps({'tool': decision.tool_name, 'status': 'success'}))
 
                 if result.complete:
                     content = result.output
                     self.session_memory.add(state.session_id, "assistant", content)
                     state.complete = True
-                    yield self.emit_events("llm_token", json.dumps({"token": content}))
-                    yield self.emit_events("done", json.dumps({
+
+                    yield self.emit_events(EventType.LLM_TOKEN, json.dumps({"token": content}))
+                    yield self.emit_events(EventType.DONE, json.dumps({
                         "usage": {},
                         "cost": {},
                         "model": "",
@@ -98,6 +103,7 @@ class Runtime:
                         "session_id": state.session_id,
                         "metadata": result.metadata or {}
                     }))
+                    yield self._transition_to(RuntimeState.COMPLETED)
                     return
 
                 continue
@@ -110,9 +116,9 @@ class Runtime:
         return self.tool_runner.run(tool_name, args, state)
 
 
-    def emit_events(self, event: str, data: str):
+    def emit_events(self, event: EventType, data: str):
         """Format SSE event."""
-        return f"event: {event}\ndata: {data}\n\n"
+        return f"event: {event.value}\ndata: {data}\n\n"
 
     def _create_session_id(self) -> str:
         """Create a new session ID."""
@@ -156,7 +162,7 @@ class Runtime:
     async def stream_final_answer(self, state: AgentState):
         async for event in self.agent.generate_answer(state):
             if event.type == EventType.LLM_TOKEN:
-                yield self.emit_events("llm_token", json.dumps({'token': event.token}))
+                yield self.emit_events(EventType.LLM_TOKEN, json.dumps({'token': event.token}))
 
             elif event.type == EventType.DONE:
                 self.session_memory.add(
@@ -165,7 +171,7 @@ class Runtime:
                     event.content
                 )
 
-                yield self.emit_events("done", json.dumps(event.metadata))
+                yield self.emit_events(EventType.DONE, json.dumps(event.metadata))
 
     async def run_stream(
         self,
@@ -204,19 +210,19 @@ class Runtime:
             if state.complete:
                 return
 
+            yield self._transition_to(RuntimeState.GENERATING)
             async for event in self.stream_final_answer(state):
                 yield event
+            yield self._transition_to(RuntimeState.COMPLETED)
 
         except Exception as e:
             logger.error("runtime_stream_error", error=str(e))
-            yield self.emit_events("error", json.dumps({'error': str(e)}))
-            yield self.emit_events("done", json.dumps({
+            yield self._transition_to(RuntimeState.FAILED, error=str(e))
+            yield self.emit_events(EventType.DONE, json.dumps({
                 'status': 'error',
                 'error': str(e),
                 'session_id': session_id,
             }))
-
-    # state machine
 
 
 def create_runtimer(
