@@ -5,8 +5,6 @@ Dispara una tarea de Celery para ingestar (o re-indexar) un documento desde una 
 Si el documento ya existe, elimina la versión anterior e ingesta la nueva.
 """
 
-import time
-from typing import Optional
 import structlog
 
 from .tools_registry import ToolRegistry, ToolExecutionResult, ToolStatus
@@ -22,8 +20,6 @@ def _ingest_document_handler(
     topic: str,
     **kwargs
 ) -> ToolExecutionResult:
-    start = time.perf_counter()
-
     """
     Handler para ingestar un documento desde una URL.
 
@@ -49,7 +45,6 @@ def _ingest_document_handler(
             output=msg,
             metadata={"error": "missing_metadata", "missing_fields": missing},
             status=ToolStatus.FAILED,
-            execution_time_ms=int(time.perf_counter() - start)
         )
 
     try:
@@ -71,7 +66,6 @@ def _ingest_document_handler(
             output=msg,
             metadata={"task_id": job_id, "status": "processing", "source": source},
             status=ToolStatus.SUCCESS,
-            execution_time_ms=int(time.perf_counter() - start)
         )
 
     except Exception as e:
@@ -81,7 +75,6 @@ def _ingest_document_handler(
             output=f"Error starting ingestion: {str(e)}",
             metadata={"error": str(e)},
             status=ToolStatus.FAILED,
-            execution_time_ms=int(time.perf_counter() - start)
         )
 
 

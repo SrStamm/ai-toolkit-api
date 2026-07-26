@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 from enum import Enum
 
-from ....domain.exceptions import ToolError, ToolNotFoundError
+from ....domain.exceptions import ToolNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +40,10 @@ class ToolExecutionResult(BaseModel):
     status: ToolStatus
     output: Any = None
     metadata: dict = Field(default_factory=dict)
-    error: ToolError | None = None
-    execution_time_ms: int
+    error: str | None = None
+    execution_time_ms: int | None = None
     complete: bool = False
+    retry_count: int = 0
 
 
 class ToolRegistry:

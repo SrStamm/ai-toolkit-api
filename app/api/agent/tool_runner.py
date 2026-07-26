@@ -4,6 +4,7 @@ ToolRunner: Ejecuta herramientas con manejo de dependencias.
 Componente separado del Agent para manejar la ejecución de herramientas.
 """
 
+import time
 import structlog
 from typing import Any
 from .schemas import AgentState
@@ -61,8 +62,12 @@ class ToolRunner:
             **relevant_deps
         }
 
+        start = time.perf_counter()
+
         # Ejecutar la herramienta
         result = tool_def.handler(**final_kwargs)
+
+        result.execution_time_ms = int((time.perf_counter() - start) * 1000)
 
         # Log de trazabilidad: decisión del agente
         log.info(
@@ -71,6 +76,7 @@ class ToolRunner:
             args=args or {},
             result_preview=result.output[:500] if len(result.output) > 500 else result.output,
             result_length=len(result.output),
+            execution_time_ms=result.execution_time_ms
         )
-        
+
         return result

@@ -84,8 +84,8 @@ class Runtime:
 
                 yield self.emit_events("tool_done", json.dumps({'tool': decision.tool_name, 'status': 'success'}))
 
-                if state.last_tool != "retrieve_context" and state.last_tool_result:
-                    content = state.last_tool_result
+                if result.complete:
+                    content = result.output
                     self.session_memory.add(state.session_id, "assistant", content)
                     state.complete = True
                     yield self.emit_events("llm_token", json.dumps({"token": content}))
@@ -96,7 +96,7 @@ class Runtime:
                         "provider": "",
                         "citations": state.citations,
                         "session_id": state.session_id,
-                        **(state.last_tool_metadata or {}),
+                        "metadata": result.metadata or {}
                     }))
                     return
 

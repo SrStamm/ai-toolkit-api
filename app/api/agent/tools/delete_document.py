@@ -4,7 +4,6 @@ Delete Document Tool.
 Elimina un documento y todos sus chunks de la base vectorial.
 """
 
-import time
 from typing import Optional
 import structlog
 
@@ -19,7 +18,6 @@ def _delete_document_handler(
     vector_store: Optional[VectorStoreInterface] = None,
     **kwargs
 ) -> ToolExecutionResult:
-    start = time.perf_counter()
 
     """Handler para eliminar un documento de la base vectorial."""
     if vector_store is None:
@@ -27,8 +25,7 @@ def _delete_document_handler(
             tool_name="delete_document",
             output="Error: Vector store not available",
             metadata={"error": "missing_dependency"},
-            status=ToolStatus.FAILED,
-            execution_time_ms=int(time.perf_counter() - start)
+            status=ToolStatus.FAILED
         )
 
     try:
@@ -39,8 +36,7 @@ def _delete_document_handler(
             tool_name="delete_document",
             output=msg,
             metadata={"source": source, "status": "deleted"},
-            status=ToolStatus.SUCCESS,
-            execution_time_ms=int(time.perf_counter() - start)
+            status=ToolStatus.SUCCESS
         )
     except Exception as e:
         logger.error("tool_delete_document_error", source=source, error=str(e))
@@ -48,8 +44,7 @@ def _delete_document_handler(
             tool_name="delete_document",
             output=f"Error deleting document: {str(e)}",
             metadata={"error": str(e)},
-            status=ToolStatus.FAILED,
-            execution_time_ms=int(time.perf_counter() - start)
+            status=ToolStatus.FAILED
         )
 
 

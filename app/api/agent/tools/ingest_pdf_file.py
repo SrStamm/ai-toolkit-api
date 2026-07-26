@@ -6,7 +6,6 @@ Si el archivo ya existe en el vector store (mismo source), se re-indexa automát
 """
 
 from pathlib import Path
-import time
 import structlog
 
 from .tools_registry import ToolRegistry, ToolExecutionResult, ToolStatus
@@ -24,7 +23,6 @@ def _ingest_pdf_file_handler(
     topic: str,
     **kwargs,
 ) -> ToolExecutionResult:
-    start = time.perf_counter()
 
     """
     Handler para ingestar un archivo PDF.
@@ -53,7 +51,6 @@ def _ingest_pdf_file_handler(
             output=msg,
             metadata={"error": "missing_metadata", "missing_fields": missing},
             status=ToolStatus.FAILED,
-            execution_time_ms=int(time.perf_counter() - start)
         )
 
     # ── Validar que el archivo exista en disco ──────────────────────────
@@ -67,7 +64,6 @@ def _ingest_pdf_file_handler(
             output=msg,
             metadata={"error": "file_not_found", "file_uuid": file_uuid},
             status=ToolStatus.FAILED,
-            execution_time_ms=int(time.perf_counter() - start)
         )
 
     try:
@@ -104,7 +100,6 @@ def _ingest_pdf_file_handler(
                 "source": filename,
             },
             status=ToolStatus.SUCCESS,
-            execution_time_ms=int(time.perf_counter() - start)
         )
 
     except Exception as e:
@@ -114,7 +109,6 @@ def _ingest_pdf_file_handler(
             output=f"Error starting ingestion: {str(e)}",
             metadata={"error": str(e)},
             status=ToolStatus.FAILED,
-            execution_time_ms=int(time.perf_counter() - start)
         )
 
 

@@ -4,7 +4,6 @@ Get Document Metadata Tool.
 Obtiene metadatos de un documento específico en el vector store.
 """
 
-import time
 from typing import Optional
 import structlog
 
@@ -19,7 +18,6 @@ def _get_document_metadata_handler(
     vector_store: Optional[VectorStoreInterface] = None,
     **kwargs
 ) -> ToolExecutionResult:
-    start = time.perf_counter()
 
     """Handler para obtener metadatos de un documento."""
     if vector_store is None:
@@ -28,7 +26,6 @@ def _get_document_metadata_handler(
             output="Error: Vector store not available",
             metadata={"error": "missing_dependency"},
             status=ToolStatus.FAILED,
-            execution_time_ms=int(time.perf_counter() - start)
         )
 
     try:
@@ -39,7 +36,6 @@ def _get_document_metadata_handler(
                 output=f"Document '{source}' not found.",
                 metadata={"source": source, "found": False},
                 status=ToolStatus.FAILED,
-                execution_time_ms=int(time.perf_counter() - start)
             )
 
         output_str = (
@@ -53,7 +49,6 @@ def _get_document_metadata_handler(
             tool_name="get_document_metadata",
             output=output_str, metadata=metadata,
             status=ToolStatus.SUCCESS,
-            execution_time_ms=int(time.perf_counter() - start)
             )
     except Exception as e:
         logger.error("tool_get_metadata_error", source=source, error=str(e))
@@ -62,7 +57,6 @@ def _get_document_metadata_handler(
             output=f"Error getting metadata: {str(e)}",
             metadata={"error": str(e)},
             status=ToolStatus.FAILED,
-            execution_time_ms=int(time.perf_counter() - start)
         )
 
 
