@@ -45,6 +45,24 @@ class ToolExecutionResult(BaseModel):
     complete: bool = False
     retry_count: int = 0
 
+    @classmethod
+    def fail(cls, tool_name: str, output: Any, metadata: dict):
+        return ToolExecutionResult(
+            tool_name=tool_name,
+            output=output,
+            metadata=metadata,
+            status=ToolStatus.FAILED
+        )
+
+    @classmethod
+    def ok(cls, tool_name:str, output: Any, metadata: dict):
+        return ToolExecutionResult(
+            tool_name=tool_name,
+            output=output,
+            metadata=metadata,
+            status=ToolStatus.SUCCESS
+        )
+
 
 class ToolRegistry:
     """

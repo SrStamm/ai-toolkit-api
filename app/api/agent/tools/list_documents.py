@@ -7,7 +7,7 @@ Lista todos los documentos disponibles en el vector store.
 from typing import Optional
 import structlog
 
-from .tools_registry import ToolRegistry, ToolExecutionResult, ToolStatus
+from .tools_registry import ToolRegistry, ToolExecutionResult
 from ....infrastructure.storage.interfaces import VectorStoreInterface
 
 logger = structlog.get_logger()
@@ -21,21 +21,19 @@ def _list_documents_handler(
 
     """Handler para listar documentos disponibles."""
     if vector_store is None:
-        return ToolExecutionResult(
+        return ToolExecutionResult.fail(
             tool_name="list_documents",
             output="Error: Vector store not available",
             metadata={"error": "missing_dependency"},
-            status=ToolStatus.FAILED
         )
 
     try:
         sources = vector_store.list_sources(domain=domain)
         if not sources:
-            return ToolExecutionResult(
+            return ToolExecutionResult.fail(
                 tool_name="list_documents",
                 output="No documents found.",
                 metadata={"count": 0},
-                status=ToolStatus.FAILED
             )
 
         output_lines = [f"Found {len(sources)} document(s):"]
@@ -44,19 +42,17 @@ def _list_documents_handler(
                 f"- {src['source']} ({src['domain']}/{src['topic']}) - {src['chunk_count']} chunks"
             )
 
-        return ToolExecutionResult(
+        return ToolExecutionResult.ok(
             tool_name="list_documents",
             output="\n".join(output_lines),
             metadata={"documents": sources, "count": len(sources)},
-            status=ToolStatus.SUCCESS
         )
     except Exception as e:
         logger.error("tool_list_documents_error", error=str(e))
-        return ToolExecutionResult(
+        return ToolExecutionResult.fail(
             tool_name="list_documents",
             output=f"Error listing documents: {str(e)}",
             metadata={"error": str(e)},
-            status=ToolStatus.FAILED
         )
 
 
