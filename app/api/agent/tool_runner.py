@@ -4,10 +4,11 @@ ToolRunner: Ejecuta herramientas con manejo de dependencias.
 Componente separado del Agent para manejar la ejecución de herramientas.
 """
 
+import time
 import structlog
 from typing import Any
 from .schemas import AgentState
-from .tools import ToolRegistry, ToolResponse
+from .tools import ToolRegistry, ToolExecutionResult
 from ...domain.exceptions import ToolNotFoundError
 
 log = structlog.get_logger()
@@ -21,7 +22,7 @@ class ToolRunner:
         ToolRegistry.initialize()
         self.tools = ToolRegistry.list_tools()
     
-    def run(self, tool_name: str, args: dict | None = None, state: AgentState | None = None) -> ToolResponse:
+    def run(self, tool_name: str, args: dict | None = None, state: AgentState | None = None) -> ToolExecutionResult:
         """Ejecuta una herramienta por nombre.
         
         Args:
@@ -30,7 +31,7 @@ class ToolRunner:
             state: Estado del agente para mapeo de campos
             
         Returns:
-            ToolResponse con el resultado de la ejecución
+            ToolExecutionResult con el resultado de la ejecución
             
         Raises:
             ToolNotFoundError: Si la herramienta no existe
@@ -61,8 +62,12 @@ class ToolRunner:
             **relevant_deps
         }
 
+        start = time.perf_counter()
+
         # Ejecutar la herramienta
         result = tool_def.handler(**final_kwargs)
+
+        result.execution_time_ms = int((time.perf_counter() - start) * 1000)
 
         # Log de trazabilidad: decisión del agente
         log.info(
@@ -71,6 +76,7 @@ class ToolRunner:
             args=args or {},
             result_preview=result.output[:500] if len(result.output) > 500 else result.output,
             result_length=len(result.output),
+            execution_time_ms=result.execution_time_ms
         )
-        
+
         return result

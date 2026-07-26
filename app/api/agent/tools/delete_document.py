@@ -7,7 +7,7 @@ Elimina un documento y todos sus chunks de la base vectorial.
 from typing import Optional
 import structlog
 
-from .tools_registry import ToolRegistry, ToolResponse
+from .tools_registry import ToolRegistry, ToolExecutionResult
 from ....infrastructure.storage.interfaces import VectorStoreInterface
 
 logger = structlog.get_logger()
@@ -17,10 +17,11 @@ def _delete_document_handler(
     source: str,
     vector_store: Optional[VectorStoreInterface] = None,
     **kwargs
-) -> ToolResponse:
+) -> ToolExecutionResult:
+
     """Handler para eliminar un documento de la base vectorial."""
     if vector_store is None:
-        return ToolResponse(
+        return ToolExecutionResult.fail(
             tool_name="delete_document",
             output="Error: Vector store not available",
             metadata={"error": "missing_dependency"},
@@ -30,14 +31,14 @@ def _delete_document_handler(
         vector_store.delete_by_filter({"source": source})
         msg = f"Document '{source}' deleted successfully."
         logger.info("tool_delete_document", source=source)
-        return ToolResponse(
+        return ToolExecutionResult.ok(
             tool_name="delete_document",
             output=msg,
             metadata={"source": source, "status": "deleted"},
         )
     except Exception as e:
         logger.error("tool_delete_document_error", source=source, error=str(e))
-        return ToolResponse(
+        return ToolExecutionResult.fail(
             tool_name="delete_document",
             output=f"Error deleting document: {str(e)}",
             metadata={"error": str(e)},

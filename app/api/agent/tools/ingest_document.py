@@ -5,10 +5,9 @@ Dispara una tarea de Celery para ingestar (o re-indexar) un documento desde una 
 Si el documento ya existe, elimina la versión anterior e ingesta la nueva.
 """
 
-from typing import Optional
 import structlog
 
-from .tools_registry import ToolRegistry, ToolResponse
+from .tools_registry import ToolRegistry, ToolExecutionResult
 from ...retrieval_engine.jobs.celery_tasks import reindex_document_task
 
 logger = structlog.get_logger()
@@ -20,7 +19,7 @@ def _ingest_document_handler(
     domain: str,
     topic: str,
     **kwargs
-) -> ToolResponse:
+) -> ToolExecutionResult:
     """
     Handler para ingestar un documento desde una URL.
 
@@ -41,7 +40,7 @@ def _ingest_document_handler(
     if missing:
         msg = f"Cannot ingest: missing required metadata: {', '.join(missing)}. Please provide them and try again."
         logger.warning("tool_ingest_missing_metadata", missing=missing, url=url)
-        return ToolResponse(
+        return ToolExecutionResult.fail(
             tool_name="ingest_document",
             output=msg,
             metadata={"error": "missing_metadata", "missing_fields": missing},
@@ -61,15 +60,15 @@ def _ingest_document_handler(
         msg = f"Ingestion started for '{source}'. Job ID: {job_id}"
         logger.info("tool_ingest_dispatched", source=source, job_id=job_id)
 
-        return ToolResponse(
+        return ToolExecutionResult.ok(
             tool_name="ingest_document",
             output=msg,
-            metadata={"task_id": job_id, "status": "processing", "source": source}
+            metadata={"task_id": job_id, "status": "processing", "source": source},
         )
 
     except Exception as e:
         logger.error("tool_ingest_error", source=source, error=str(e))
-        return ToolResponse(
+        return ToolExecutionResult.fail(
             tool_name="ingest_document",
             output=f"Error starting ingestion: {str(e)}",
             metadata={"error": str(e)},

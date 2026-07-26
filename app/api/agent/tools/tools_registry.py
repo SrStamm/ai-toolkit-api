@@ -9,8 +9,10 @@ initialize() cada vez que se agrega una tool nueva.
 import importlib
 import logging
 from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
+from enum import Enum
 
 from ....domain.exceptions import ToolNotFoundError
 
@@ -27,14 +29,39 @@ class ToolDefinition:
     handler: Callable
     dependencies: list[str] = field(default_factory=list)
 
+class ToolStatus(str, Enum):
+    SUCCESS = "success"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    RETRY = "retry"
 
-@dataclass
-class ToolResponse:
-    """Respuesta de una tool ejecutada."""
-
+class ToolExecutionResult(BaseModel):
     tool_name: str
-    output: str
-    metadata: dict | None = None
+    status: ToolStatus
+    output: Any = None
+    metadata: dict = Field(default_factory=dict)
+    error: str | None = None
+    execution_time_ms: int | None = None
+    complete: bool = False
+    retry_count: int = 0
+
+    @classmethod
+    def fail(cls, tool_name: str, output: Any, metadata: dict):
+        return ToolExecutionResult(
+            tool_name=tool_name,
+            output=output,
+            metadata=metadata,
+            status=ToolStatus.FAILED
+        )
+
+    @classmethod
+    def ok(cls, tool_name:str, output: Any, metadata: dict):
+        return ToolExecutionResult(
+            tool_name=tool_name,
+            output=output,
+            metadata=metadata,
+            status=ToolStatus.SUCCESS
+        )
 
 
 class ToolRegistry:

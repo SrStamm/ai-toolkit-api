@@ -5,7 +5,7 @@ Busca en la base vectorial y construye respuesta con contexto.
 """
 
 from typing import Optional
-from .tools_registry import ToolRegistry, ToolResponse
+from .tools_registry import ToolRegistry, ToolExecutionResult
 import structlog
 
 logger = structlog.get_logger()
@@ -17,11 +17,11 @@ def _retrieve_context_tool_handler(
     domain: Optional[str] = None,
     rag_orchestrator: Optional[object] = None,  # TYPE: Any para evitar import pesado
     **kwargs
-) -> ToolResponse:
+) -> ToolExecutionResult:
     """Handler para la tool RAG."""
     if rag_orchestrator is None:
-        return ToolResponse(
-        tool_name="retrieve_context",
+        return ToolExecutionResult.fail(
+            tool_name="retrieve_context",
             output="Error: RAG orchestrator not available",
             metadata={"error": "missing_dependency"},
         )
@@ -36,7 +36,7 @@ def _retrieve_context_tool_handler(
     # Convert citations to dicts for JSON serialization in metadata
     citations_dict = [citation.model_dump() for citation in citations]
 
-    return ToolResponse(
+    return ToolExecutionResult.ok(
         tool_name="retrieve_context",
         output=context_str,
         metadata={"citations": citations_dict},

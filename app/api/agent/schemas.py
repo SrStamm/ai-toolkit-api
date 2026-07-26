@@ -2,7 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from enum import Enum
 
-from .tools.tools_registry import ToolResponse
+from .tools.tools_registry import ToolExecutionResult
 from .session_memory import Message
 
 
@@ -34,12 +34,12 @@ class AgentState(BaseModel):
     context: Optional[str] = None
     tool_results: List[str] = Field(default_factory=list)
     citations: List[dict] = Field(default_factory=list)  # Citaciones acumuladas
-    complete: bool = False
-    
+    complete: bool = Field(default=False, description="tool says 'Im done, show my output to the user'")
+
     # Archivos adjuntos (PDF)
     file_uuid: str | None = None
     filename: str | None = None
-    
+
     # Trazabilidad de herramientas
     last_tool: str | None = None
     last_tool_result: str | None = None
@@ -61,7 +61,7 @@ class AgentState(BaseModel):
         if metadata and "citations" in metadata:
             self.citations.extend(metadata["citations"])
 
-    def apply(self, response: ToolResponse):
+    def apply(self, response: ToolExecutionResult):
         self.context = response.output
 
         self.last_tool = response.tool_name
