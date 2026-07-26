@@ -128,9 +128,7 @@ export function useChatStream({
       const userMessage: Message = {
         id: generateId(),
         role: "user",
-        content: file
-          ? `[PDF: ${fileName}]\n${query.trim()}`
-          : query.trim(),
+        content: file ? `[PDF: ${fileName}]\n${query.trim()}` : query.trim(),
       };
 
       const aiMessage: Message = {
@@ -167,13 +165,27 @@ export function useChatStream({
                   : msg,
               ),
             );
+          } else if (event === "state_changed") {
+            if (data.state === "executing_tool" && data.tool) {
+              accumulatedSteps.push({ tool: data.tool, status: "running" });
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessage.id
+                    ? { ...msg, steps: [...accumulatedSteps] }
+                    : msg,
+                ),
+              );
+            }
           } else if (event === "tool_done") {
             const toolName: string = data.tool || data.tool_name || "unknown";
             const idx = accumulatedSteps.findLastIndex(
               (s) => s.tool === toolName && s.status === "running",
             );
             if (idx !== -1) {
-              accumulatedSteps[idx] = { ...accumulatedSteps[idx], status: "completed" };
+              accumulatedSteps[idx] = {
+                ...accumulatedSteps[idx],
+                status: "completed",
+              };
             }
             setMessages((prev) =>
               prev.map((msg) =>
@@ -226,7 +238,7 @@ export function useChatStream({
             }
 
             setIsLoading(false);
-          } else if (event === "error") {
+          } else if (event === "state_changed" && data.state === "failed") {
             console.error("Stream error:", data);
             setMessages((prev) =>
               prev.map((msg) =>
@@ -261,7 +273,8 @@ export function useChatStream({
     // Remove the last user message AND the streaming assistant placeholder
     setMessages((prev) => {
       const lastUserIdx = prev.findLastIndex((msg) => msg.role === "user");
-      if (lastUserIdx === -1) return prev.filter((msg) => msg.isStreaming !== true);
+      if (lastUserIdx === -1)
+        return prev.filter((msg) => msg.isStreaming !== true);
       // Remove user message at lastUserIdx and everything after (the AI placeholder)
       return prev.slice(0, lastUserIdx);
     });
