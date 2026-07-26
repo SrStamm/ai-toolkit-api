@@ -84,6 +84,9 @@ class Decision(BaseModel):
 class EventType(str, Enum):
     LLM_TOKEN = "llm_token" 
     DONE = 'done'
+    STATE_CHANGED = "state_changed"
+    TOOL_DONE = "tool_done"
+    AGENT_DECISION = "agent_decision"
 
 
 class AgentEvent(BaseModel):
@@ -91,3 +94,11 @@ class AgentEvent(BaseModel):
     content: str | None = None
     token: str | None = None
     metadata: dict = Field(default_factory=dict)
+
+class RuntimeState(str, Enum):
+    THINKING = "thinking"
+    EXECUTING_TOOL = "executing_tool"
+    WAITING_USER = "waiting_user"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    GENERATING = "generating"
