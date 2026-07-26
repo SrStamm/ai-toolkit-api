@@ -25,6 +25,9 @@ export interface Message {
   isStream?: boolean;
   citations?: Citation[];
   steps?: ToolStep[];
+  agentStatus?: "thinking" | "executing_tool" | "generating" | "waiting_user" | "completed";
+  currentTool?: string;
+  isWaitingForInput?: boolean;
 }
 
 const generateId = () =>
@@ -155,23 +158,50 @@ export function useChatStream({
         body,
         { provider, model, signal: controller.signal },
         (event, data) => {
-          if (event === "tool_start") {
-            const toolName: string = data.tool || data.tool_name || "unknown";
-            accumulatedSteps.push({ tool: toolName, status: "running" });
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === aiMessage.id
-                  ? { ...msg, steps: [...accumulatedSteps] }
-                  : msg,
-              ),
-            );
-          } else if (event === "state_changed") {
+          if (event === "state_changed") {
             if (data.state === "executing_tool" && data.tool) {
               accumulatedSteps.push({ tool: data.tool, status: "running" });
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === aiMessage.id
-                    ? { ...msg, steps: [...accumulatedSteps] }
+                    ? {
+                        ...msg,
+                        steps: [...accumulatedSteps],
+                        agentStatus: "executing_tool",
+                        currentTool: data.tool,
+                      }
+                    : msg,
+                ),
+              );
+            } else if (data.state === "thinking") {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessage.id
+                    ? { ...msg, agentStatus: "thinking" }
+                    : msg,
+                ),
+              );
+            } else if (data.state === "generating") {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessage.id
+                    ? { ...msg, agentStatus: "generating" }
+                    : msg,
+                ),
+              );
+            } else if (data.state === "waiting_user") {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessage.id
+                    ? { ...msg, isWaitingForInput: true, agentStatus: "waiting_user" }
+                    : msg,
+                ),
+              );
+            } else if (data.state === "completed") {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessage.id
+                    ? { ...msg, agentStatus: "completed" }
                     : msg,
                 ),
               );
