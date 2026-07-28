@@ -71,14 +71,16 @@ services:
     networks:
       - backend_net
 
-  # front:
-  #   build:
-  #     context: .
-  #     dockerfile: front-ai-toolkit/Dockerfile
-  #   ports:
-  #     - "3000:80"
-  #   networks:
-  #     - backend_net
+  front:
+    build:
+      context: front-ai-toolkit
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    networks:
+      - backend_net
+    environment:
+      - VITE_URL=http://localhost:8000
 
   ollama:
     profiles:
