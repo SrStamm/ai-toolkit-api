@@ -5,6 +5,11 @@ interface UploadFileResponse {
   filename: string;
 }
 
+interface SSEEvent {
+  eventName: string;
+  data: string;
+}
+
 export const uploadAgentFile = async (
   file: File,
 ): Promise<UploadFileResponse> => {
@@ -34,7 +39,7 @@ interface AgentAskOptions {
 export const agentAskStream = (
   body: AgentQuestion,
   options: AgentAskOptions = {},
-  onEvent: (event: string, data: any) => void,
+  onEvent: (event: SSEEvent) => void,
   onError?: (error: string) => void,
 ): void => {
   const headers: Record<string, string> = {
@@ -99,7 +104,7 @@ export const agentAskStream = (
             if (eventName && dataStr) {
               try {
                 const data = JSON.parse(dataStr);
-                onEvent(eventName, data);
+                onEvent({ eventName, data });
               } catch (err) {
                 console.error("Failed to parse SSE data:", dataStr, err);
               }
@@ -123,7 +128,7 @@ export const agentAskStream = (
           if (eventName && dataStr) {
             try {
               const data = JSON.parse(dataStr);
-              onEvent(eventName, data);
+              onEvent({ eventName, data });
             } catch (err) {
               console.error("Failed to parse final SSE data:", dataStr, err);
             }
