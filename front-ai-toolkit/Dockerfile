@@ -1,21 +1,23 @@
 # -- Etapa 1: Build
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copiar todo lo necesario para build
-COPY front-ai-toolkit/package*.json ./
-RUN npm install
+# Copiar manifiestos usando la ruta relativa al contexto raíz (.)
+COPY package.json pnpm-lock.yaml ./
 
-# Instalar types faltantes
-RUN npm install --save-dev @types/react-syntax-highlighter
+# Habilitar pnpm e instalar dependencias
+# RUN corepack enable && pnpm install --frozen-lockfile
+# RUN corepack enable && pnpm config set allow-builds true && pnpm install --frozen-lockfile
+RUN corepack enable && pnpm install --frozen-lockfile --dangerously-allow-all-builds && pnpm add -D @types/react-syntax-highlighter
 
-COPY front-ai-toolkit/ ./
+# Copiar el resto del código del frontend
+COPY . .
 
-# Copiar .env para Vite (VITE_* variables se injectan en build time)
-COPY front-ai-toolkit/.env .env.production.local
+# Copiar .env para Vite
+# COPY .env .env.production.local
 
-RUN npm run build
+RUN pnpm run build
 
 # -- Etapa 2: Servir con nginx
 FROM nginx:alpine
@@ -24,7 +26,7 @@ FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copiar configuración de nginx para SPA
-COPY front-ai-toolkit/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
