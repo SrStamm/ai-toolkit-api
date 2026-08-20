@@ -68,6 +68,20 @@ class HTTPRagClient implements RagClient {
     return response.json();
   }
 
+  async listSources(domain?: string): Promise<SourceMetadata[]> {
+    const response = await fetch(`${this.baseUrl}/documents`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Get List Sources failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
   async getSourceMetadata(source: string): Promise<SourceMetadata | null> {
     const response = await fetch(
       `${this.baseUrl}/documents/metadata?source=${encodeURIComponent(source)}`,
@@ -96,6 +110,9 @@ async function test() {
   );
 
   console.log(data3);
+
+  const data4 = await client.listSources("Docker");
+  console.log(data4);
 
   // const data2 = await client.ingest({
   //   url: "https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/",
