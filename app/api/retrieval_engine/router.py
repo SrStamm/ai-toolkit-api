@@ -1,8 +1,7 @@
 import structlog
 import shutil
 from pathlib import Path
-from ..agent.adapters.rag_adapter import QueryServiceAdapter, create_query_adapter
-from ..llamaindex_adapter.orchestrator import LlamaIndexOrchestrator
+from ..agent.adapters.rag_adapter import create_query_adapter
 from ..retrieval_engine.service import get_rag_service
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
@@ -24,6 +23,11 @@ def search_documents(
     ):
 
     return rag_adapter.get_context(request.query, request.top_k, request.domain)
+
+@router.delete("/documents/{source}")
+async def delete_document(source: str):
+    rag_service.vector_store.delete_by_filter({"source": source})
+    return {"status": "deleted", "source": source}
 
 @router.post(
     "/ingest/job",
@@ -78,3 +82,4 @@ async def get_status_job(job_id: str, job_serv: JobService = Depends(JobService)
         return state
     except Exception as e:
         return {"error": f"Job {job_id} not found"}, 404
+
