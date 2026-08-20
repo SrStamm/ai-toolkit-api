@@ -54,12 +54,30 @@ class HTTPRagClient implements RagClient {
   }
 
   async deleteDocument(source: string) {
-    const response = await fetch(`${this.baseUrl}/documents/${encodeURIComponent(source)}`, {
-      method: "DELETE",
-    });
+    const response = await fetch(
+      `${this.baseUrl}/documents/${encodeURIComponent(source)}`,
+      {
+        method: "DELETE",
+      },
+    );
 
     if (!response.ok) {
       throw new Error(`Delete Document failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async getSourceMetadata(source: string): Promise<SourceMetadata | null> {
+    const response = await fetch(
+      `${this.baseUrl}/documents/metadata?source=${encodeURIComponent(source)}`,
+      {
+        method: "GET",
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Get Document Metadata failed: ${response.status}`);
     }
 
     return response.json();
@@ -73,20 +91,20 @@ async function test() {
   });
   console.log(data);
 
-  const data3 = await client.deleteDocument(
+  const data3 = await client.getSourceMetadata(
     "https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/",
   );
 
   console.log(data3);
 
-  const data2 = await client.ingest({
-    url: "https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/",
-    source: "Docker",
-    domain: "Docker",
-    topic: "Merge",
-  });
+  // const data2 = await client.ingest({
+  //   url: "https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/",
+  //   source: "Docker",
+  //   domain: "Docker",
+  //   topic: "Merge",
+  // });
 
-  console.log(data2);
+  // console.log(data2);
 }
 
 test();

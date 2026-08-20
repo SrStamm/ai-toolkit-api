@@ -18,10 +18,7 @@ rag_service = get_rag_service()
 rag_adapter = create_query_adapter(rag_service)
 
 @router.post("/search")
-def search_documents(
-        request: SearchRequest,
-    ):
-
+def search_documents(request: SearchRequest):
     return rag_adapter.get_context(request.query, request.top_k, request.domain)
 
 @router.delete("/documents/{source}")
@@ -29,9 +26,22 @@ async def delete_document(source: str):
     rag_service.vector_store.delete_by_filter({"source": source})
     return {"status": "deleted", "source": source}
 
-@router.post(
-    "/ingest/job",
-)
+@router.get("/documents/metadata")
+async def get_documents_metadata(source: str):
+    metadata = rag_service.vector_store.get_source_metadata(source)
+    if metadata is None:
+        return {"status":"failed"}
+
+    output_str = (
+        f"Source: {metadata['source']}\n"
+        f"Domain: {metadata['domain']}\n"
+        f"Topic: {metadata['topic']}\n"
+        f"Chunks: {metadata['chunk_count']}\n"
+        f"Last Ingested: {metadata['last_ingested']}"
+    )
+    return { "status": "success", "metadata": metadata, "output": output_str}
+
+@router.post("/ingest/job")
 async def ingest_document_job(
     ingest: IngestRequest, job_serv: JobService = Depends(JobService)
 ):
@@ -73,9 +83,7 @@ async def ingest_file_job_endpoint(
     return {"status": "queued", "job_id": job_id}
 
 
-@router.get(
-    "/job/{job_id}",
-)
+@router.get("/job/{job_id}")
 async def get_status_job(job_id: str, job_serv: JobService = Depends(JobService)):
     try:
         state = job_serv.get_state(job_id)
