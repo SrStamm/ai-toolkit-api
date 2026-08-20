@@ -34,6 +34,24 @@ class HTTPRagClient implements RagClient {
 
     return response.json();
   }
+
+  async ingest(data: IngestData) {
+    const response = await fetch(`${this.baseUrl}/ingest/job`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: data.url,
+        domain: data.domain,
+        topic: data.topic,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ingest File Job failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
 }
 
 async function test() {
@@ -42,6 +60,15 @@ async function test() {
     domain: "Docker",
   });
   console.log(data);
+
+  const data2 = await client.ingest({
+    url: "https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/",
+    source: "Docker",
+    domain: "Docker",
+    topic: "Merge",
+  });
+
+  console.log(data2);
 }
 
 test();
