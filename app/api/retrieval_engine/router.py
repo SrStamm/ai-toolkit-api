@@ -1,16 +1,29 @@
+import structlog
 import shutil
 from pathlib import Path
+from ..agent.adapters.rag_adapter import QueryServiceAdapter, create_query_adapter
+from ..llamaindex_adapter.orchestrator import LlamaIndexOrchestrator
+from ..retrieval_engine.service import get_rag_service
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-import structlog
 
 from .jobs.celery_tasks import ingest_file_job, ingest_html_job
 from .jobs.job_service import JobService
-from .schemas import IngestRequest
+from .schemas import IngestRequest, SearchRequest
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
 logger = structlog.getLogger()
 
+# Use RAG service with adapter (retrieval_engine/)
+rag_service = get_rag_service()
+rag_adapter = create_query_adapter(rag_service)
+
+@router.post("/search")
+def search_documents(
+        request: SearchRequest,
+    ):
+
+    return rag_adapter.get_context(request.query, request.top_k, request.domain)
 
 @router.post(
     "/ingest/job",

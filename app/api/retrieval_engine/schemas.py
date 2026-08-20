@@ -13,6 +13,12 @@ class IngestRequest(BaseModel):
         return v.lower().strip()
 
 
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=5, max_length=1000)
+    domain: str | None = Field(None, max_length=50)
+    topic: str | None = Field(None, max_length=50)
+    top_k: int = Field(5)
+
 class QueryRequest(BaseModel):
     text: str = Field(min_length=5, max_length=1000)
     domain: str | None = Field(None, max_length=50)
