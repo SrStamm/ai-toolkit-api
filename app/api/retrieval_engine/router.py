@@ -1,3 +1,5 @@
+from typing import Optional
+
 import structlog
 import shutil
 from pathlib import Path
@@ -20,6 +22,29 @@ rag_adapter = create_query_adapter(rag_service)
 @router.post("/search")
 def search_documents(request: SearchRequest):
     return rag_adapter.get_context(request.query, request.top_k, request.domain)
+
+@router.post("/documents")
+async def get_documents(domain: str | None = None):
+    sources = rag_service.vector_store.list_sources(domain)
+    if not sources:
+        return {"status":"failed"}
+
+    output_lines = [f"Found {len(sources)} document(s):"]
+    for src in sources:
+        output_lines.append(
+            f"- {src['source']} ({src['domain']}/{src['topic']}) - {src['chunk_count']} chunks"
+        )
+
+    return {
+        "status": "success",
+        "metadata": 
+            { 
+                "documents": sources,
+                "count": len(sources)
+            }, 
+        "output": "\n".join(output_lines)
+    }
+
 
 @router.delete("/documents/{source}")
 async def delete_document(source: str):
