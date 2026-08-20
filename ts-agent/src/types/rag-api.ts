@@ -11,8 +11,15 @@ export interface SearchResult {
 
 export interface SearchOptions {
   topK?: number;
-  domain?: string;
+  domain: string;
   topic?: string;
+}
+
+export interface IngestData {
+  url: string;
+  source: string;
+  domain: string;
+  topic: string;
 }
 
 export interface IngestResult {
