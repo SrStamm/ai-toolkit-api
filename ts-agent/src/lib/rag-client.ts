@@ -52,6 +52,18 @@ class HTTPRagClient implements RagClient {
 
     return response.json();
   }
+
+  async deleteDocument(source: string) {
+    const response = await fetch(`${this.baseUrl}/documents/${encodeURIComponent(source)}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Delete Document failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
 }
 
 async function test() {
@@ -60,6 +72,12 @@ async function test() {
     domain: "Docker",
   });
   console.log(data);
+
+  const data3 = await client.deleteDocument(
+    "https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/",
+  );
+
+  console.log(data3);
 
   const data2 = await client.ingest({
     url: "https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/",
