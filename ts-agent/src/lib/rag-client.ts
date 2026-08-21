@@ -1,6 +1,9 @@
 import {
+  DeleteDocumentResponse,
+  DocumentMetadataResponse,
   IngestData,
   IngestResult,
+  ListDocumentsResponse,
   SearchOptions,
   SearchResult,
   SourceMetadata,
@@ -9,9 +12,9 @@ import {
 export interface RagClient {
   search(query: string, opts: SearchOptions): Promise<SearchResult>;
   ingest(data: IngestData): Promise<IngestResult>;
-  deleteDocument(source: string): Promise<void>;
-  getSourceMetadata(source: string): Promise<SourceMetadata | null>;
-  listSources(domain?: string): Promise<SourceMetadata[]>;
+  deleteDocument(source: string): Promise<DeleteDocumentResponse>;
+  getSourceMetadata(source: string): Promise<DocumentMetadataResponse | null>;
+  listSources(domain?: string): Promise<ListDocumentsResponse>;
 }
 
 class HTTPRagClient implements RagClient {
@@ -24,6 +27,7 @@ class HTTPRagClient implements RagClient {
       body: JSON.stringify({
         query,
         domain: opts.domain,
+        topic: opts.topic ?? null,
         top_k: opts.topK ?? 5,
       }),
     });
@@ -53,7 +57,7 @@ class HTTPRagClient implements RagClient {
     return response.json();
   }
 
-  async deleteDocument(source: string) {
+  async deleteDocument(source: string): Promise<DeleteDocumentResponse> {
     const response = await fetch(
       `${this.baseUrl}/documents/${encodeURIComponent(source)}`,
       {
@@ -68,7 +72,7 @@ class HTTPRagClient implements RagClient {
     return response.json();
   }
 
-  async listSources(domain?: string): Promise<SourceMetadata[]> {
+  async listSources(domain?: string): Promise<ListDocumentsResponse> {
     const response = await fetch(`${this.baseUrl}/documents`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -82,7 +86,9 @@ class HTTPRagClient implements RagClient {
     return response.json();
   }
 
-  async getSourceMetadata(source: string): Promise<SourceMetadata | null> {
+  async getSourceMetadata(
+    source: string,
+  ): Promise<DocumentMetadataResponse | null> {
     const response = await fetch(
       `${this.baseUrl}/documents/metadata?source=${encodeURIComponent(source)}`,
       {
@@ -125,3 +131,5 @@ async function test() {
 }
 
 test();
+
+export const httpClient = new HTTPRagClient("http://localhost:8000/rag");
