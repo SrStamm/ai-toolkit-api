@@ -9,6 +9,26 @@ export interface SearchResult {
   citations: Citation[];
 }
 
+export interface ListDocumentsResponse {
+  status: "success" | "failed";
+  metadata: {
+    documents: SourceMetadata[];
+    count: number;
+  };
+  output: string;
+}
+
+export interface DeleteDocumentResponse {
+  status: "deleted";
+  source: string;
+}
+
+export interface DocumentMetadataResponse {
+  status: "success" | "failed";
+  metadata: SourceMetadata | null;
+  output: string;
+}
+
 export interface SearchOptions {
   topK?: number;
   domain: string;
