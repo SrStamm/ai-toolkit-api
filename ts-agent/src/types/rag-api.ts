@@ -9,14 +9,16 @@ export interface SearchResult {
   citations: Citation[];
 }
 
-export interface ListDocumentsResponse {
-  status: "success" | "failed";
-  metadata: {
-    documents: SourceMetadata[];
-    count: number;
-  };
-  output: string;
-}
+export type ListDocumentsResponse =
+  | {
+      status: "success";
+      metadata: {
+        documents: SourceMetadata[];
+        count: number;
+      };
+      output: string;
+    }
+  | { status: "failed" };
 
 export interface DeleteDocumentResponse {
   status: "deleted";
