@@ -23,11 +23,9 @@ export interface DeleteDocumentResponse {
   source: string;
 }
 
-export interface DocumentMetadataResponse {
-  status: "success" | "failed";
-  metadata: SourceMetadata | null;
-  output: string;
-}
+export type DocumentMetadataResponse =
+  | { status: "success"; metadata: SourceMetadata; output: string }
+  | { status: "failed" };
 
 export interface SearchOptions {
   topK?: number;

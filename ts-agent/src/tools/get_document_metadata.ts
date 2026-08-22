@@ -11,6 +11,15 @@ registerTool({
   dependencies: [],
   execute: async (input, deps) => {
     const result = await httpClient.getSourceMetadata(input.source);
+
+    if (result.status === "failed") {
+      return {
+        ok: false,
+        error: `No existe metadata para "${input.source}"`,
+        retryable: false,
+      };
+    }
+
     return {
       ok: true,
       output: result.output,

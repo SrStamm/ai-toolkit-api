@@ -1,5 +1,6 @@
 import type { Citation } from "./rag-api";
 import type { Message } from "./llm";
+import { ToolMetadata } from "./tools";
 
 export enum ActionType {
   CALL_TOOL = "call_tool",
@@ -49,5 +50,5 @@ export type AgentEvent =
   | { type: "tool_done"; tool: string; status: "success" | "error" }
   | { type: "agent_decision"; decision: Decision }
   | { type: "state_changed"; state: RuntimeState; tool?: string }
-  | { type: "done"; content: string; metadata: DoneMetadata }
+  | { type: "done"; content: string; metadata: ToolMetadata }
   | { type: "error"; error: string };

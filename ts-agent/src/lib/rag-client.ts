@@ -12,7 +12,7 @@ export interface RagClient {
   search(query: string, opts: SearchOptions): Promise<SearchResult>;
   ingest(data: IngestData): Promise<IngestResult>;
   deleteDocument(source: string): Promise<DeleteDocumentResponse>;
-  getSourceMetadata(source: string): Promise<DocumentMetadataResponse | null>;
+  getSourceMetadata(source: string): Promise<DocumentMetadataResponse>;
   listSources(domain?: string): Promise<ListDocumentsResponse>;
 }
 
@@ -85,9 +85,7 @@ class HTTPRagClient implements RagClient {
     return response.json();
   }
 
-  async getSourceMetadata(
-    source: string,
-  ): Promise<DocumentMetadataResponse | null> {
+  async getSourceMetadata(source: string): Promise<DocumentMetadataResponse> {
     const response = await fetch(
       `${this.baseUrl}/documents/metadata?source=${encodeURIComponent(source)}`,
       {
