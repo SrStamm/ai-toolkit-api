@@ -57,8 +57,8 @@ export interface SourceMetadata {
   source: string;
   domain: string;
   topic: string;
-  chunkCount: number;
-  lastIngested: number;
+  chunk_count: number;
+  last_ingested: number;
 }
 
 export interface JobState {
