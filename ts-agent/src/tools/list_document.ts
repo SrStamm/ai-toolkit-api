@@ -11,6 +11,15 @@ registerTool({
   dependencies: [],
   execute: async (input, deps) => {
     const result = await httpClient.listSources(input.domain);
+
+    if (result.status === "failed") {
+      return {
+        ok: false,
+        error: "No hay documentos en la base de conocimiento",
+        retryable: false,
+      };
+    }
+
     return {
       ok: true,
       output: result.output,

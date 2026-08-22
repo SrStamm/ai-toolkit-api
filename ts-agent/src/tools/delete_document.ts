@@ -13,6 +13,7 @@ registerTool({
     const result = await httpClient.deleteDocument(input.source);
     return {
       ok: true,
+      output: `Documento ${result.source} eliminado`,
       metadata: { source: result.source },
     };
   },

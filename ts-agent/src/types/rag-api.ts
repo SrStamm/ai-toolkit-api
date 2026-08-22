@@ -9,25 +9,25 @@ export interface SearchResult {
   citations: Citation[];
 }
 
-export interface ListDocumentsResponse {
-  status: "success" | "failed";
-  metadata: {
-    documents: SourceMetadata[];
-    count: number;
-  };
-  output: string;
-}
+export type ListDocumentsResponse =
+  | {
+      status: "success";
+      metadata: {
+        documents: SourceMetadata[];
+        count: number;
+      };
+      output: string;
+    }
+  | { status: "failed" };
 
 export interface DeleteDocumentResponse {
   status: "deleted";
   source: string;
 }
 
-export interface DocumentMetadataResponse {
-  status: "success" | "failed";
-  metadata: SourceMetadata | null;
-  output: string;
-}
+export type DocumentMetadataResponse =
+  | { status: "success"; metadata: SourceMetadata; output: string }
+  | { status: "failed" };
 
 export interface SearchOptions {
   topK?: number;
@@ -57,8 +57,8 @@ export interface SourceMetadata {
   source: string;
   domain: string;
   topic: string;
-  chunkCount: number;
-  lastIngested: number;
+  chunk_count: number;
+  last_ingested: number;
 }
 
 export interface JobState {

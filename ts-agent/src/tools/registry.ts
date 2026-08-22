@@ -1,8 +1,11 @@
+import z from "zod";
 import { Tool } from "../types/tools";
 
 const tools = new Map<string, Tool>();
 
-export function registerTool(tool: Tool) {
+export function registerTool<TSchema extends z.ZodType>(
+  tool: Tool<TSchema>,
+): void {
   tools.set(tool.name, tool);
 }
 

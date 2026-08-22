@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Citation } from "./rag-api";
+import type { Citation, SourceMetadata } from "./rag-api";
 
 export type ToolResult =
   | { ok: true; output: string; metadata: ToolMetadata; complete?: boolean }
@@ -10,25 +10,25 @@ export interface ToolMetadata {
   taskId?: string;
   status?: string;
   source?: string;
-  documents?: unknown[];
+  documents?: SourceMetadata[];
   count?: number;
-  [key: string]: unknown;
 }
 
-export interface Tool<
-  TInput extends Record<string, unknown> = Record<string, unknown>,
-> {
+export interface Tool<TSchema extends z.ZodType = z.ZodType> {
   name: string;
   description: string;
-  schema: z.ZodSchema<TInput>;
+  schema: TSchema;
   dependencies: string[];
-  execute: (input: TInput, deps: DependencyContainer) => Promise<ToolResult>;
+  execute: (
+    input: z.output<TSchema>,
+    deps: DependencyContainer,
+  ) => Promise<ToolResult>;
 }
 
 export interface DependencyContainer {
   get<T>(key: string): T;
 }
 
-export interface CompleteToolResult extends ToolResult {
+export type CompleteToolResult = Extract<ToolResult, { ok: true }> & {
   complete: true;
-}
+};

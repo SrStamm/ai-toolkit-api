@@ -6,14 +6,13 @@ import {
   ListDocumentsResponse,
   SearchOptions,
   SearchResult,
-  SourceMetadata,
 } from "../types/rag-api";
 
 export interface RagClient {
   search(query: string, opts: SearchOptions): Promise<SearchResult>;
   ingest(data: IngestData): Promise<IngestResult>;
   deleteDocument(source: string): Promise<DeleteDocumentResponse>;
-  getSourceMetadata(source: string): Promise<DocumentMetadataResponse | null>;
+  getSourceMetadata(source: string): Promise<DocumentMetadataResponse>;
   listSources(domain?: string): Promise<ListDocumentsResponse>;
 }
 
@@ -86,9 +85,7 @@ class HTTPRagClient implements RagClient {
     return response.json();
   }
 
-  async getSourceMetadata(
-    source: string,
-  ): Promise<DocumentMetadataResponse | null> {
+  async getSourceMetadata(source: string): Promise<DocumentMetadataResponse> {
     const response = await fetch(
       `${this.baseUrl}/documents/metadata?source=${encodeURIComponent(source)}`,
       {
@@ -103,33 +100,5 @@ class HTTPRagClient implements RagClient {
     return response.json();
   }
 }
-
-async function test() {
-  const client = new HTTPRagClient("http://localhost:8000/rag");
-  const data = await client.search("Como funciona Merge en Docker?", {
-    domain: "Docker",
-  });
-  console.log(data);
-
-  const data3 = await client.getSourceMetadata(
-    "https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/",
-  );
-
-  console.log(data3);
-
-  const data4 = await client.listSources("Docker");
-  console.log(data4);
-
-  // const data2 = await client.ingest({
-  //   url: "https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/",
-  //   source: "Docker",
-  //   domain: "Docker",
-  //   topic: "Merge",
-  // });
-
-  // console.log(data2);
-}
-
-test();
 
 export const httpClient = new HTTPRagClient("http://localhost:8000/rag");
