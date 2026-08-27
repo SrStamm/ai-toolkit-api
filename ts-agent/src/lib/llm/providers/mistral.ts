@@ -28,7 +28,7 @@ interface MistralResponse {
   choices: MistralChoice[];
 }
 
-class MistralProvider implements LLMInterface {
+export class MistralProvider implements LLMInterface {
   private endpoint: string;
 
   constructor(
