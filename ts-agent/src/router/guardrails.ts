@@ -14,7 +14,7 @@ export function applyGuardrails(
     if (decision.tool_name == ctx.lastTool) {
       return { action: ActionType.FINAL_ANSWER };
     }
-
-    return decision;
   }
+
+  return decision;
 }
