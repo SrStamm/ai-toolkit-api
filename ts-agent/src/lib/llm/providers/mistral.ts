@@ -28,7 +28,7 @@ interface MistralResponse {
   choices: MistralChoice[];
 }
 
-class MistralProvider implements LLMInterface {
+export class MistralProvider implements LLMInterface {
   private endpoint: string;
 
   constructor(
@@ -79,28 +79,3 @@ class MistralProvider implements LLMInterface {
     };
   }
 }
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing env var: ${name}`);
-  return value;
-}
-
-async function test() {
-  const client = new MistralProvider(
-    "https://api.mistral.ai/v1",
-    requireEnv("MISTRAL_API_KEY"),
-    "mistral-small-latest",
-    0.5,
-  );
-
-  const response = await client.chat([], "Hola, como estas?");
-  console.log(response);
-  console.log(response.content);
-
-  const response2 = await client.chat([], "Que es una variable?");
-  console.log(response2);
-  console.log(response2.content);
-}
-
-test();
