@@ -3,7 +3,7 @@ import { Redis } from "ioredis";
 import { Message } from "../types/llm";
 
 const REDIS_URL = process.env.REDIS_URL;
-const redis = new Redis(REDIS_URL || "redis://localhost:6379");
+export const redisClient = new Redis(REDIS_URL || "redis://localhost:6379");
 
 interface SessionMemoryConfig {
   defaultWindowSize: number;
@@ -11,7 +11,7 @@ interface SessionMemoryConfig {
 }
 
 // Create class for Session Memory
-class SessionMemory {
+export class SessionMemory {
   private client: Redis;
   private windowSize: number;
   private ttlSeconds: number;
@@ -65,14 +65,3 @@ class SessionMemory {
     return await this.client.ttl(key);
   }
 }
-
-const client: SessionMemory = new SessionMemory(redis);
-
-async function test() {
-  await client.add("111", { content: "hola", role: "user" });
-
-  const response = await client.getHistory("111");
-  console.log(response);
-}
-
-test();
