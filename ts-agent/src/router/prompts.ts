@@ -71,11 +71,12 @@ export function buildFinalAnswerPrompt(context?: string): string {
     - Return ONLY the answer text, NO JSON wrapper needed
 
     ${
-      context ??
-      `
+      context
+        ? `
     ## Context
     ${context}
 `
+        : ""
     }
     `;
 }
