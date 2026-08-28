@@ -1,5 +1,4 @@
 import { LLMInterface } from "../lib/llm/client";
-import { getLlmProvider } from "../lib/llm/factory";
 import { buildFinalAnswerPrompt } from "../router/prompts";
 import { Router } from "../router/router";
 import { getTool } from "../tools/registry";
@@ -12,8 +11,9 @@ import {
   RuntimeState,
   StepTrace,
 } from "../types/agent";
-import { CostBreakdown } from "../types/llm";
+import { CostBreakdown, Message } from "../types/llm";
 import { ToolResult } from "../types/tools";
+import { redisClient, SessionMemory } from "../lib/session-memory";
 
 const DEFAULT_CONFIG: RuntimeConfig = {
   maxSteps: 5,
@@ -27,6 +27,7 @@ class Runtime {
   private llm: LLMInterface;
   private router: Router;
   private config: RuntimeConfig;
+  private sessionMemory: SessionMemory;
 
   private state: AgentState | null = null;
   private traces: StepTrace[] = [];
@@ -37,16 +38,26 @@ class Runtime {
     total_cost: 0,
   };
 
-  constructor(llm: LLMInterface, config?: Partial<RuntimeConfig>) {
+  constructor(
+    llm: LLMInterface,
+    sessionMemory: SessionMemory,
+    config?: Partial<RuntimeConfig>,
+  ) {
     this.llm = llm;
     this.router = new Router(llm);
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.sessionMemory = sessionMemory;
   }
 
   async main(input: AgentInput) {
-    this.state = this.initState(input);
+    this.state = await this.initState(input);
     this.traces = [];
     this.currentStep = 0;
+
+    await this.sessionMemory.add(input.session_id, {
+      role: "user",
+      content: input.query,
+    });
 
     return this.execution_loop();
   }
@@ -73,6 +84,12 @@ class Runtime {
 
         case ActionType.FINAL_ANSWER: {
           const answer = await this.generateAnswer();
+
+          await this.sessionMemory.add(this.state!.session_id, {
+            role: "assistant",
+            content: answer,
+          });
+
           return { content: answer, metadata: {} };
         }
 
@@ -95,6 +112,12 @@ class Runtime {
               `type: done, content: ${result.output}, metadata: ${result.metadata}`,
             );
             this.state!.status = RuntimeState.COMPLETED;
+
+            await this.sessionMemory.add(this.state!.session_id, {
+              role: "assistant",
+              content: result.output,
+            });
+
             return;
           }
 
@@ -161,14 +184,16 @@ class Runtime {
     return lastError!;
   }
 
-  private initState(input: AgentInput): AgentState {
+  private async initState(input: AgentInput): Promise<AgentState> {
+    const history = await this.sessionMemory.getHistory(input.session_id);
+
     return {
       query: input.query,
       session_id: input.session_id,
       domain: input.domain,
       file_uuid: input.file_uuid,
       filename: input.filename,
-      history: input.history ?? [],
+      history: history.length > 0 ? history : (input.history ?? []),
       status: RuntimeState.THINKING,
       toolContext: {
         citations: [],
@@ -207,17 +232,22 @@ class Runtime {
       ? this.state.toolContext.lastToolResult
       : undefined;
 
-    console.log("Tool Context: ", this.state?.toolContext);
-    console.log("Context: ", context);
-
     const systemPrompt = buildFinalAnswerPrompt(context);
 
-    console.log("systemPrompt: ", systemPrompt);
+    const messages: Message[] = [
+      ...(this.state!.history ?? []),
+      { role: "user", content: this.state!.query },
+    ];
 
-    const response = await this.llm.chat(
-      [{ role: "user", content: this.state!.query }],
-      systemPrompt,
-    );
+    const response = await this.llm.chat(messages, systemPrompt);
     return response.content;
   }
+}
+
+export function createRuntime(
+  llm: LLMInterface,
+  config?: Partial<RuntimeConfig>,
+) {
+  const sessionMemory = new SessionMemory(redisClient);
+  return new Runtime(llm, sessionMemory, config);
 }

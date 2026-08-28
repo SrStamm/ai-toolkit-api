@@ -20,7 +20,6 @@ registerTool({
     });
     return {
       ok: true,
-      complete: true,
       output: result.context,
       metadata: { citations: result.citations },
     };
