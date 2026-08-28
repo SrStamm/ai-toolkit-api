@@ -1,7 +1,7 @@
 import { LLMInterface } from "../lib/llm/client";
 import "../tools";
 import { listTools } from "../tools/registry";
-import { ActionType, ToolContext } from "../types/agent";
+import { ActionType, Decision, ToolContext } from "../types/agent";
 import { Message } from "../types/llm";
 import { applyGuardrails } from "./guardrails";
 import { buildRoutingPrompt } from "./prompts";
@@ -11,7 +11,7 @@ const decisionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("call_tool"),
     tool_name: z.string(),
-    args: z.record(z.unknown()).default({}),
+    args: z.record(z.string(), z.unknown()).default({}),
   }),
   z.object({
     action: z.literal("ask_user"),
@@ -22,7 +22,7 @@ const decisionSchema = z.discriminatedUnion("action", [
   }),
 ]);
 
-class Router {
+export class Router {
   private llm: LLMInterface;
 
   constructor(llm: LLMInterface) {
@@ -37,7 +37,11 @@ class Router {
     return toolList;
   }
 
-  async getDecision(query: string, ctx: ToolContext, history?: Message[]) {
+  async getDecision(
+    query: string,
+    ctx: ToolContext,
+    history?: Message[],
+  ): Promise<Decision> {
     const toolList = this.buildToolList();
 
     const systemPrompt = buildRoutingPrompt(toolList, ctx);

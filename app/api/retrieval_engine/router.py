@@ -21,7 +21,14 @@ rag_adapter = create_query_adapter(rag_service)
 
 @router.post("/search")
 def search_documents(request: SearchRequest):
-    return rag_adapter.get_context(request.query, request.top_k, request.domain)
+    context_str, citations = rag_adapter.get_context(
+            request.query, request.top_k, request.domain
+        )
+
+    return {
+        "context": context_str,
+        "citations": [c.model_dump() for c in citations]
+    }
 
 @router.post("/documents")
 async def get_documents(domain: str | None = None):
