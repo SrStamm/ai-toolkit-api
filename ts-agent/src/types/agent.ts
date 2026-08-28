@@ -1,5 +1,5 @@
 import type { Citation } from "./rag-api";
-import type { Message } from "./llm";
+import type { CostBreakdown, Message } from "./llm";
 import { ToolMetadata } from "./tools";
 
 export enum ActionType {
@@ -36,6 +36,18 @@ export interface ToolContext {
   citations: Citation[];
 }
 
+export interface AgentState {
+  query: string;
+  session_id: string;
+  top_k?: number;
+  domain?: string;
+  history?: Message[];
+  file_uuid?: string;
+  filename?: string;
+  status: RuntimeState;
+  toolContext: ToolContext;
+}
+
 export type Decision =
   | {
       action: ActionType.CALL_TOOL;
@@ -46,6 +58,43 @@ export type Decision =
   | { action: ActionType.FINAL_ANSWER };
 
 export type AgentEvent =
+  | { type: "llm_token"; token: string }
+  | { type: "tool_done"; tool: string; status: "success" | "error" }
+  | { type: "agent_decision"; decision: Decision }
+  | { type: "state_changed"; state: RuntimeState; tool?: string }
+  | { type: "done"; content: string; metadata: ToolMetadata }
+  | { type: "error"; error: string };
+
+export interface StepTrace {
+  step: number;
+  action: ActionType;
+  toolName?: string;
+  args: Record<string, unknown>;
+  resultPreview?: string;
+  durationMs: number;
+  timestamp: number;
+  error?: string;
+}
+
+export interface RuntimeConfig {
+  maxSteps: number;
+  stepTimeoutMs: number;
+  totalTimeoutMs: number;
+  maxRetries: number;
+  retryBackoffMs: number;
+}
+
+export interface LoopResult {
+  status: RuntimeState;
+  steps: StepTrace[];
+  finalAnswer?: string;
+  totalDurationMs: number;
+  totalTokens: number;
+  totalCost: CostBreakdown;
+  error?: string;
+}
+
+export type StreamEvent =
   | { type: "llm_token"; token: string }
   | { type: "tool_done"; tool: string; status: "success" | "error" }
   | { type: "agent_decision"; decision: Decision }
