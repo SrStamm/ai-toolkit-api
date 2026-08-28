@@ -58,7 +58,7 @@ export function buildRoutingPrompt(toolList: string, ctx: ToolContext): string {
     `;
 }
 
-export function buildFinalAnswerPrompt(): string {
+export function buildFinalAnswerPrompt(context?: string): string {
   return `
     You are an expert assistant that answers questions.
     Instructions:
@@ -69,5 +69,13 @@ export function buildFinalAnswerPrompt(): string {
       - Use **bold** for emphasis
       - Use lists for steps or multiple points
     - Return ONLY the answer text, NO JSON wrapper needed
+
+    ${
+      context ??
+      `
+    ## Context
+    ${context}
+`
+    }
     `;
 }
