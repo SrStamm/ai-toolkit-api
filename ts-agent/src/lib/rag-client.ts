@@ -101,4 +101,8 @@ class HTTPRagClient implements RagClient {
   }
 }
 
-export const httpClient = new HTTPRagClient("http://localhost:8000/rag");
+const RAG_URL = process.env.RAG_URL;
+
+export const httpClient = new HTTPRagClient(
+  RAG_URL || "http://localhost:8000/rag",
+);
