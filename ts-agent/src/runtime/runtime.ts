@@ -134,6 +134,9 @@ class Runtime {
             type: "done",
             session_id: this.state.session_id,
             content: decision.message,
+            metadata: {
+              citations: this.state.toolContext.citations,
+            },
           });
           return;
         }
@@ -165,6 +168,7 @@ class Runtime {
             yield this.emitEvent("done", {
               type: "done",
               session_id: this.state.session_id,
+              content: result.output,
               metadata: result.metadata,
             });
             yield this.emitEvent("state_changed", {
@@ -193,6 +197,10 @@ class Runtime {
           yield this.emitEvent("done", {
             type: "done",
             session_id: this.state.session_id,
+            content: answer,
+            metadata: {
+              citations: this.state.toolContext.citations,
+            },
           });
 
           yield this.emitEvent("state_changed", {
