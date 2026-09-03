@@ -96,8 +96,24 @@ class Runtime {
     return content.trim();
   }
 
+  async updateMemory(
+    query: string,
+    role: "user" | "assistant",
+    session_id: string,
+  ) {
+    const userMessage: Message = {
+      role: role,
+      content: query,
+    };
+
+    await this.sessionMemory.add(session_id, userMessage);
+    this.state.history.push(userMessage);
+  }
+
   async *runStream(input: AgentInput) {
     this.state = await this.initState(input);
+
+    await this.updateMemory(input.query, "user", input.session_id);
 
     yield this.emitEvent("state_changed", {
       type: "state_changed",
@@ -154,6 +170,7 @@ class Runtime {
           });
 
           this.updateContext(decision.tool_name, result);
+
           yield this.emitEvent("tool_done", {
             type: "tool_done",
             tool: decision.tool_name,
@@ -175,6 +192,7 @@ class Runtime {
               type: "state_changed",
               state: RuntimeState.COMPLETED,
             });
+
             return;
           }
           break;
@@ -207,6 +225,9 @@ class Runtime {
             type: "state_changed",
             state: RuntimeState.COMPLETED,
           });
+
+          await this.updateMemory(answer, "assistant", this.state.session_id);
+
           return;
         }
       }
@@ -239,8 +260,6 @@ class Runtime {
         this.state!.history,
       );
 
-      console.log("decision: ", decision);
-
       switch (decision.action) {
         case ActionType.ASK_USER: {
           return { content: decision.message, metadata: {} };
@@ -272,9 +291,6 @@ class Runtime {
           this.updateContext(decision.tool_name, result);
 
           if (result.ok && result.complete) {
-            console.log(
-              `type: done, content: ${result.output}, metadata: ${result.metadata}`,
-            );
             this.state!.status = RuntimeState.COMPLETED;
 
             await this.sessionMemory.add(this.state!.session_id, {
@@ -296,8 +312,6 @@ class Runtime {
     decision: Extract<Decision, { action: ActionType.CALL_TOOL }>,
   ): Promise<ToolResult> {
     const tool = getTool(decision.tool_name);
-
-    console.log(tool);
 
     if (!tool) {
       return {
@@ -328,8 +342,6 @@ class Runtime {
           durationMs: Date.now() - startMs,
           timestamp: Date.now(),
         });
-
-        console.log("toolResult: ", result);
 
         return result as ToolResult;
       } catch (err) {

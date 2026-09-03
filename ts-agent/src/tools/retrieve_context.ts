@@ -13,15 +13,25 @@ registerTool({
   }),
   dependencies: [],
   execute: async (input, deps) => {
-    const result = await httpClient.search(input.query, {
+    const results = await httpClient.search(input.query, {
       topK: input.top_k,
       domain: input.domain ?? "",
       topic: input.topic,
     });
+
+    if (!results || results.length === 0) {
+      return {
+        ok: true,
+        output:
+          "No se encontró contexto relevante en la base de conocimientos para esta consulta.",
+        metadata: { citations: [] },
+      };
+    }
+
     return {
       ok: true,
-      output: result.context,
-      metadata: { citations: result.citations },
+      output: results.context,
+      metadata: { citations: results.citations },
     };
   },
 });

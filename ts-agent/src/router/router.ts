@@ -58,7 +58,6 @@ export class Router {
 
       return finalDecision;
     } catch (error) {
-      console.warn(error);
       return { action: ActionType.FINAL_ANSWER };
     }
   }
