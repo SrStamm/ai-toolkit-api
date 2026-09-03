@@ -10,6 +10,7 @@ import {
   RuntimeConfig,
   RuntimeState,
   StepTrace,
+  StreamEvent,
 } from "../types/agent";
 import { CostBreakdown, Message } from "../types/llm";
 import { ToolResult } from "../types/tools";
@@ -47,6 +48,161 @@ class Runtime {
     this.router = new Router(llm);
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.sessionMemory = sessionMemory;
+  }
+
+  private emitEvent<T extends StreamEvent["type"]>(
+    event: T,
+    data: Extract<StreamEvent, { type: T }>,
+  ): string {
+    return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  }
+
+  extractAnswer(answer: string): string {
+    if (!answer) return "";
+
+    let content = answer.trim();
+
+    content = content.replace(/^```(?:json|text)?\n?/, "").replace(/```$/, "");
+
+    if (content.startsWith("{") && content.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(content);
+        if (typeof parsed === "object" && parsed !== null) {
+          // Common field names that might contain the answer
+          const possibleKeys = [
+            "answer",
+            "response",
+            "text",
+            "content",
+            "message",
+          ];
+          for (const key of possibleKeys) {
+            if (key in parsed && typeof parsed[key] === "string") {
+              content = parsed[key];
+              break;
+            }
+          }
+          // If single key, use its value
+          const keys = Object.keys(parsed);
+          if (keys.length === 1 && typeof parsed[keys[0]] === "string") {
+            content = parsed[keys[0]];
+          }
+        }
+      } catch {
+        // Not valid JSON, continue with original
+      }
+    }
+
+    return content.trim();
+  }
+
+  async *runStream(input: AgentInput) {
+    this.state = await this.initState(input);
+
+    yield this.emitEvent("state_changed", {
+      type: "state_changed",
+      state: RuntimeState.THINKING,
+    });
+
+    for (
+      this.currentStep = 0;
+      this.currentStep < this.config.maxSteps;
+      this.currentStep++
+    ) {
+      const decision = await this.router.getDecision(
+        this.state.query,
+        this.state.toolContext,
+        this.state.history,
+      );
+
+      yield this.emitEvent("agent_decision", {
+        type: "agent_decision",
+        decision: decision,
+      });
+
+      switch (decision.action) {
+        case ActionType.ASK_USER: {
+          yield this.emitEvent("state_changed", {
+            type: "state_changed",
+            state: RuntimeState.WAITING_USER,
+          });
+          yield this.emitEvent("llm_token", {
+            type: "llm_token",
+            token: decision.message,
+          });
+          yield this.emitEvent("done", {
+            type: "done",
+            session_id: this.state.session_id,
+            content: decision.message,
+          });
+          return;
+        }
+
+        case ActionType.CALL_TOOL: {
+          yield this.emitEvent("state_changed", {
+            type: "state_changed",
+            state: RuntimeState.EXECUTING_TOOL,
+            tool: decision.tool_name,
+          });
+
+          const result = await this.executeToolWithRetry({
+            ...decision,
+            args: { ...decision.args, query: this.state.query },
+          });
+
+          this.updateContext(decision.tool_name, result);
+          yield this.emitEvent("tool_done", {
+            type: "tool_done",
+            tool: decision.tool_name,
+            status: result.ok ? "success" : "error",
+          });
+
+          if (result.ok && result.complete) {
+            yield this.emitEvent("llm_token", {
+              type: "llm_token",
+              token: result.output,
+            });
+            yield this.emitEvent("done", {
+              type: "done",
+              session_id: this.state.session_id,
+              metadata: result.metadata,
+            });
+            yield this.emitEvent("state_changed", {
+              type: "state_changed",
+              state: RuntimeState.COMPLETED,
+            });
+            return;
+          }
+          break;
+        }
+
+        case ActionType.FINAL_ANSWER: {
+          yield this.emitEvent("state_changed", {
+            type: "state_changed",
+            state: RuntimeState.GENERATING,
+          });
+
+          const raw = await this.generateAnswer();
+          const answer = this.extractAnswer(raw);
+
+          yield this.emitEvent("llm_token", {
+            type: "llm_token",
+            token: answer,
+          });
+
+          yield this.emitEvent("done", {
+            type: "done",
+            session_id: this.state.session_id,
+          });
+
+          yield this.emitEvent("state_changed", {
+            type: "state_changed",
+            state: RuntimeState.COMPLETED,
+          });
+          return;
+        }
+      }
+    }
   }
 
   async main(input: AgentInput) {
