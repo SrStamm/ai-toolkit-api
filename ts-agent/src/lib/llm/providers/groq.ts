@@ -37,7 +37,8 @@ export class GroqProvider implements LLMInterface {
       model: this.model,
       messages: [{ role: "system", content: systemPrompt }, ...messages],
       temperature: this.temperature,
-      // Groq NO soporta response_format — lo omitimos
+      // Force plain text output — Groq/Llama interprets JSON as tool calls otherwise
+      tool_choice: "none",
     };
 
     const response = await fetch(this.endpoint, {
