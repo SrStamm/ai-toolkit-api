@@ -1,5 +1,3 @@
-const url = import.meta.env.VITE_URL;
-
 interface FetchProps {
   path: string;
   method: string;
@@ -20,7 +18,7 @@ const Fetch = async <T = unknown>({ path, method, body, headers }: FetchProps): 
   };
 
   try {
-    const response = await fetch(url + path, fetchOptions);
+    const response = await fetch(path, fetchOptions);
 
     // Verificar el content-type
 

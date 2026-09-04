@@ -11,6 +11,14 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    proxy: {
+      // ts-agent: agente (streaming, routing, LLM)
+      "/agent": "http://localhost:3000",
+      // python backend: RAG (ingestión, búsqueda, documentos)
+      "/rag": "http://localhost:8000",
+    },
+  },
   build: {
     chunkSizeWarningLimit: 600, // Increase warning limit for syntax highlighter
     rollupOptions: {
