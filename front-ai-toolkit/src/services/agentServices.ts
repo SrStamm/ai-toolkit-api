@@ -39,7 +39,7 @@ interface AgentAskOptions {
 export const agentAskStream = (
   body: AgentQuestion,
   options: AgentAskOptions = {},
-  onEvent: (event: SSEEvent) => void,
+  onEvent: (eventName: string, data: Record<string, unknown>) => void,
   onError?: (error: string) => void,
 ): void => {
   const headers: Record<string, string> = {
@@ -104,7 +104,7 @@ export const agentAskStream = (
             if (eventName && dataStr) {
               try {
                 const data = JSON.parse(dataStr);
-                onEvent({ eventName, data });
+                onEvent(eventName, data);
               } catch (err) {
                 console.error("Failed to parse SSE data:", dataStr, err);
               }
@@ -128,7 +128,7 @@ export const agentAskStream = (
           if (eventName && dataStr) {
             try {
               const data = JSON.parse(dataStr);
-              onEvent({ eventName, data });
+              onEvent(eventName, data);
             } catch (err) {
               console.error("Failed to parse final SSE data:", dataStr, err);
             }
