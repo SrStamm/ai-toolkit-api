@@ -37,7 +37,8 @@ export class GroqProvider implements LLMInterface {
       model: this.model,
       messages: [{ role: "system", content: systemPrompt }, ...messages],
       temperature: this.temperature,
-      // Force plain text output — Groq/Llama interprets JSON as tool calls otherwise
+      // Explicitly disable tool calling — Groq/Llama activates it by default
+      tools: [],
       tool_choice: "none",
     };
 
