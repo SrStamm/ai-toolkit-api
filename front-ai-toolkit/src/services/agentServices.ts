@@ -5,11 +5,6 @@ interface UploadFileResponse {
   filename: string;
 }
 
-interface SSEEvent {
-  eventName: string;
-  data: string;
-}
-
 export const uploadAgentFile = async (
   file: File,
 ): Promise<UploadFileResponse> => {
