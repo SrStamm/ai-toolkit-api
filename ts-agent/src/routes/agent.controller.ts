@@ -35,7 +35,15 @@ export async function streamAgentLoop(req: Request, res: Response) {
   });
 
   try {
-    const runtime = createRuntime(getLlmProvider());
+    const providerOverride = req.headers["x-llm-provider"] as string | undefined;
+    const modelOverride = req.headers["x-llm-model"] as string | undefined;
+
+    const llm = getLlmProvider({
+      provider: providerOverride,
+      model: modelOverride,
+    });
+
+    const runtime = createRuntime(llm);
 
     for await (const event of runtime.runStream(parsed.data)) {
       if (isAborted) break;
