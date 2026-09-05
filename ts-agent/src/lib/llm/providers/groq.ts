@@ -1,34 +1,26 @@
-// Mistral provider
+// Groq provider — OpenAI-compatible, no response_format support
 import { LLMResponse, Message } from "../../../types/llm";
 import { LLMInterface } from "../client";
-import { configDotenv } from "dotenv";
 
-configDotenv();
-
-interface MistralUsage {
+interface GroqUsage {
   prompt_tokens: number;
-  total_tokens: number;
   completion_tokens: number;
+  total_tokens: number;
 }
 
-interface MistralMessage {
-  role: string;
-  content: string;
-}
-
-interface MistralChoice {
+interface GroqChoice {
   index: number;
   finish_reason: string;
-  message: MistralMessage;
+  message: { role: string; content: string };
 }
 
-interface MistralResponse {
+interface GroqResponse {
   model: string;
-  usage: MistralUsage;
-  choices: MistralChoice[];
+  usage: GroqUsage;
+  choices: GroqChoice[];
 }
 
-export class MistralProvider implements LLMInterface {
+export class GroqProvider implements LLMInterface {
   private endpoint: string;
 
   constructor(
@@ -41,17 +33,13 @@ export class MistralProvider implements LLMInterface {
   }
 
   async chat(messages: Message[], systemPrompt: string): Promise<LLMResponse> {
-    messages = [{ role: "system", content: systemPrompt }, ...messages];
-
-    // Request data
     const data = {
       model: this.model,
-      messages: messages,
+      messages: [{ role: "system", content: systemPrompt }, ...messages],
       temperature: this.temperature,
-
-      ...(this.baseUrl.includes("mistral") && {
-        response_format: { type: "json_object" },
-      }),
+      // Explicitly disable tool calling — Groq/Llama activates it by default
+      tools: [],
+      tool_choice: "none",
     };
 
     const response = await fetch(this.endpoint, {
@@ -64,10 +52,11 @@ export class MistralProvider implements LLMInterface {
     });
 
     if (!response.ok) {
-      throw new Error(`LLM client failed: ${response.status}`);
+      const body = await response.text().catch(() => "");
+      throw new Error(`Groq API failed: ${response.status} — ${body}`);
     }
 
-    const raw = (await response.json()) as MistralResponse;
+    const raw = (await response.json()) as GroqResponse;
 
     return {
       content: raw.choices[0].message.content,
@@ -78,7 +67,7 @@ export class MistralProvider implements LLMInterface {
       },
       cost: { input_cost: 0, output_cost: 0, total_cost: 0 },
       model: raw.model,
-      provider: "mistral",
+      provider: "groq",
     };
   }
 }

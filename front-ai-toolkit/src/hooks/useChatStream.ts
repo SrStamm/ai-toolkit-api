@@ -25,7 +25,12 @@ export interface Message {
   isStream?: boolean;
   citations?: Citation[];
   steps?: ToolStep[];
-  agentStatus?: "thinking" | "executing_tool" | "generating" | "waiting_user" | "completed";
+  agentStatus?:
+    | "thinking"
+    | "executing_tool"
+    | "generating"
+    | "waiting_user"
+    | "completed";
   currentTool?: string;
   isWaitingForInput?: boolean;
 }
@@ -145,8 +150,8 @@ export function useChatStream({
       setIsLoading(true);
 
       const body: AgentQuestion = {
-        text: query.trim(),
-        session_id: sessionId || undefined,
+        query: query.trim(),
+        sessionId: sessionId || "111",
         file_uuid: fileUuid,
         filename: fileName,
       };
@@ -193,7 +198,11 @@ export function useChatStream({
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === aiMessage.id
-                    ? { ...msg, isWaitingForInput: true, agentStatus: "waiting_user" }
+                    ? {
+                        ...msg,
+                        isWaitingForInput: true,
+                        agentStatus: "waiting_user",
+                      }
                     : msg,
                 ),
               );
@@ -234,10 +243,10 @@ export function useChatStream({
               ),
             );
           } else if (event === "done") {
-            if (data.session_id) {
-              setSessionId(data.session_id);
+            if (data.sessionId) {
+              setSessionId(data.sessionId);
             }
-            const finalContent = accumulatedContent || data.answer;
+            const finalContent = accumulatedContent || data.content;
             const currentTaskId = data.task_id || undefined;
 
             setMessages((prev) =>
