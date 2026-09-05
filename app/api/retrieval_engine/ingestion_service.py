@@ -94,11 +94,11 @@ class IngestionService:
         if news:
             await report(60, "Generating embeddings...")
 
-            # Timeout calculation
-            estimated_time = len(news) * 0.5
-            timeout = max(60, estimated_time * 2)
-
             BATCH_SIZE = 20
+
+            # Timeout per batch: ~3s/chunk on CPU (conservative for low-resource machines)
+            # with a 2x safety margin. Minimum 120s per batch.
+            timeout = max(120, BATCH_SIZE * 3 * 2)
 
             for i in range(0, len(news), BATCH_SIZE):
                 batch = news[i : i + BATCH_SIZE]
