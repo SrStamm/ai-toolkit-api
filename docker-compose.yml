@@ -71,16 +71,32 @@ services:
     networks:
       - backend_net
 
+  ts-agent:
+    build:
+      context: ./ts-agent
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./ts-agent/.env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - RAG_URL=http://api:8000/rag
+    depends_on:
+      - redis
+      - api
+    networks:
+      - backend_net
+
   front:
     build:
       context: front-ai-toolkit
       dockerfile: Dockerfile
     ports:
-      - "3000:80"
+      - "5173:80"
     networks:
       - backend_net
-    environment:
-      - VITE_URL=http://localhost:8000
 
   ollama:
     profiles:
