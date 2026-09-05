@@ -165,7 +165,7 @@ export function useChatStream({
         (event, data) => {
           if (event === "state_changed") {
             if (data.state === "executing_tool" && data.tool) {
-              accumulatedSteps.push({ tool: data.tool, status: "running" });
+              accumulatedSteps.push({ tool: data.tool as string, status: "running" });
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === aiMessage.id
@@ -173,7 +173,7 @@ export function useChatStream({
                         ...msg,
                         steps: [...accumulatedSteps],
                         agentStatus: "executing_tool",
-                        currentTool: data.tool,
+                        currentTool: data.tool as string,
                       }
                     : msg,
                 ),
@@ -216,9 +216,9 @@ export function useChatStream({
               );
             }
           } else if (event === "tool_done") {
-            const toolName: string = data.tool || data.tool_name || "unknown";
+            const toolName: string = (data.tool as string) || (data.tool_name as string) || "unknown";
             const idx = accumulatedSteps.findLastIndex(
-              (s) => s.tool === toolName && s.status === "running",
+              (s: ToolStep) => s.tool === toolName && s.status === "running",
             );
             if (idx !== -1) {
               accumulatedSteps[idx] = {
@@ -234,7 +234,7 @@ export function useChatStream({
               ),
             );
           } else if (event === "llm_token") {
-            accumulatedContent += data.token || "";
+            accumulatedContent += (data.token as string) || "";
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === aiMessage.id
@@ -244,9 +244,9 @@ export function useChatStream({
             );
           } else if (event === "done") {
             if (data.sessionId) {
-              setSessionId(data.sessionId);
+              setSessionId(data.sessionId as string);
             }
-            const finalContent = accumulatedContent || data.content;
+            const finalContent = accumulatedContent || (data.content as string);
             const currentTaskId = data.task_id || undefined;
 
             setMessages((prev) =>
@@ -256,7 +256,7 @@ export function useChatStream({
                       ...msg,
                       content: parseAnswer(finalContent),
                       isStreaming: false,
-                      citations: data.citations || [],
+                      citations: (data.citations as Citation[]) || [],
                       // No more taskId in message - it goes to global context
                     }
                   : msg,
@@ -267,7 +267,7 @@ export function useChatStream({
             // Backend unified: all tasks use same format (status, step, progress)
             if (currentTaskId) {
               addJob({
-                id: currentTaskId,
+                id: currentTaskId as string,
                 type: "job",
                 source: "agent-chat",
                 status: "pending",
@@ -284,7 +284,7 @@ export function useChatStream({
                 msg.id === aiMessage.id
                   ? {
                       ...msg,
-                      content: "Error: " + (data.error || "Unknown error"),
+                      content: "Error: " + ((data.error as string) || "Unknown error"),
                       isStreaming: false,
                     }
                   : msg,
@@ -311,7 +311,7 @@ export function useChatStream({
 
     // Remove the last user message AND the streaming assistant placeholder
     setMessages((prev) => {
-      const lastUserIdx = prev.findLastIndex((msg) => msg.role === "user");
+      const lastUserIdx = prev.findLastIndex((msg: Message) => msg.role === "user");
       if (lastUserIdx === -1)
         return prev.filter((msg) => msg.isStreaming !== true);
       // Remove user message at lastUserIdx and everything after (the AI placeholder)

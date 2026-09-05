@@ -16,7 +16,9 @@ export default defineConfig({
       // ts-agent: agente (streaming, routing, LLM)
       "/agent": "http://localhost:3000",
       // python backend: RAG (ingestión, búsqueda, documentos)
-      "/rag": "http://localhost:8000",
+
+      "/rag": "http://localhost:8000/",
+      // "/rag": "http://100.110.201.56:8000/",
     },
   },
   build: {
