@@ -2,6 +2,8 @@ import { type Request, type Response } from "express";
 import { AgentInputSchema } from "./agent.type";
 import { createRuntime } from "../runtime/runtime";
 import { getLlmProvider } from "../lib/llm/factory";
+import { loadProvidersConfig } from "../config/loader";
+import { ProviderConfigValidator } from "../config/validator";
 
 export async function streamAgentLoop(req: Request, res: Response) {
   const parsed = AgentInputSchema.safeParse(req.body);
@@ -56,5 +58,41 @@ export async function streamAgentLoop(req: Request, res: Response) {
     if (!res.writableEnded) {
       res.end();
     }
+  }
+}
+
+export function listProviders(_req: Request, res: Response) {
+  try {
+    const config = loadProvidersConfig();
+    const validator = new ProviderConfigValidator();
+    const errors = validator.validate(config);
+
+    if (errors.length > 0) {
+      res.status(500).json({
+        error: "Invalid provider configuration",
+        details: errors,
+      });
+      return;
+    }
+
+    // Map internal camelCase to frontend snake_case
+    const response = {
+      providers: config.providers.map((p) => ({
+        name: p.name,
+        default_model: p.defaultModel ?? null,
+        models: p.models.map((m) => ({
+          name: m.name,
+          max_tokens: m.maxTokens,
+          supports_tools: m.supportsTools,
+        })),
+      })),
+    };
+
+    res.json(response);
+  } catch (err) {
+    console.error("[providers] Error loading config:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Failed to load providers",
+    });
   }
 }
