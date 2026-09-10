@@ -1,7 +1,6 @@
+import { SessionMemory, redisClient } from "../lib/session-memory";
+import { logger } from "../lib/logger";
 import { LLMInterface } from "../lib/llm/client";
-import { buildFinalAnswerPrompt } from "../router/prompts";
-import { Router } from "../router/router";
-import { getTool } from "../tools/registry";
 import {
   ActionType,
   AgentInput,
@@ -11,31 +10,36 @@ import {
   RuntimeState,
   StepTrace,
   StreamEvent,
+  ToolContext,
 } from "../types/agent";
-import { CostBreakdown, Message } from "../types/llm";
+import { Message } from "../types/llm";
 import { ToolResult } from "../types/tools";
-import { redisClient, SessionMemory } from "../lib/session-memory";
+import { Router } from "../router/router";
+import { getTool } from "../tools/registry";
+import { buildFinalAnswerPrompt } from "../router/prompts";
+
+const log = logger.child("runtime");
 
 const DEFAULT_CONFIG: RuntimeConfig = {
   maxSteps: 5,
   stepTimeoutMs: 30_000,
   totalTimeoutMs: 120_000,
   maxRetries: 2,
-  retryBackoffMs: 500,
+  retryBackoffMs: 1_000,
 };
 
-class Runtime {
+export class Runtime {
   private llm: LLMInterface;
   private router: Router;
-  private config: RuntimeConfig;
   private sessionMemory: SessionMemory;
-
-  private state: AgentState | null = null;
+  private config: RuntimeConfig;
+  private state!: AgentState;
   private traces: StepTrace[] = [];
   private currentStep = 0;
-  private totalCost: CostBreakdown = {
-    input_cost: 0,
-    output_cost: 0,
+
+  private stats = {
+    total_input_tokens: 0,
+    total_output_tokens: 0,
     total_cost: 0,
   };
 
@@ -107,10 +111,19 @@ class Runtime {
     };
 
     await this.sessionMemory.add(session_id, userMessage);
-    this.state.history.push(userMessage);
+    this.state?.history?.push(userMessage);
+
+    log.debug("memory_updated", { session_id, role, content_len: query.length });
   }
 
   async *runStream(input: AgentInput) {
+    const startTime = Date.now();
+    log.info("stream_started", {
+      session_id: input.session_id,
+      query_preview: input.query.slice(0, 100),
+      has_file: !!input.file_uuid,
+    });
+
     this.state = await this.initState(input);
 
     await this.updateMemory(input.query, "user", input.session_id);
@@ -125,11 +138,23 @@ class Runtime {
       this.currentStep < this.config.maxSteps;
       this.currentStep++
     ) {
+      log.debug("step_begin", {
+        step: this.currentStep,
+        session_id: input.session_id,
+      });
+
       const decision = await this.router.getDecision(
         this.state.query,
         this.state.toolContext,
         this.state.history,
       );
+
+      log.info("agent_decision", {
+        step: this.currentStep,
+        action: decision.action,
+        tool_name: "tool_name" in decision ? decision.tool_name : undefined,
+        session_id: input.session_id,
+      });
 
       yield this.emitEvent("agent_decision", {
         type: "agent_decision",
@@ -138,6 +163,10 @@ class Runtime {
 
       switch (decision.action) {
         case ActionType.ASK_USER: {
+          log.info("action_ask_user", {
+            step: this.currentStep,
+            message_preview: decision.message.slice(0, 100),
+          });
           yield this.emitEvent("state_changed", {
             type: "state_changed",
             state: RuntimeState.WAITING_USER,
@@ -154,10 +183,20 @@ class Runtime {
               citations: this.state.toolContext.citations,
             },
           });
+          log.info("stream_completed", {
+            reason: "ask_user",
+            duration_ms: Date.now() - startTime,
+            steps: this.currentStep + 1,
+          });
           return;
         }
 
         case ActionType.CALL_TOOL: {
+          log.info("action_call_tool", {
+            step: this.currentStep,
+            tool_name: decision.tool_name,
+            args: decision.args,
+          });
           yield this.emitEvent("state_changed", {
             type: "state_changed",
             state: RuntimeState.EXECUTING_TOOL,
@@ -178,6 +217,10 @@ class Runtime {
           });
 
           if (result.ok && result.complete) {
+            log.info("tool_complete_early_return", {
+              tool_name: decision.tool_name,
+              output_len: result.output.length,
+            });
             yield this.emitEvent("llm_token", {
               type: "llm_token",
               token: result.output,
@@ -193,12 +236,19 @@ class Runtime {
               state: RuntimeState.COMPLETED,
             });
 
+            log.info("stream_completed", {
+              reason: "tool_complete",
+              tool_name: decision.tool_name,
+              duration_ms: Date.now() - startTime,
+              steps: this.currentStep + 1,
+            });
             return;
           }
           break;
         }
 
         case ActionType.FINAL_ANSWER: {
+          log.info("action_final_answer", { step: this.currentStep });
           yield this.emitEvent("state_changed", {
             type: "state_changed",
             state: RuntimeState.GENERATING,
@@ -228,10 +278,22 @@ class Runtime {
 
           await this.updateMemory(answer, "assistant", this.state.session_id);
 
+          log.info("stream_completed", {
+            reason: "final_answer",
+            answer_len: answer.length,
+            duration_ms: Date.now() - startTime,
+            steps: this.currentStep + 1,
+          });
           return;
         }
       }
     }
+
+    log.warn("max_steps_reached", {
+      max_steps: this.config.maxSteps,
+      session_id: input.session_id,
+      duration_ms: Date.now() - startTime,
+    });
   }
 
   async main(input: AgentInput) {
@@ -259,6 +321,12 @@ class Runtime {
         this.state!.toolContext,
         this.state!.history,
       );
+
+      log.info("loop_decision", {
+        step: this.currentStep,
+        action: decision.action,
+        tool_name: "tool_name" in decision ? decision.tool_name : undefined,
+      });
 
       switch (decision.action) {
         case ActionType.ASK_USER: {
@@ -314,6 +382,10 @@ class Runtime {
     const tool = getTool(decision.tool_name);
 
     if (!tool) {
+      log.error("tool_not_found", {
+        tool_name: decision.tool_name,
+        available_tools: "retrieve_context,list_documents,delete_document,get_document_metadata",
+      });
       return {
         ok: false,
         error: `Tool '${decision.tool_name}' not found`,
@@ -327,10 +399,29 @@ class Runtime {
       const startMs = Date.now();
 
       try {
+        log.debug("tool_execution_start", {
+          tool_name: decision.tool_name,
+          attempt,
+          max_retries: this.config.maxRetries,
+          args: decision.args,
+        });
+
         const result = await Promise.race([
           tool.execute(decision.args, /* deps */ null as any),
           this.timeout(this.config.stepTimeoutMs),
         ]);
+
+        const durationMs = Date.now() - startMs;
+        const toolResult = result as ToolResult;
+
+        log.info("tool_execution_completed", {
+          tool_name: decision.tool_name,
+          attempt,
+          ok: toolResult.ok,
+          duration_ms: durationMs,
+          output_len: toolResult.ok ? toolResult.output.length : undefined,
+          error: toolResult.ok ? undefined : toolResult.error,
+        });
 
         // Registrar trace
         this.traces.push({
@@ -338,30 +429,60 @@ class Runtime {
           action: ActionType.CALL_TOOL,
           toolName: decision.tool_name,
           args: decision.args,
-          resultPreview: result.ok ? result.output.slice(0, 200) : result.error,
-          durationMs: Date.now() - startMs,
+          resultPreview: toolResult.ok ? toolResult.output.slice(0, 200) : toolResult.error,
+          durationMs,
           timestamp: Date.now(),
         });
 
-        return result as ToolResult;
+        return toolResult;
       } catch (err) {
+        const durationMs = Date.now() - startMs;
+        const errorMsg = err instanceof Error ? err.message : String(err);
+
+        log.error("tool_execution_error", {
+          tool_name: decision.tool_name,
+          attempt,
+          duration_ms: durationMs,
+          error: errorMsg,
+          is_timeout: errorMsg === "Step timeout",
+        });
+
         lastError = {
           ok: false,
-          error: err instanceof Error ? err.message : String(err),
+          error: errorMsg,
           retryable: true,
         };
 
         if (attempt < this.config.maxRetries) {
-          await this.sleep(this.config.retryBackoffMs * (attempt + 1));
+          const backoff = this.config.retryBackoffMs * (attempt + 1);
+          log.debug("tool_retry_backoff", {
+            tool_name: decision.tool_name,
+            attempt,
+            next_attempt: attempt + 1,
+            backoff_ms: backoff,
+          });
+          await this.sleep(backoff);
         }
       }
     }
+
+    log.error("tool_all_retries_exhausted", {
+      tool_name: decision.tool_name,
+      total_attempts: this.config.maxRetries + 1,
+      last_error: lastError?.error,
+    });
 
     return lastError!;
   }
 
   private async initState(input: AgentInput): Promise<AgentState> {
     const history = await this.sessionMemory.getHistory(input.session_id);
+
+    log.debug("state_initialized", {
+      session_id: input.session_id,
+      history_size: history.length,
+      has_domain: !!input.domain,
+    });
 
     return {
       query: input.query,
@@ -391,6 +512,14 @@ class Runtime {
         ctx.citations.push(...result.metadata.citations);
       }
     }
+
+    log.debug("context_updated", {
+      tool_name: toolName,
+      ok: result.ok,
+      has_context: ctx.hasContext,
+      execution_count: ctx.toolExecutionCount,
+      citation_count: ctx.citations.length,
+    });
   }
 
   private timeout(ms: number): Promise<never> {
@@ -408,6 +537,12 @@ class Runtime {
       ? this.state.toolContext.lastToolResult
       : undefined;
 
+    log.debug("generate_answer_start", {
+      has_context: !!context,
+      context_len: context?.length,
+      history_size: this.state!.history?.length,
+    });
+
     const systemPrompt = buildFinalAnswerPrompt(context);
 
     const messages: Message[] = [
@@ -416,6 +551,11 @@ class Runtime {
     ];
 
     const response = await this.llm.chat(messages, systemPrompt);
+
+    log.debug("generate_answer_completed", {
+      response_len: response.content.length,
+    });
+
     return response.content;
   }
 }

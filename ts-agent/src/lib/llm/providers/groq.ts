@@ -1,6 +1,9 @@
 // Groq provider — OpenAI-compatible, no response_format support
 import { LLMResponse, Message } from "../../../types/llm";
 import { LLMInterface } from "../client";
+import { logger } from "../../logger";
+
+const log = logger.child("llm:groq");
 
 interface GroqUsage {
   prompt_tokens: number;
@@ -42,6 +45,14 @@ export class GroqProvider implements LLMInterface {
       tool_choice: "none",
     };
 
+    log.debug("api_call_start", {
+      model: this.model,
+      message_count: data.messages.length,
+      temperature: this.temperature,
+    });
+
+    const startTime = Date.now();
+
     const response = await fetch(this.endpoint, {
       method: "POST",
       headers: {
@@ -53,10 +64,24 @@ export class GroqProvider implements LLMInterface {
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
+      log.error("api_call_failed", {
+        status: response.status,
+        body_preview: body.slice(0, 200),
+        duration_ms: Date.now() - startTime,
+      });
       throw new Error(`Groq API failed: ${response.status} — ${body}`);
     }
 
     const raw = (await response.json()) as GroqResponse;
+
+    log.info("api_call_completed", {
+      model: raw.model,
+      prompt_tokens: raw.usage.prompt_tokens,
+      completion_tokens: raw.usage.completion_tokens,
+      total_tokens: raw.usage.total_tokens,
+      finish_reason: raw.choices[0]?.finish_reason,
+      duration_ms: Date.now() - startTime,
+    });
 
     return {
       content: raw.choices[0].message.content,
