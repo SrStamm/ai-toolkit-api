@@ -118,15 +118,20 @@ export class Runtime {
 
   async *runStream(input: AgentInput) {
     const startTime = Date.now();
+
+    // Generate session_id if not provided
+    const sessionId = input.session_id || crypto.randomUUID();
+    const resolvedInput = { ...input, session_id: sessionId };
+
     log.info("stream_started", {
-      session_id: input.session_id,
+      session_id: sessionId,
       query_preview: input.query.slice(0, 100),
       has_file: !!input.file_uuid,
     });
 
-    this.state = await this.initState(input);
+    this.state = await this.initState(resolvedInput);
 
-    await this.updateMemory(input.query, "user", input.session_id);
+    await this.updateMemory(input.query, "user", sessionId);
 
     yield this.emitEvent("state_changed", {
       type: "state_changed",
@@ -140,7 +145,7 @@ export class Runtime {
     ) {
       log.debug("step_begin", {
         step: this.currentStep,
-        session_id: input.session_id,
+        session_id: sessionId,
       });
 
       const decision = await this.router.getDecision(
@@ -153,7 +158,7 @@ export class Runtime {
         step: this.currentStep,
         action: decision.action,
         tool_name: "tool_name" in decision ? decision.tool_name : undefined,
-        session_id: input.session_id,
+        session_id: sessionId,
       });
 
       yield this.emitEvent("agent_decision", {
@@ -291,17 +296,20 @@ export class Runtime {
 
     log.warn("max_steps_reached", {
       max_steps: this.config.maxSteps,
-      session_id: input.session_id,
+      session_id: sessionId,
       duration_ms: Date.now() - startTime,
     });
   }
 
   async main(input: AgentInput) {
-    this.state = await this.initState(input);
+    const sessionId = input.session_id || crypto.randomUUID();
+    const resolvedInput = { ...input, session_id: sessionId };
+
+    this.state = await this.initState(resolvedInput);
     this.traces = [];
     this.currentStep = 0;
 
-    await this.sessionMemory.add(input.session_id, {
+    await this.sessionMemory.add(sessionId, {
       role: "user",
       content: input.query,
     });
@@ -476,17 +484,18 @@ export class Runtime {
   }
 
   private async initState(input: AgentInput): Promise<AgentState> {
-    const history = await this.sessionMemory.getHistory(input.session_id);
+    const sessionId = input.session_id || crypto.randomUUID();
+    const history = await this.sessionMemory.getHistory(sessionId);
 
     log.debug("state_initialized", {
-      session_id: input.session_id,
+      session_id: sessionId,
       history_size: history.length,
       has_domain: !!input.domain,
     });
 
     return {
       query: input.query,
-      session_id: input.session_id,
+      session_id: sessionId,
       domain: input.domain,
       file_uuid: input.file_uuid,
       filename: input.filename,
