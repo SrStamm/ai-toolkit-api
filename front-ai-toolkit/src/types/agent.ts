@@ -1,8 +1,6 @@
 export interface AgentQuestion {
   query: string;
   sessionId?: string;
-  file_uuid?: string;
-  filename?: string;
 }
 
 export interface AgentResponse {

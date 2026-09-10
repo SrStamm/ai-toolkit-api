@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { agentAskStream, uploadAgentFile } from "@/services/agentServices";
+import { agentAskStream, uploadAndIngestFile } from "@/services/agentServices";
 import type { AgentQuestion } from "@/types/agent";
 import { showToastError } from "@/components/toast";
 import { useJobContext } from "@/contexts/JobContext";
@@ -117,15 +117,12 @@ export function useChatStream({
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      // If a file is attached, upload it first to get a UUID
-      let fileUuid: string | undefined;
-      let fileName: string | undefined;
-
+      // If a file is attached, upload and ingest it directly via RAG
       if (file) {
         try {
-          const result = await uploadAgentFile(file);
-          fileUuid = result.file_uuid;
-          fileName = result.filename;
+          const domain = file.name.replace(/\.pdf$/i, "");
+          const topic = query.trim();
+          await uploadAndIngestFile(file, domain, topic);
         } catch (err) {
           showToastError("Error al subir el archivo");
           setIsLoading(false);
@@ -136,7 +133,7 @@ export function useChatStream({
       const userMessage: Message = {
         id: generateId(),
         role: "user",
-        content: file ? `[PDF: ${fileName}]\n${query.trim()}` : query.trim(),
+        content: file ? `[PDF: ${file.name}]\n${query.trim()}` : query.trim(),
       };
 
       const aiMessage: Message = {
@@ -151,9 +148,7 @@ export function useChatStream({
 
       const body: AgentQuestion = {
         query: query.trim(),
-        sessionId: sessionId || "111",
-        file_uuid: fileUuid,
-        filename: fileName,
+        sessionId: sessionId || undefined,
       };
 
       let accumulatedContent = "";
