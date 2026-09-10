@@ -10,20 +10,54 @@ import { z } from "zod";
 
 const log = logger.child("router");
 
+// Schema for ask_user that accepts both formats:
+// - { action: "ask_user", message: "..." }  (top-level)
+// - { action: "ask_user", args: { message: "..." } }  (nested in args)
+const askUserSchema = z
+  .object({
+    action: z.literal("ask_user"),
+    message: z.string().optional(),
+    args: z
+      .object({ message: z.string().optional() })
+      .passthrough()
+      .optional(),
+  })
+  .transform((val) => ({
+    action: "ask_user" as const,
+    message: val.message ?? val.args?.message ?? "",
+  }));
+
 const decisionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("call_tool"),
     tool_name: z.string(),
     args: z.record(z.string(), z.unknown()).default({}),
   }),
-  z.object({
-    action: z.literal("ask_user"),
-    message: z.string(),
-  }),
+  askUserSchema,
   z.object({
     action: z.literal("final_answer"),
   }),
 ]);
+
+// Fallback parser for when discriminatedUnion fails (handles ask_user with args.message)
+function parseDecisionFallback(raw: unknown): Decision | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+
+  if (obj.action === "ask_user") {
+    const message =
+      typeof obj.message === "string"
+        ? obj.message
+        : typeof obj.args === "object" &&
+            obj.args !== null &&
+            typeof (obj.args as Record<string, unknown>).message === "string"
+          ? ((obj.args as Record<string, unknown>).message as string)
+          : "";
+    return { action: ActionType.ASK_USER, message };
+  }
+
+  return null;
+}
 
 export class Router {
   private llm: LLMInterface;
@@ -68,8 +102,21 @@ export class Router {
 
     try {
       const parsed = JSON.parse(response.content);
-      const decision = decisionSchema.parse(parsed);
-      const finalDecision = applyGuardrails(decision as Decision, ctx);
+      let decision: Decision;
+
+      try {
+        decision = decisionSchema.parse(parsed) as Decision;
+      } catch {
+        // Fallback for ask_user with args.message format
+        const fallback = parseDecisionFallback(parsed);
+        if (fallback) {
+          decision = fallback;
+        } else {
+          throw new Error("Failed to parse decision");
+        }
+      }
+
+      const finalDecision = applyGuardrails(decision, ctx);
 
       log.info("decision_parsed", {
         raw_action: decision.action,
