@@ -247,7 +247,11 @@ export function useChatStream({
               setSessionId(data.sessionId as string);
             }
             const finalContent = accumulatedContent || (data.content as string);
-            const currentTaskId = data.task_id || undefined;
+            // Support both formats: top-level task_id (legacy) and metadata.job_id (tools)
+            const currentTaskId =
+              (data as any).task_id ||
+              (data as any).metadata?.job_id ||
+              undefined;
 
             setMessages((prev) =>
               prev.map((msg) =>
@@ -257,14 +261,12 @@ export function useChatStream({
                       content: parseAnswer(finalContent),
                       isStreaming: false,
                       citations: (data.citations as Citation[]) || [],
-                      // No more taskId in message - it goes to global context
                     }
                   : msg,
               ),
             );
 
-            // Add task to global context if task_id is present
-            // Backend unified: all tasks use same format (status, step, progress)
+            // Add job to global context so the frontend can poll its progress
             if (currentTaskId) {
               addJob({
                 id: currentTaskId as string,
