@@ -19,7 +19,7 @@ export enum RuntimeState {
 
 export interface AgentInput {
   query: string;
-  session_id: string;
+  session_id?: string;
   top_k?: number;
   domain?: string; // Dominio opcional para filtrar búsquedas
   history?: Message[];
@@ -99,5 +99,5 @@ export type StreamEvent =
   | { type: "tool_done"; tool: string; status: "success" | "error" }
   | { type: "agent_decision"; decision: Decision }
   | { type: "state_changed"; state: RuntimeState; tool?: string }
-  | { type: "done"; content: string; metadata: ToolMetadata; sessionId: string }
+  | { type: "done"; content: string; metadata: ToolMetadata; sessionId?: string }
   | { type: "error"; error: string };
