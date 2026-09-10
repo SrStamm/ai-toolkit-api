@@ -3,6 +3,8 @@ import { ToolContext } from "../types/agent";
 export function buildRoutingPrompt(toolList: string, ctx: ToolContext): string {
   return `You are a routing system that decides what action to take.
 
+    IMPORTANT: Do NOT call tools directly. Do NOT use function calling or tool_use. Return ONLY a plain JSON object as text. Never invoke any tool — just decide and output the JSON.
+
     Available tools:
     ${toolList}
 
@@ -50,11 +52,13 @@ export function buildRoutingPrompt(toolList: string, ctx: ToolContext): string {
     - Input: "[Archivo adjunto: manual.pdf (UUID: abc-123)]\n\ningerí este pdf sobre fastapi con topic routing" → Output: {"action": "call_tool", "tool_name": "ingest_pdf_file", "args": {"file_uuid": "abc-123", "filename": "manual.pdf", "domain": "fastapi", "topic": "routing"}}
 
 
-    Return ONLY this JSON format:
+    Return ONLY this JSON format (plain text, no function calling):
     {"action": "call_tool", "tool_name":"retrieve_context", "args": {"top_k": 5, "domain":"fastapi"}}
     {"action": "final_answer"}
     {"action": "ask_user", "args": {"message": "your question here"}}
     {"action": "call_tool", "tool_name": "tool_name", "args": {"param": "value"}}
+
+    REMEMBER: Output JSON text only. Do NOT use tool_use or function_calling APIs.
     `;
 }
 
