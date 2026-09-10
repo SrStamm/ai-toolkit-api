@@ -1,6 +1,9 @@
 // Create Redis client
 import { Redis } from "ioredis";
 import { Message } from "../types/llm";
+import { logger } from "./logger";
+
+const log = logger.child("session-memory");
 
 const REDIS_URL = process.env.REDIS_URL;
 export const redisClient = new Redis(REDIS_URL || "redis://localhost:6379", {
@@ -10,6 +13,14 @@ export const redisClient = new Redis(REDIS_URL || "redis://localhost:6379", {
   },
   maxRetriesPerRequest: 3,
   enableReadyCheck: true,
+});
+
+redisClient.on("connect", () => {
+  log.info("redis_connected", { url: REDIS_URL || "redis://localhost:6379" });
+});
+
+redisClient.on("error", (err) => {
+  log.error("redis_error", { error: err.message });
 });
 
 interface SessionMemoryConfig {
@@ -43,11 +54,18 @@ export class SessionMemory {
         .ltrim(key, 0, this.windowSize - 1) // Trim to window size
         .expire(key, this.ttlSeconds) // Refresh TTL
         .exec();
+
+      log.debug("message_saved", {
+        session_id: sessionId,
+        role: message.role,
+        content_len: message.content.length,
+        window_size: this.windowSize,
+      });
     } catch (err) {
-      console.error(
-        `[SessionMemory] Error guardando mensaje para ${sessionId}:`,
-        err,
-      );
+      log.error("message_save_failed", {
+        session_id: sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -60,12 +78,19 @@ export class SessionMemory {
 
       if (!rawMessages) return [];
 
-      return rawMessages.map((m) => JSON.parse(m)).reverse();
+      const history = rawMessages.map((m) => JSON.parse(m)).reverse();
+
+      log.debug("history_retrieved", {
+        session_id: sessionId,
+        message_count: history.length,
+      });
+
+      return history;
     } catch (err) {
-      console.error(
-        `[SessionMemory] Error obteniendo historial para ${sessionId}:`,
-        err,
-      );
+      log.error("history_retrieve_failed", {
+        session_id: sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return [];
     }
   }
@@ -73,6 +98,12 @@ export class SessionMemory {
   async clear(sessionId: string) {
     const key = this.generateKey(sessionId);
     const result = await this.client.del(key);
+
+    log.debug("session_cleared", {
+      session_id: sessionId,
+      existed: result > 0,
+    });
+
     return result > 0;
   }
 

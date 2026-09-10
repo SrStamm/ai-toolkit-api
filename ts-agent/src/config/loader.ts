@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import yaml from "js-yaml";
 import type { AppConfig, ProviderConfig, ModelConfig } from "../types/provider";
+import { logger } from "../lib/logger";
+
+const log = logger.child("config");
 
 // --- Raw YAML shapes (snake_case as written in the file) ---
 
@@ -47,14 +50,24 @@ export function loadProvidersConfig(configPath?: string): AppConfig {
   const resolvedPath =
     configPath ?? join(__dirname, "providers.yaml");
 
+  log.debug("loading_config", { path: resolvedPath });
+
   const file = readFileSync(resolvedPath, "utf-8");
   const raw = yaml.load(file) as RawAppConfig;
 
   if (!raw?.providers || !Array.isArray(raw.providers)) {
+    log.error("config_invalid", { reason: "missing providers array" });
     throw new Error("Invalid providers.yaml: missing 'providers' array");
   }
 
-  return {
+  const config = {
     providers: raw.providers.map(mapProvider),
   };
+
+  log.info("config_loaded", {
+    provider_count: config.providers.length,
+    providers: config.providers.map((p) => p.name),
+  });
+
+  return config;
 }
