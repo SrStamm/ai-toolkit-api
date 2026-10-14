@@ -31,7 +31,7 @@ registerTool({
         topic: input.topic,
       });
 
-      if (!results || results.length === 0) {
+      if (!results || !results.context || !results.citations?.length) {
         log.info("execute_no_results", {
           duration_ms: Date.now() - startTime,
         });
