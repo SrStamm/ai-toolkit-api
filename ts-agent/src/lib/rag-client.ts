@@ -2,7 +2,7 @@ import {
   DeleteDocumentResponse,
   DocumentMetadataResponse,
   IngestData,
-  IngestResult,
+  IngestJobResponse,
   ListDocumentsResponse,
   SearchOptions,
   SearchResult,
@@ -13,7 +13,7 @@ const log = logger.child("rag-client");
 
 export interface RagClient {
   search(query: string, opts: SearchOptions): Promise<SearchResult>;
-  ingest(data: IngestData): Promise<IngestResult>;
+  ingest(data: IngestData): Promise<IngestJobResponse>;
   deleteDocument(source: string): Promise<DeleteDocumentResponse>;
   getSourceMetadata(source: string): Promise<DocumentMetadataResponse>;
   listSources(domain?: string): Promise<ListDocumentsResponse>;
@@ -22,7 +22,7 @@ export interface RagClient {
 class HTTPRagClient implements RagClient {
   constructor(private baseUrl: string) {}
 
-  async search(query: string, opts: SearchOptions) {
+  async search(query: string, opts: SearchOptions): Promise<SearchResult> {
     log.debug("search_start", {
       query_preview: query.slice(0, 80),
       top_k: opts.topK,
@@ -50,7 +50,7 @@ class HTTPRagClient implements RagClient {
       throw new Error(`RAG search failed: ${response.status}`);
     }
 
-    const result = await response.json();
+    const result = (await response.json()) as SearchResult;
 
     log.info("search_completed", {
       duration_ms: Date.now() - startTime,
@@ -61,7 +61,7 @@ class HTTPRagClient implements RagClient {
     return result;
   }
 
-  async ingest(data: IngestData) {
+  async ingest(data: IngestData): Promise<IngestJobResponse> {
     log.debug("ingest_start", {
       url: data.url,
       domain: data.domain,
@@ -87,7 +87,7 @@ class HTTPRagClient implements RagClient {
       throw new Error(`Ingest File Job failed: ${response.status}`);
     }
 
-    const result = await response.json();
+    const result = (await response.json()) as IngestJobResponse;
 
     log.info("ingest_completed", {
       duration_ms: Date.now() - startTime,
@@ -118,7 +118,7 @@ class HTTPRagClient implements RagClient {
       throw new Error(`Delete Document failed: ${response.status}`);
     }
 
-    const result = await response.json();
+    const result = (await response.json()) as DeleteDocumentResponse;
 
     log.info("delete_completed", {
       source,
@@ -147,12 +147,13 @@ class HTTPRagClient implements RagClient {
       throw new Error(`Get List Sources failed: ${response.status}`);
     }
 
-    const result = await response.json();
+    const result = (await response.json()) as ListDocumentsResponse;
 
     log.info("list_sources_completed", {
       duration_ms: Date.now() - startTime,
       status: result.status,
-      document_count: result.metadata?.count ?? 0,
+      document_count:
+        result.status === "success" ? (result.metadata.count ?? 0) : 0,
     });
 
     return result;
@@ -179,7 +180,7 @@ class HTTPRagClient implements RagClient {
       throw new Error(`Get Document Metadata failed: ${response.status}`);
     }
 
-    const result = await response.json();
+    const result = (await response.json()) as DocumentMetadataResponse;
 
     log.info("get_metadata_completed", {
       source,

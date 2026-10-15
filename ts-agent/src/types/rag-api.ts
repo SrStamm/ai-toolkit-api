@@ -42,15 +42,10 @@ export interface IngestData {
   topic: string;
 }
 
-export interface IngestResult {
-  chunksProcessed: number;
-  new: number;
-  updated: number;
-}
-
-export interface IngestJobResult {
-  status: "queued" | "processing" | "completed" | "failed";
-  jobId: string;
+export interface IngestJobResponse {
+  status: "queued";
+  url: string;
+  job_id: string;
 }
 
 export interface SourceMetadata {
