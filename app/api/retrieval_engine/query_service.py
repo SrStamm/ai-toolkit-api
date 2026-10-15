@@ -87,6 +87,44 @@ class QueryService:
 
         return citations
 
+    def _build_context(self, chunks: list) -> str:
+        """Format chunks into numbered context blocks."""
+        return "\n\n".join(
+            f"[{i + 1}]\n{chunk.payload['text']}"
+            for i, chunk in enumerate(chunks)
+        )
+
+    def get_context(
+        self,
+        query: str,
+        top_k: int = 5,
+        domain: str | None = None,
+        topic: str | None = None,
+    ) -> tuple[str, list[Citation]]:
+        """
+        Retrieve reranked context + citations without generating an answer.
+
+        Exposed for external agent runtimes (ts-agent) that run their own
+        LLM loop and only need the knowledge-base context.
+
+        Args:
+            query: User's query string.
+            top_k: Maximum number of chunks to include in the context.
+            domain: Optional domain filter.
+            topic: Optional topic filter.
+
+        Returns:
+            Tuple of (formatted context string, list of citations).
+        """
+        query_result = self.retrieve(text=query, domain=domain, topic=topic)
+        if not query_result:
+            return "", []
+
+        rerank_result = self.reranker.rerank(query, query_result)[:top_k]
+        return self._build_context(rerank_result), self._build_citations(
+            rerank_result
+        )
+
     def _parse_answer(self, content: str) -> str:
         """Parse LLM answer from response."""
         try:
@@ -127,10 +165,7 @@ class QueryService:
         self.logger.info("chunks_reranked", quantity=len(rerank_result))
 
         # Build context
-        context = "\n\n".join(
-            f"[{i + 1}]\n{chunk.payload['text']}"
-            for i, chunk in enumerate(rerank_result)
-        )
+        context = self._build_context(rerank_result)
 
         # Generate answer
         prompt = PROMPT_TEMPLATE_CHAT.format(context=context, question=user_question)
@@ -192,10 +227,7 @@ class QueryService:
         self.logger.info("chunks_reranked", quantity=len(rerank_result))
 
         # Build context
-        context = "\n\n".join(
-            f"[{i + 1}]\n{chunk.payload['text']}"
-            for i, chunk in enumerate(rerank_result)
-        )
+        context = self._build_context(rerank_result)
 
         # Generate answer (streaming)
         prompt = PROMPT_TEMPLATE.format(context=context, question=user_question)

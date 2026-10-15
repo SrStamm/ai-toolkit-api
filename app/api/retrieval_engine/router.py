@@ -3,7 +3,6 @@ from typing import Optional
 import structlog
 import shutil
 from pathlib import Path
-from ..agent.adapters.rag_adapter import create_query_adapter
 from ..retrieval_engine.service import get_rag_service
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
@@ -17,18 +16,22 @@ logger = structlog.getLogger()
 
 # Use RAG service with adapter (retrieval_engine/)
 rag_service = get_rag_service()
-rag_adapter = create_query_adapter(rag_service)
+
 
 @router.post("/search")
 def search_documents(request: SearchRequest):
-    context_str, citations = rag_adapter.get_context(
-            request.query, request.top_k, request.domain
-        )
+    context, citations = rag_service.query.get_context(
+        query=request.query,
+        top_k=request.top_k,
+        domain=request.domain,
+        topic=request.topic,
+    )
 
     return {
-        "context": context_str,
-        "citations": [c.model_dump() for c in citations]
+        "context": context,
+        "citations": [c.model_dump() for c in citations],
     }
+
 
 @router.post("/documents")
 async def get_documents(domain: str | None = None):
