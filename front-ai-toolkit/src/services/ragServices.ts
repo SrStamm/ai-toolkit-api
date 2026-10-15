@@ -5,8 +5,6 @@ import type {
 } from "@/types/rag";
 import Fetch from "@/utils/api";
 
-const url = import.meta.env.VITE_URL;
-
 export const getJobStatus = async (
   jobId: string,
 ): Promise<JobStatusResponse> => {
@@ -27,7 +25,7 @@ export const ingestURLJob = async (
 };
 
 export const ingestFileJob = async (body: FormData) => {
-  return await fetch(url + "/rag/ingest-file/job", {
+  return await fetch("/rag/ingest-file/job", {
     method: "POST",
     body: body,
   });

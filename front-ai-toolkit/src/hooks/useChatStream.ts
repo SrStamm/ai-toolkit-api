@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { agentAskStream, uploadAgentFile } from "@/services/agentServices";
+import { agentAskStream, uploadAndIngestFile } from "@/services/agentServices";
 import type { AgentQuestion } from "@/types/agent";
 import { showToastError } from "@/components/toast";
 import { useJobContext } from "@/contexts/JobContext";
@@ -25,7 +25,12 @@ export interface Message {
   isStream?: boolean;
   citations?: Citation[];
   steps?: ToolStep[];
-  agentStatus?: "thinking" | "executing_tool" | "generating" | "waiting_user" | "completed";
+  agentStatus?:
+    | "thinking"
+    | "executing_tool"
+    | "generating"
+    | "waiting_user"
+    | "completed";
   currentTool?: string;
   isWaitingForInput?: boolean;
 }
@@ -112,15 +117,12 @@ export function useChatStream({
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      // If a file is attached, upload it first to get a UUID
-      let fileUuid: string | undefined;
-      let fileName: string | undefined;
-
+      // If a file is attached, upload and ingest it directly via RAG
       if (file) {
         try {
-          const result = await uploadAgentFile(file);
-          fileUuid = result.file_uuid;
-          fileName = result.filename;
+          const domain = file.name.replace(/\.pdf$/i, "");
+          const topic = query.trim();
+          await uploadAndIngestFile(file, domain, topic);
         } catch (err) {
           showToastError("Error al subir el archivo");
           setIsLoading(false);
@@ -131,7 +133,7 @@ export function useChatStream({
       const userMessage: Message = {
         id: generateId(),
         role: "user",
-        content: file ? `[PDF: ${fileName}]\n${query.trim()}` : query.trim(),
+        content: file ? `[PDF: ${file.name}]\n${query.trim()}` : query.trim(),
       };
 
       const aiMessage: Message = {
@@ -145,10 +147,8 @@ export function useChatStream({
       setIsLoading(true);
 
       const body: AgentQuestion = {
-        text: query.trim(),
-        session_id: sessionId || undefined,
-        file_uuid: fileUuid,
-        filename: fileName,
+        query: query.trim(),
+        sessionId: sessionId || undefined,
       };
 
       let accumulatedContent = "";
@@ -160,7 +160,7 @@ export function useChatStream({
         (event, data) => {
           if (event === "state_changed") {
             if (data.state === "executing_tool" && data.tool) {
-              accumulatedSteps.push({ tool: data.tool, status: "running" });
+              accumulatedSteps.push({ tool: data.tool as string, status: "running" });
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === aiMessage.id
@@ -168,7 +168,7 @@ export function useChatStream({
                         ...msg,
                         steps: [...accumulatedSteps],
                         agentStatus: "executing_tool",
-                        currentTool: data.tool,
+                        currentTool: data.tool as string,
                       }
                     : msg,
                 ),
@@ -193,7 +193,11 @@ export function useChatStream({
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === aiMessage.id
-                    ? { ...msg, isWaitingForInput: true, agentStatus: "waiting_user" }
+                    ? {
+                        ...msg,
+                        isWaitingForInput: true,
+                        agentStatus: "waiting_user",
+                      }
                     : msg,
                 ),
               );
@@ -207,9 +211,9 @@ export function useChatStream({
               );
             }
           } else if (event === "tool_done") {
-            const toolName: string = data.tool || data.tool_name || "unknown";
+            const toolName: string = (data.tool as string) || (data.tool_name as string) || "unknown";
             const idx = accumulatedSteps.findLastIndex(
-              (s) => s.tool === toolName && s.status === "running",
+              (s: ToolStep) => s.tool === toolName && s.status === "running",
             );
             if (idx !== -1) {
               accumulatedSteps[idx] = {
@@ -225,7 +229,7 @@ export function useChatStream({
               ),
             );
           } else if (event === "llm_token") {
-            accumulatedContent += data.token || "";
+            accumulatedContent += (data.token as string) || "";
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === aiMessage.id
@@ -234,11 +238,15 @@ export function useChatStream({
               ),
             );
           } else if (event === "done") {
-            if (data.session_id) {
-              setSessionId(data.session_id);
+            if (data.sessionId) {
+              setSessionId(data.sessionId as string);
             }
-            const finalContent = accumulatedContent || data.answer;
-            const currentTaskId = data.task_id || undefined;
+            const finalContent = accumulatedContent || (data.content as string);
+            // Support both formats: top-level task_id (legacy) and metadata.job_id (tools)
+            const currentTaskId =
+              (data as any).task_id ||
+              (data as any).metadata?.job_id ||
+              undefined;
 
             setMessages((prev) =>
               prev.map((msg) =>
@@ -247,18 +255,16 @@ export function useChatStream({
                       ...msg,
                       content: parseAnswer(finalContent),
                       isStreaming: false,
-                      citations: data.citations || [],
-                      // No more taskId in message - it goes to global context
+                      citations: (data.citations as Citation[]) || [],
                     }
                   : msg,
               ),
             );
 
-            // Add task to global context if task_id is present
-            // Backend unified: all tasks use same format (status, step, progress)
+            // Add job to global context so the frontend can poll its progress
             if (currentTaskId) {
               addJob({
-                id: currentTaskId,
+                id: currentTaskId as string,
                 type: "job",
                 source: "agent-chat",
                 status: "pending",
@@ -275,7 +281,7 @@ export function useChatStream({
                 msg.id === aiMessage.id
                   ? {
                       ...msg,
-                      content: "Error: " + (data.error || "Unknown error"),
+                      content: "Error: " + ((data.error as string) || "Unknown error"),
                       isStreaming: false,
                     }
                   : msg,
@@ -302,7 +308,7 @@ export function useChatStream({
 
     // Remove the last user message AND the streaming assistant placeholder
     setMessages((prev) => {
-      const lastUserIdx = prev.findLastIndex((msg) => msg.role === "user");
+      const lastUserIdx = prev.findLastIndex((msg: Message) => msg.role === "user");
       if (lastUserIdx === -1)
         return prev.filter((msg) => msg.isStreaming !== true);
       // Remove user message at lastUserIdx and everything after (the AI placeholder)

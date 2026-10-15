@@ -9,13 +9,13 @@ COPY package.json pnpm-lock.yaml ./
 # Habilitar pnpm e instalar dependencias
 # RUN corepack enable && pnpm install --frozen-lockfile
 # RUN corepack enable && pnpm config set allow-builds true && pnpm install --frozen-lockfile
-RUN corepack enable && pnpm install --frozen-lockfile --dangerously-allow-all-builds && pnpm add -D @types/react-syntax-highlighter
+RUN corepack enable && pnpm install --frozen-lockfile --dangerously-allow-all-builds
 
 # Copiar el resto del código del frontend
 COPY . .
 
-# Copiar .env para Vite
-# COPY .env .env.production.local
+# Copiar .env para Vite (production override)
+COPY .env.production.local .env.production.local
 
 RUN pnpm run build
 

@@ -283,6 +283,7 @@ class QdrantStore(VectorStoreInterface):
                 limit=256,
                 with_payload=True,
                 with_vectors=False,
+                offset=offset,
             )
             
             for point in points:

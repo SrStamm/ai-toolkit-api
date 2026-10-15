@@ -1,12 +1,10 @@
 export interface AgentQuestion {
-  text: string;
-  session_id?: string;
-  file_uuid?: string;
-  filename?: string;
+  query: string;
+  sessionId?: string;
 }
 
 export interface AgentResponse {
   output: string;
-  session_id: string;
+  sessionId: string;
   metadata: Record<string, unknown>;
 }
