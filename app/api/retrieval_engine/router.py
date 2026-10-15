@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from .jobs.celery_tasks import ingest_file_job, ingest_html_job
 from .jobs.job_service import JobService
-from .schemas import IngestRequest
+from .schemas import IngestRequest, SearchRequest
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
@@ -16,6 +16,21 @@ logger = structlog.getLogger()
 
 # Use RAG service with adapter (retrieval_engine/)
 rag_service = get_rag_service()
+
+
+@router.post("/search")
+def search_documents(request: SearchRequest):
+    context, citations = rag_service.query.get_context(
+        query=request.query,
+        top_k=request.top_k,
+        domain=request.domain,
+        topic=request.topic,
+    )
+
+    return {
+        "context": context,
+        "citations": [c.model_dump() for c in citations],
+    }
 
 
 @router.post("/documents")
