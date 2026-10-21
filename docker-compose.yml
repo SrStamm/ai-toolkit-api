@@ -94,7 +94,7 @@ services:
       context: front-ai-toolkit
       dockerfile: Dockerfile
     ports:
-      - "5173:80"
+      - "8080:80"
     networks:
       - backend_net
 

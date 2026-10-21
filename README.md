@@ -23,7 +23,7 @@ AI Toolkit API is an educational/experimental stack that ingests documents (URL 
 
 ```mermaid
 graph TD
-    subgraph FRONT["Frontend — port 5173"]
+    subgraph FRONT["Frontend — port 8080"]
         FE["React 19 · Vite 7 · Tailwind 4<br/>Chat · ToolSteps · Ingestion dashboard"]
     end
 
@@ -112,7 +112,7 @@ docker compose up --build
 
 | Service | URL |
 | --- | --- |
-| Frontend | http://localhost:5173 |
+| Frontend | http://localhost:8080 |
 | API (FastAPI, docs at `/docs`) | http://localhost:8000 |
 | ts-agent | http://localhost:3000 |
 | Qdrant | http://localhost:6333 |
