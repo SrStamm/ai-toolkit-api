@@ -6,20 +6,15 @@ import pytest
 from unittest.mock import MagicMock, patch
 from pydantic import BaseModel
 
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
-
 
 class TestStructuredOutput:
     """Tests para generate_structured_output."""
 
     def test_successful_parsing(self):
         """Debería parsear respuesta JSON correctamente."""
-        from application.llm.client import LLMClient
-        from domain.services.router import LLMRouter
-        from domain.models import LLMResponse, TokenUsage, CostBreakdown
+        from app.application.llm.client import LLMClient
+        from app.domain.services.router import LLMRouter
+        from app.domain.models import LLMResponse, TokenUsage, CostBreakdown
 
         # Mock router
         mock_router = MagicMock()
@@ -42,8 +37,8 @@ class TestStructuredOutput:
 
     def test_retry_on_invalid_json(self):
         """Debería hacer retry cuando el JSON es inválido."""
-        from application.llm.client import LLMClient
-        from domain.models import LLMResponse, TokenUsage, CostBreakdown
+        from app.application.llm.client import LLMClient
+        from app.domain.models import LLMResponse, TokenUsage, CostBreakdown
 
         # Mock router - primero inválido, después válido
         mock_router = MagicMock()
@@ -76,7 +71,7 @@ class TestStructuredOutput:
 
     def test_max_retries_exceeded_raises(self):
         """Debería lanzar excepción después de max retries."""
-        from application.llm.client import LLMClient, MAX_STRUCTURED_OUTPUT_RETRIES
+        from app.application.llm.client import LLMClient, MAX_STRUCTURED_OUTPUT_RETRIES
         from app.domain.exceptions import StructuredOutputError
         from app.domain.models import LLMResponse, TokenUsage, CostBreakdown
 

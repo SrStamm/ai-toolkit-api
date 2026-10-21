@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 import asyncio
 from pydantic import BaseModel, ValidationError
 
-from ...infrastructure.logging import time_response
-from ...domain.models import LLMResponse
-from ...domain.exceptions import StructuredOutputError
-from ...domain.services.router import LLMRouter, get_llm_router
-from ...domain.providers.base import Message
+from app.infrastructure.logging import time_response
+from app.domain.models import LLMResponse
+from app.domain.exceptions import StructuredOutputError
+from app.domain.services.router import LLMRouter, get_llm_router
+from app.domain.providers.base import Message
 
 load_dotenv()
 
