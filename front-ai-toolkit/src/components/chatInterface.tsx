@@ -10,7 +10,8 @@ import {
   X,
   StopCircle,
 } from "lucide-react";
-import { useLLMConfig, LLMSelector } from "./llmConfigBar";
+import { LLMSelector } from "./llmConfigBar";
+import { useLLMConfig } from "@/hooks/useLLMConfig";
 import { useChatStream } from "@/hooks/useChatStream";
 import { MessageBubble } from "./MessageBubble";
 
