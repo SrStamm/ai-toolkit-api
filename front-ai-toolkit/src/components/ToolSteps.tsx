@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Loader2, Check, ChevronDown, ChevronRight } from "lucide-react";
 import type { ToolStep } from "@/hooks/useChatStream";
@@ -16,9 +16,15 @@ export function ToolSteps({ steps }: ToolStepsProps) {
 
   // Auto-expand when there are running steps
   const hasRunning = steps.some((s) => s.status === "running");
-  useEffect(() => {
+  const [prevHasRunning, setPrevHasRunning] = useState(false);
+
+  // Adjust the state during render when the running flag flips, instead of
+  // setting state inside an effect. The component mounts on the very first
+  // (running) step, so the initial `false` makes the first render expand too.
+  if (hasRunning !== prevHasRunning) {
+    setPrevHasRunning(hasRunning);
     if (hasRunning) setExpanded(true);
-  }, [hasRunning]);
+  }
 
   if (!steps || steps.length === 0) return null;
 

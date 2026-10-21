@@ -1,6 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { Home } from "./pages/Home";
-import { JobProvider } from "@/contexts/JobContext";
+import { JobProvider } from "@/contexts/JobProvider";
 
 export function App() {
   return (
