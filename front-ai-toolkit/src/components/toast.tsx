@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 
-interface ToastOptions {
+export interface ToastOptions {
   type: "error" | "info" | "success";
   msg: string;
   position?: "top-center" | "top-left" | "top-right" | "bottom-center" | "bottom-left" | "bottom-right";
@@ -28,9 +28,4 @@ export function showToastSuccess(msg: string, options?: Partial<ToastOptions>) {
 
 export function showToastInfo(msg: string, options?: Partial<ToastOptions>) {
   return showToast({ type: "info", msg, ...options });
-}
-
-// Legacy export for backwards compatibility
-export default function CustomizedToast({ type, msg }: ToastOptions) {
-  return showToast({ type, msg });
 }
