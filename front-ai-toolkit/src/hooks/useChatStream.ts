@@ -123,7 +123,7 @@ export function useChatStream({
           const domain = file.name.replace(/\.pdf$/i, "");
           const topic = query.trim();
           await uploadAndIngestFile(file, domain, topic);
-        } catch (err) {
+        } catch {
           showToastError("Error al subir el archivo");
           setIsLoading(false);
           return;
@@ -153,6 +153,9 @@ export function useChatStream({
 
       let accumulatedContent = "";
       const accumulatedSteps: ToolStep[] = [];
+      // Tracks whether a terminal event (`done` or `error`) was received, so an
+      // end of stream without one can be reported as an abnormal termination.
+      let terminalEventSeen = false;
 
       agentAskStream(
         body,
@@ -209,6 +212,29 @@ export function useChatStream({
                     : msg,
                 ),
               );
+            } else if (data.state === "failed") {
+              const detail =
+                typeof data.error === "string" && data.error
+                  ? data.error
+                  : "Unknown error";
+              const failureText = "Error: " + detail;
+              console.error("Stream failed:", failureText);
+              // The runtime sends the message in the `error` event that follows
+              // this one, so only toast here when a message is already available.
+              if (detail !== "Unknown error") showToastError(failureText);
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessage.id
+                    ? {
+                        ...msg,
+                        content: failureText,
+                        isStreaming: false,
+                        agentStatus: undefined,
+                      }
+                    : msg,
+                ),
+              );
+              setIsLoading(false);
             }
           } else if (event === "tool_done") {
             const toolName: string = (data.tool as string) || (data.tool_name as string) || "unknown";
@@ -238,14 +264,16 @@ export function useChatStream({
               ),
             );
           } else if (event === "done") {
+            terminalEventSeen = true;
             if (data.sessionId) {
               setSessionId(data.sessionId as string);
             }
             const finalContent = accumulatedContent || (data.content as string);
             // Support both formats: top-level task_id (legacy) and metadata.job_id (tools)
+            const metadata = data.metadata as { job_id?: string } | undefined;
             const currentTaskId =
-              (data as any).task_id ||
-              (data as any).metadata?.job_id ||
+              (typeof data.task_id === "string" ? data.task_id : undefined) ||
+              metadata?.job_id ||
               undefined;
 
             setMessages((prev) =>
@@ -274,15 +302,23 @@ export function useChatStream({
             }
 
             setIsLoading(false);
-          } else if (event === "state_changed" && data.state === "failed") {
-            console.error("Stream error:", data);
+          } else if (event === "error") {
+            terminalEventSeen = true;
+            const detail =
+              typeof data.error === "string" && data.error
+                ? data.error
+                : "Unknown error";
+            const failureText = "Error: " + detail;
+            console.error("Stream error:", failureText);
+            showToastError(failureText);
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === aiMessage.id
                   ? {
                       ...msg,
-                      content: "Error: " + ((data.error as string) || "Unknown error"),
+                      content: failureText,
                       isStreaming: false,
+                      agentStatus: undefined,
                     }
                   : msg,
               ),
@@ -294,6 +330,30 @@ export function useChatStream({
           console.error("Stream error:", error);
           showToastError(error);
           setMessages((prev) => prev.filter((msg) => msg.id !== aiMessage.id));
+          setIsLoading(false);
+        },
+        () => {
+          // The stream ended without a terminal event: the run never reported
+          // an answer nor an error. Never fires on abort (client cancellation),
+          // which is handled by `cancelQuery`.
+          if (terminalEventSeen) return;
+          if (controller.signal.aborted) return;
+
+          const failureText = "Error: The stream ended unexpectedly";
+          console.error(failureText);
+          showToastError(failureText);
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessage.id
+                ? {
+                    ...msg,
+                    content: failureText,
+                    isStreaming: false,
+                    agentStatus: undefined,
+                  }
+                : msg,
+            ),
+          );
           setIsLoading(false);
         },
       );

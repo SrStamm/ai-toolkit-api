@@ -41,6 +41,7 @@ export const agentAskStream = (
   options: AgentAskOptions = {},
   onEvent: (eventName: string, data: Record<string, unknown>) => void,
   onError?: (error: string) => void,
+  onEnd?: () => void,
 ): void => {
   const headers: Record<string, string> = {
     Accept: "text/event-stream",
@@ -57,13 +58,25 @@ export const agentAskStream = (
   const baseUrl = import.meta.env.VITE_URL || "";
   const url = `${baseUrl}/agent/agent-loop/stream`;
 
+  // Fires once when the SSE reader finishes normally. It is not called on
+  // abort (client cancellation) nor when the read fails — those paths report
+  // through `onError`.
+  const notifyEnd = () => {
+    if (!onEnd) return;
+    try {
+      onEnd();
+    } catch (err) {
+      console.error("End-of-stream handler failed:", err);
+    }
+  };
+
   fetch(url, {
     method: "POST",
     headers: headers,
     body: JSON.stringify(body),
     signal: options.signal,
   })
-    .then((response) => {
+    .then(async (response) => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -136,7 +149,12 @@ export const agentAskStream = (
         }
       };
 
-      return readStream();
+      await readStream();
+
+      // The reader finished normally: the stream ended without a read error.
+      // Aborts and read failures reject before reaching this point, so the
+      // end-of-stream callback only fires for a clean end of stream.
+      notifyEnd();
     })
     .catch((err) => {
       // AbortError is expected when user cancels — don't propagate as error

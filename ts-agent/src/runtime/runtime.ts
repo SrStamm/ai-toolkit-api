@@ -28,6 +28,8 @@ const DEFAULT_CONFIG: RuntimeConfig = {
   retryBackoffMs: 1_000,
 };
 
+const MAX_ERROR_MESSAGE_LENGTH = 500;
+
 export class Runtime {
   private llm: LLMInterface;
   private router: Router;
@@ -59,6 +61,22 @@ export class Runtime {
     data: Extract<StreamEvent, { type: T }>,
   ): string {
     return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  }
+
+  /**
+   * Turns an unknown thrown value into a short, human-readable message.
+   * Never leaks a raw stack trace: only `error.message` is used and
+   * whitespace is collapsed so multi-line traces become a single line.
+   */
+  private toSafeErrorMessage(err: unknown): string {
+    const raw = err instanceof Error ? err.message : String(err);
+    const collapsed = raw.replace(/\s+/g, " ").trim();
+
+    if (!collapsed) return "Unknown error";
+
+    return collapsed.length > MAX_ERROR_MESSAGE_LENGTH
+      ? `${collapsed.slice(0, MAX_ERROR_MESSAGE_LENGTH)}...`
+      : collapsed;
   }
 
   extractAnswer(answer: string): string {
@@ -121,184 +139,213 @@ export class Runtime {
 
     // Generate session_id if not provided
     const sessionId = input.session_id || crypto.randomUUID();
-    const resolvedInput = { ...input, session_id: sessionId };
 
-    log.info("stream_started", {
-      session_id: sessionId,
-      query_preview: input.query.slice(0, 100),
-      has_file: !!input.file_uuid,
-    });
+    try {
+      const resolvedInput = { ...input, session_id: sessionId };
 
-    this.state = await this.initState(resolvedInput);
-
-    await this.updateMemory(input.query, "user", sessionId);
-
-    yield this.emitEvent("state_changed", {
-      type: "state_changed",
-      state: RuntimeState.THINKING,
-    });
-
-    for (
-      this.currentStep = 0;
-      this.currentStep < this.config.maxSteps;
-      this.currentStep++
-    ) {
-      log.debug("step_begin", {
-        step: this.currentStep,
+      log.info("stream_started", {
         session_id: sessionId,
+        query_preview: input.query.slice(0, 100),
+        has_file: !!input.file_uuid,
       });
 
-      const decision = await this.router.getDecision(
-        this.state.query,
-        this.state.toolContext,
-        this.state.history,
-      );
+      this.state = await this.initState(resolvedInput);
 
-      log.info("agent_decision", {
-        step: this.currentStep,
-        action: decision.action,
-        tool_name: "tool_name" in decision ? decision.tool_name : undefined,
-        session_id: sessionId,
+      await this.updateMemory(input.query, "user", sessionId);
+
+      yield this.emitEvent("state_changed", {
+        type: "state_changed",
+        state: RuntimeState.THINKING,
       });
 
-      yield this.emitEvent("agent_decision", {
-        type: "agent_decision",
-        decision: decision,
-      });
+      for (
+        this.currentStep = 0;
+        this.currentStep < this.config.maxSteps;
+        this.currentStep++
+      ) {
+        log.debug("step_begin", {
+          step: this.currentStep,
+          session_id: sessionId,
+        });
 
-      switch (decision.action) {
-        case ActionType.ASK_USER: {
-          log.info("action_ask_user", {
-            step: this.currentStep,
-            message_preview: decision.message.slice(0, 100),
-          });
-          yield this.emitEvent("state_changed", {
-            type: "state_changed",
-            state: RuntimeState.WAITING_USER,
-          });
-          yield this.emitEvent("llm_token", {
-            type: "llm_token",
-            token: decision.message,
-          });
-          yield this.emitEvent("done", {
-            type: "done",
-            sessionId: this.state.session_id,
-            content: decision.message,
-            metadata: {
-              citations: this.state.toolContext.citations,
-            },
-          });
-          log.info("stream_completed", {
-            reason: "ask_user",
-            duration_ms: Date.now() - startTime,
-            steps: this.currentStep + 1,
-          });
-          return;
-        }
+        const decision = await this.router.getDecision(
+          this.state.query,
+          this.state.toolContext,
+          this.state.history,
+        );
 
-        case ActionType.CALL_TOOL: {
-          log.info("action_call_tool", {
-            step: this.currentStep,
-            tool_name: decision.tool_name,
-            args: decision.args,
-          });
-          yield this.emitEvent("state_changed", {
-            type: "state_changed",
-            state: RuntimeState.EXECUTING_TOOL,
-            tool: decision.tool_name,
-          });
+        log.info("agent_decision", {
+          step: this.currentStep,
+          action: decision.action,
+          tool_name: "tool_name" in decision ? decision.tool_name : undefined,
+          session_id: sessionId,
+        });
 
-          const result = await this.executeToolWithRetry({
-            ...decision,
-            args: { ...decision.args, query: this.state.query },
-          });
+        yield this.emitEvent("agent_decision", {
+          type: "agent_decision",
+          decision: decision,
+        });
 
-          this.updateContext(decision.tool_name, result);
-
-          yield this.emitEvent("tool_done", {
-            type: "tool_done",
-            tool: decision.tool_name,
-            status: result.ok ? "success" : "error",
-          });
-
-          if (result.ok && result.complete) {
-            log.info("tool_complete_early_return", {
-              tool_name: decision.tool_name,
-              output_len: result.output.length,
+        switch (decision.action) {
+          case ActionType.ASK_USER: {
+            log.info("action_ask_user", {
+              step: this.currentStep,
+              message_preview: decision.message.slice(0, 100),
+            });
+            yield this.emitEvent("state_changed", {
+              type: "state_changed",
+              state: RuntimeState.WAITING_USER,
             });
             yield this.emitEvent("llm_token", {
               type: "llm_token",
-              token: result.output,
+              token: decision.message,
             });
             yield this.emitEvent("done", {
               type: "done",
               sessionId: this.state.session_id,
-              content: result.output,
-              metadata: result.metadata,
+              content: decision.message,
+              metadata: {
+                citations: this.state.toolContext.citations,
+              },
             });
-            yield this.emitEvent("state_changed", {
-              type: "state_changed",
-              state: RuntimeState.COMPLETED,
-            });
-
             log.info("stream_completed", {
-              reason: "tool_complete",
-              tool_name: decision.tool_name,
+              reason: "ask_user",
               duration_ms: Date.now() - startTime,
               steps: this.currentStep + 1,
             });
             return;
           }
-          break;
-        }
 
-        case ActionType.FINAL_ANSWER: {
-          log.info("action_final_answer", { step: this.currentStep });
-          yield this.emitEvent("state_changed", {
-            type: "state_changed",
-            state: RuntimeState.GENERATING,
-          });
+          case ActionType.CALL_TOOL: {
+            log.info("action_call_tool", {
+              step: this.currentStep,
+              tool_name: decision.tool_name,
+              args: decision.args,
+            });
+            yield this.emitEvent("state_changed", {
+              type: "state_changed",
+              state: RuntimeState.EXECUTING_TOOL,
+              tool: decision.tool_name,
+            });
 
-          const raw = await this.generateAnswer();
-          const answer = this.extractAnswer(raw);
+            const result = await this.executeToolWithRetry({
+              ...decision,
+              args: { ...decision.args, query: this.state.query },
+            });
 
-          yield this.emitEvent("llm_token", {
-            type: "llm_token",
-            token: answer,
-          });
+            this.updateContext(decision.tool_name, result);
 
-          yield this.emitEvent("done", {
-            type: "done",
-            sessionId: this.state.session_id,
-            content: answer,
-            metadata: {
-              citations: this.state.toolContext.citations,
-            },
-          });
+            yield this.emitEvent("tool_done", {
+              type: "tool_done",
+              tool: decision.tool_name,
+              status: result.ok ? "success" : "error",
+            });
 
-          yield this.emitEvent("state_changed", {
-            type: "state_changed",
-            state: RuntimeState.COMPLETED,
-          });
+            if (result.ok && result.complete) {
+              log.info("tool_complete_early_return", {
+                tool_name: decision.tool_name,
+                output_len: result.output.length,
+              });
+              yield this.emitEvent("llm_token", {
+                type: "llm_token",
+                token: result.output,
+              });
+              yield this.emitEvent("done", {
+                type: "done",
+                sessionId: this.state.session_id,
+                content: result.output,
+                metadata: result.metadata,
+              });
+              yield this.emitEvent("state_changed", {
+                type: "state_changed",
+                state: RuntimeState.COMPLETED,
+              });
 
-          await this.updateMemory(answer, "assistant", this.state.session_id);
+              log.info("stream_completed", {
+                reason: "tool_complete",
+                tool_name: decision.tool_name,
+                duration_ms: Date.now() - startTime,
+                steps: this.currentStep + 1,
+              });
+              return;
+            }
+            break;
+          }
 
-          log.info("stream_completed", {
-            reason: "final_answer",
-            answer_len: answer.length,
-            duration_ms: Date.now() - startTime,
-            steps: this.currentStep + 1,
-          });
-          return;
+          case ActionType.FINAL_ANSWER: {
+            log.info("action_final_answer", { step: this.currentStep });
+            yield this.emitEvent("state_changed", {
+              type: "state_changed",
+              state: RuntimeState.GENERATING,
+            });
+
+            const raw = await this.generateAnswer();
+            const answer = this.extractAnswer(raw);
+
+            yield this.emitEvent("llm_token", {
+              type: "llm_token",
+              token: answer,
+            });
+
+            yield this.emitEvent("done", {
+              type: "done",
+              sessionId: this.state.session_id,
+              content: answer,
+              metadata: {
+                citations: this.state.toolContext.citations,
+              },
+            });
+
+            yield this.emitEvent("state_changed", {
+              type: "state_changed",
+              state: RuntimeState.COMPLETED,
+            });
+
+            await this.updateMemory(answer, "assistant", this.state.session_id);
+
+            log.info("stream_completed", {
+              reason: "final_answer",
+              answer_len: answer.length,
+              duration_ms: Date.now() - startTime,
+              steps: this.currentStep + 1,
+            });
+            return;
+          }
         }
       }
-    }
 
-    log.warn("max_steps_reached", {
-      max_steps: this.config.maxSteps,
-      session_id: sessionId,
-      duration_ms: Date.now() - startTime,
-    });
+      log.warn("max_steps_reached", {
+        max_steps: this.config.maxSteps,
+        session_id: sessionId,
+        duration_ms: Date.now() - startTime,
+      });
+
+      yield this.emitEvent("state_changed", {
+        type: "state_changed",
+        state: RuntimeState.FAILED,
+      });
+      yield this.emitEvent("error", {
+        type: "error",
+        error: `Agent run stopped after reaching the maximum number of steps (${this.config.maxSteps})`,
+      });
+    } catch (err) {
+      const message = this.toSafeErrorMessage(err);
+
+      log.error("stream_failed", {
+        session_id: sessionId,
+        duration_ms: Date.now() - startTime,
+        error: message,
+      });
+
+      yield this.emitEvent("state_changed", {
+        type: "state_changed",
+        state: RuntimeState.FAILED,
+      });
+      yield this.emitEvent("error", {
+        type: "error",
+        error: message,
+      });
+    }
   }
 
   async main(input: AgentInput) {
