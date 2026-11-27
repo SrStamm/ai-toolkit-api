@@ -1,0 +1,7 @@
+packages:
+  - ts-agent
+  - front-ai-toolkit
+  - packages/*
+
+allowBuilds:
+  esbuild: true
