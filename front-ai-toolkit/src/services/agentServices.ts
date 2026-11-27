@@ -1,19 +1,18 @@
 import type { AgentQuestion } from "@/types/agent";
-
-interface IngestFileResponse {
-  status: string;
-  job_id: string;
-}
+import {
+  fromIngestJobResponse,
+  type IngestJobStarted,
+} from "../adapters/rag-contracts";
 
 export const uploadAndIngestFile = async (
   file: File,
   domain: string,
   topic: string,
-): Promise<IngestFileResponse> => {
+): Promise<IngestJobStarted> => {
   const baseUrl = import.meta.env.VITE_URL || "";
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("source", file.name);
+  formData.append("replaces_source", file.name);
   formData.append("domain", domain);
   formData.append("topic", topic);
 
@@ -26,7 +25,7 @@ export const uploadAndIngestFile = async (
     throw new Error(`Ingest failed: ${response.statusText}`);
   }
 
-  return response.json() as Promise<IngestFileResponse>;
+  return fromIngestJobResponse(await response.json());
 };
 
 interface AgentAskOptions {
