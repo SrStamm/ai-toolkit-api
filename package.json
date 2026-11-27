@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@11.17.0+sha512.cca3cea332ad254bb84145f966d19f4879615210346fc92c79a047f23a0d7b3cca3c3792f0076ba1f1831d277efbcf0a9119b31a9a60eca7fb3d6231f331ef72",
   "scripts": {
+    "check:contract-boundary": "node scripts/check-contract-boundary.mjs",
     "check:contracts": "PYTHONPATH=. PROMETHEUS_MULTIPROC_DIR=${PROMETHEUS_MULTIPROC_DIR:-/tmp/opencode/prom} app/.venv/bin/python scripts/generate-openapi.py && pnpm --filter @ai-toolkit/rag-contracts generate && git diff --exit-code -- openapi.json packages/rag-contracts/src/generated/api.ts"
   }
 }
