@@ -5,6 +5,7 @@ pydantic-settings
 
 pytest
 pytest-asyncio
+httpx
 
 requests
 beautifulsoup4

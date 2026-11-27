@@ -6,7 +6,8 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from .infrastructure.logging import register_exceptions_handlers, logger
+from .infrastructure.logging import logger
+from .api.exception_handlers import register_exceptions_handlers
 from .infrastructure.metrics import http_requests_total, registry
 from .infrastructure.storage.qdrant_client import get_qdrant_store
 from .api.retrieval_engine.router import router as rag_router
