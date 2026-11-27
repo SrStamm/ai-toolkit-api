@@ -7,11 +7,13 @@ import time
 from fastapi import UploadFile
 import structlog
 
-from app.api.retrieval_engine.jobs.schemas import JobStatus
-from app.api.retrieval_engine.jobs.job_service import JobService
-from app.api.retrieval_engine.service import RAGService, get_rag_service
-from app.core.celery_app import celery_app
-from app.infrastructure.metrics import (
+from app.domain.source_identity import canonicalize_source_for_lookup
+
+from .schemas import JobStatus
+from .job_service import JobService
+from ..service import RAGService, get_rag_service
+from ....core.celery_app import celery_app
+from ....infrastructure.metrics import (
     celery_task_duration_seconds,
     celery_tasks_total,
     documents_ingested_total,
@@ -39,13 +41,15 @@ def ingest_html_job(self, job_id: str, ingest_data: dict):
             )
             job_service.update_progress(job_id, percent, message)
 
+        source = canonicalize_source_for_lookup(ingest_data["url"])
         asyncio.run(
             rag_service.ingest_document(
                 url=ingest_data["url"],
-                source=ingest_data["url"],
+                source=source,
                 domain=ingest_data["domain"],
                 topic=ingest_data["topic"],
                 progress_callback=tracker,
+                replaces_source=ingest_data.get("replaces_source"),
             )
         )
 
@@ -70,7 +74,16 @@ def ingest_html_job(self, job_id: str, ingest_data: dict):
 
 
 @celery_app.task(bind=True)
-def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topic: str):
+def ingest_file_job(
+    self,
+    job_id: str,
+    file_path: str,
+    source: str,
+    domain: str,
+    topic: str,
+    display_name: str | None = None,
+    replaces_source: str | None = None,
+):
     job_service = JobService()
     rag_service: RAGService = get_rag_service()
 
@@ -97,6 +110,8 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
                     domain=domain,
                     topic=topic,
                     progress_callback=tracker,
+                    display_name=display_name,
+                    replaces_source=replaces_source,
                 )
             )
 
@@ -125,6 +140,7 @@ def ingest_file_job(self, job_id: str, file_path: str, source, domain: str, topi
 @celery_app.task()
 def reindex_document_task(job_id: str, source: str, url: str, domain: str, topic: str):
     job_service = JobService()
+    source = canonicalize_source_for_lookup(source)
 
     """Celery task to re-index a document."""
     from app.infrastructure.storage.qdrant_client import get_qdrant_store

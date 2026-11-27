@@ -12,6 +12,8 @@ from uuid import uuid5, NAMESPACE_DNS
 from fastapi import UploadFile
 import structlog
 
+from app.domain.source_identity import canonicalize_source_for_lookup
+
 from ...api.extraction.schema import ChunkWithMetadata
 from ...api.extraction.factory import SourceFactory
 from ...api.extraction.exceptions import EmptySourceContentError
@@ -58,12 +60,17 @@ class IngestionService:
         domain: str,
         topic: str,
         progress_callback: ProgressCallback | None = None,
+        display_name: str | None = None,
+        replaces_source: str | None = None,
     ) -> dict:
-        """Process ingestion with optional progress reporting."""
+        """Process ingestion with optional progress reporting and source replacement."""
 
         async def report(percent: int, msg: str) -> None:
             if progress_callback:
                 await progress_callback(percent, msg)
+
+        if replaces_source and replaces_source != source:
+            self.vector_store.delete_by_filter({"source": replaces_source})
 
         await report(50, "Analyzing chunks...")
 
@@ -132,6 +139,7 @@ class IngestionService:
                             "text": chunk_metadata.text,
                             "section": chunk_metadata.section,
                             "source": source,
+                            "display_name": display_name or source,
                             "domain": domain.lower(),
                             "topic": topic.lower(),
                             "chunk_index": original_idx,
@@ -154,6 +162,9 @@ class IngestionService:
                     vector=chunk_db.vector,
                     payload={
                         **chunk_db.payload,
+                        "display_name": (
+                            display_name or chunk_db.payload.get("display_name") or source
+                        ),
                         "ingested_at": timestamp,
                     },
                 )
@@ -181,6 +192,8 @@ class IngestionService:
         domain: str,
         topic: str,
         progress_callback: ProgressCallback | None = None,
+        display_name: str | None = None,
+        replaces_source: str | None = None,
     ) -> dict:
         """Synchronous PDF ingestion."""
         extractor, cleaner = SourceFactory.get_pdf_cleaner()
@@ -201,6 +214,8 @@ class IngestionService:
             domain=domain,
             topic=topic,
             progress_callback=progress_callback,
+            display_name=display_name,
+            replaces_source=replaces_source,
         )
 
         self._log_ingestion_metrics("pdf", result)
@@ -208,7 +223,13 @@ class IngestionService:
         return result
 
     async def ingest_pdf_file_stream(
-        self, file: UploadFile, source: str, domain: str, topic: str
+        self,
+        file: UploadFile,
+        source: str,
+        domain: str,
+        topic: str,
+        display_name: str | None = None,
+        replaces_source: str | None = None,
     ) -> AsyncIterator[dict]:
         """Streaming PDF ingestion with progress reporting."""
 
@@ -242,6 +263,8 @@ class IngestionService:
             domain=domain,
             topic=topic,
             progress_callback=None,
+            display_name=display_name,
+            replaces_source=replaces_source,
         )
 
         yield {"progress": 95, "step": "Finalizing..."}
@@ -260,10 +283,12 @@ class IngestionService:
         domain: str,
         topic: str,
         progress_callback: ProgressCallback | None = None,
+        replaces_source: str | None = None,
     ) -> dict:
         """Synchronous URL ingestion."""
         from ...api.extraction.exceptions import SourceException
 
+        source = canonicalize_source_for_lookup(source)
         extractor, cleaner = SourceFactory.get_extractor_and_cleaner(url)
 
         try:
@@ -288,6 +313,8 @@ class IngestionService:
             domain=domain,
             topic=topic,
             progress_callback=progress_callback,
+            display_name=source,
+            replaces_source=replaces_source,
         )
 
         self.logger.info(
@@ -304,10 +331,17 @@ class IngestionService:
         return result
 
     async def ingest_document_stream(
-        self, url: str, source: str, domain: str, topic: str
+        self,
+        url: str,
+        source: str,
+        domain: str,
+        topic: str,
+        replaces_source: str | None = None,
     ) -> AsyncIterator[dict]:
         """Streaming URL ingestion with progress reporting."""
         from app.api.extraction.exceptions import SourceException
+
+        source = canonicalize_source_for_lookup(source)
 
         yield {"progress": 10, "step": "Extracting content from URL"}
 
@@ -337,6 +371,8 @@ class IngestionService:
             domain=domain,
             topic=topic,
             progress_callback=None,
+            display_name=source,
+            replaces_source=replaces_source,
         )
 
         yield {"progress": 95, "step": "Finalizing..."}
