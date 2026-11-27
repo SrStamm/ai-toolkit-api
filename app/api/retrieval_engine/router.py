@@ -42,6 +42,7 @@ def documented_errors(*status_codes: int) -> dict[int, dict[str, object]]:
 
 @router.post(
     "/search",
+    operation_id="searchDocuments",
     response_model=SearchResponse,
     responses=documented_errors(422, 500),
 )
@@ -59,6 +60,7 @@ def search_documents(
 
 @router.post(
     "/documents",
+    operation_id="listDocuments",
     response_model=ListDocumentsResponse,
     responses=documented_errors(422, 500),
 )
@@ -86,6 +88,7 @@ async def get_documents(
 
 @router.delete(
     "/documents/{source:path}",
+    operation_id="deleteDocument",
     response_model=DeleteDocumentResponse,
     responses=documented_errors(400, 422, 500, 503),
 )
@@ -113,6 +116,7 @@ async def delete_document(
 
 @router.get(
     "/documents/metadata",
+    operation_id="getDocumentMetadata",
     response_model=DocumentMetadataResponse,
     responses=documented_errors(404, 422, 500),
 )
@@ -145,6 +149,7 @@ async def get_documents_metadata(
 
 @router.post(
     "/ingest/job",
+    operation_id="ingestDocumentJob",
     response_model=IngestJobResponse,
     responses=documented_errors(422, 500),
 )
@@ -159,6 +164,7 @@ async def ingest_document_job(
 
 @router.post(
     "/ingest-file/job",
+    operation_id="ingestFileJob",
     response_model=IngestJobResponse,
     responses=documented_errors(400, 422, 500),
 )
@@ -205,6 +211,7 @@ async def ingest_file_job_endpoint(
 
 @router.get(
     "/job/{job_id}",
+    operation_id="getJobStatus",
     response_model=JobStatusResponse,
     responses=documented_errors(404, 422, 500),
 )
