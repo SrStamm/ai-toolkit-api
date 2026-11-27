@@ -2,6 +2,7 @@
   "name": "@ai-toolkit/ts-agent",
   "private": true,
   "dependencies": {
+    "@ai-toolkit/rag-contracts": "workspace:*",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
