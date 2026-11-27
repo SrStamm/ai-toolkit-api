@@ -20,7 +20,7 @@ registerTool({
     try {
       const result = await httpClient.listSources(input.domain);
 
-      if (result.status === "failed") {
+      if (result.metadata.documents.length === 0) {
         log.info("execute_no_documents", {
           duration_ms: Date.now() - startTime,
         });

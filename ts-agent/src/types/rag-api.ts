@@ -1,33 +1,17 @@
-export interface Citation {
-  source: string;
-  chunk_index: number;
-  text: string;
-}
+/**
+ * Agent-owned RAG models.
+ *
+ * These types describe what the agent's tools consume. They are deliberately
+ * separate from the generated HTTP contract: conversions live in
+ * `src/adapters/rag-contracts.ts`.
+ */
+
+export type Citation = string;
 
 export interface SearchResult {
   context: string;
   citations: Citation[];
 }
-
-export type ListDocumentsResponse =
-  | {
-      status: "success";
-      metadata: {
-        documents: SourceMetadata[];
-        count: number;
-      };
-      output: string;
-    }
-  | { status: "failed" };
-
-export interface DeleteDocumentResponse {
-  status: "deleted";
-  source: string;
-}
-
-export type DocumentMetadataResponse =
-  | { status: "success"; metadata: SourceMetadata; output: string }
-  | { status: "failed" };
 
 export interface SearchOptions {
   topK?: number;
@@ -44,22 +28,34 @@ export interface IngestData {
 
 export interface IngestJobResponse {
   status: "queued";
-  url: string;
   job_id: string;
+}
+
+export interface DeleteDocumentResponse {
+  status: "deleted";
+  source: string;
 }
 
 export interface SourceMetadata {
   source: string;
+  display_name?: string | null;
   domain: string;
   topic: string;
   chunk_count: number;
   last_ingested: number;
 }
 
-export interface JobState {
-  jobId: string;
-  status: "queued" | "running" | "completed" | "failed";
-  progress: number;
-  step: string;
-  error?: string;
-}
+export type ListDocumentsResponse = {
+  status: "success";
+  metadata: {
+    documents: SourceMetadata[];
+    count: number;
+  };
+  output: string;
+};
+
+export type DocumentMetadataResponse = {
+  status: "success";
+  metadata: SourceMetadata;
+  output: string;
+};

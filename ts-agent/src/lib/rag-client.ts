@@ -7,6 +7,17 @@ import {
   SearchOptions,
   SearchResult,
 } from "../types/rag-api";
+import {
+  fromDeleteDocumentResponse,
+  fromDocumentMetadataResponse,
+  fromIngestJobResponse,
+  fromListDocumentsResponse,
+  fromSearchResponse,
+  RAG_PATHS,
+  toOriginBaseUrl,
+  toWireIngest,
+  toWireSearch,
+} from "../adapters/rag-contracts";
 import { logger } from "./logger";
 
 const log = logger.child("rag-client");
@@ -31,15 +42,10 @@ class HTTPRagClient implements RagClient {
 
     const startTime = Date.now();
 
-    const response = await fetch(`${this.baseUrl}/search`, {
+    const response = await fetch(`${this.baseUrl}${RAG_PATHS.search}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query,
-        domain: opts.domain,
-        topic: opts.topic ?? null,
-        top_k: opts.topK ?? 5,
-      }),
+      body: JSON.stringify(toWireSearch(query, opts)),
     });
 
     if (!response.ok) {
@@ -50,7 +56,7 @@ class HTTPRagClient implements RagClient {
       throw new Error(`RAG search failed: ${response.status}`);
     }
 
-    const result = (await response.json()) as SearchResult;
+    const result = fromSearchResponse(await response.json());
 
     log.info("search_completed", {
       duration_ms: Date.now() - startTime,
@@ -69,14 +75,10 @@ class HTTPRagClient implements RagClient {
 
     const startTime = Date.now();
 
-    const response = await fetch(`${this.baseUrl}/ingest/job`, {
+    const response = await fetch(`${this.baseUrl}${RAG_PATHS.ingestJob}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: data.url,
-        domain: data.domain,
-        topic: data.topic,
-      }),
+      body: JSON.stringify(toWireIngest(data)),
     });
 
     if (!response.ok) {
@@ -87,7 +89,7 @@ class HTTPRagClient implements RagClient {
       throw new Error(`Ingest File Job failed: ${response.status}`);
     }
 
-    const result = (await response.json()) as IngestJobResponse;
+    const result = fromIngestJobResponse(await response.json());
 
     log.info("ingest_completed", {
       duration_ms: Date.now() - startTime,
@@ -102,12 +104,13 @@ class HTTPRagClient implements RagClient {
 
     const startTime = Date.now();
 
-    const response = await fetch(
-      `${this.baseUrl}/documents/${encodeURIComponent(source)}`,
-      {
-        method: "DELETE",
-      },
+    const path = RAG_PATHS.document.replace(
+      "{source}",
+      encodeURIComponent(source),
     );
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: "DELETE",
+    });
 
     if (!response.ok) {
       log.error("delete_failed", {
@@ -118,7 +121,7 @@ class HTTPRagClient implements RagClient {
       throw new Error(`Delete Document failed: ${response.status}`);
     }
 
-    const result = (await response.json()) as DeleteDocumentResponse;
+    const result = fromDeleteDocumentResponse(await response.json());
 
     log.info("delete_completed", {
       source,
@@ -133,7 +136,7 @@ class HTTPRagClient implements RagClient {
 
     const startTime = Date.now();
 
-    const response = await fetch(`${this.baseUrl}/documents`, {
+    const response = await fetch(`${this.baseUrl}${RAG_PATHS.documents}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ domain }),
@@ -147,13 +150,12 @@ class HTTPRagClient implements RagClient {
       throw new Error(`Get List Sources failed: ${response.status}`);
     }
 
-    const result = (await response.json()) as ListDocumentsResponse;
+    const result = fromListDocumentsResponse(await response.json());
 
     log.info("list_sources_completed", {
       duration_ms: Date.now() - startTime,
       status: result.status,
-      document_count:
-        result.status === "success" ? (result.metadata.count ?? 0) : 0,
+      document_count: result.metadata.count,
     });
 
     return result;
@@ -165,7 +167,7 @@ class HTTPRagClient implements RagClient {
     const startTime = Date.now();
 
     const response = await fetch(
-      `${this.baseUrl}/documents/metadata?source=${encodeURIComponent(source)}`,
+      `${this.baseUrl}${RAG_PATHS.metadata}?source=${encodeURIComponent(source)}`,
       {
         method: "GET",
       },
@@ -180,7 +182,7 @@ class HTTPRagClient implements RagClient {
       throw new Error(`Get Document Metadata failed: ${response.status}`);
     }
 
-    const result = (await response.json()) as DocumentMetadataResponse;
+    const result = fromDocumentMetadataResponse(await response.json());
 
     log.info("get_metadata_completed", {
       source,
@@ -192,8 +194,6 @@ class HTTPRagClient implements RagClient {
   }
 }
 
-const RAG_URL = process.env.RAG_URL;
-
 export const httpClient = new HTTPRagClient(
-  RAG_URL || "http://localhost:8000/rag",
+  toOriginBaseUrl(process.env.RAG_URL || "http://localhost:8000"),
 );

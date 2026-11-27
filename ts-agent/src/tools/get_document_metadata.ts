@@ -20,18 +20,6 @@ registerTool({
     try {
       const result = await httpClient.getSourceMetadata(input.source);
 
-      if (result.status === "failed") {
-        log.info("execute_not_found", {
-          source: input.source,
-          duration_ms: Date.now() - startTime,
-        });
-        return {
-          ok: false,
-          error: `No existe metadata para "${input.source}"`,
-          retryable: false,
-        };
-      }
-
       log.info("execute_completed", {
         source: input.source,
         duration_ms: Date.now() - startTime,
