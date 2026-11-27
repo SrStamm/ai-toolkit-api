@@ -9,14 +9,14 @@ from uuid import UUID
 
 from fastapi import UploadFile
 
-from app.api.retrieval_engine.ingestion_service import IngestionService
-from app.api.retrieval_engine.query_service import QueryService
-from app.api.retrieval_engine.reranker import Reranker
-from app.api.retrieval_engine.metrics_collector import MetricsCollector
-from app.api.retrieval_engine.schemas import QueryResponse
-from app.infrastructure.storage.interfaces import VectorStoreInterface
-from app.infrastructure.storage.hybrid_ai import HybridEmbeddingService
-from app.application.llm.client import LLMClient
+from .ingestion_service import IngestionService, ProgressCallback
+from .query_service import QueryService
+from .reranker import Reranker
+from .metrics_collector import MetricsCollector
+from .schemas.query import QueryResponse
+from ...infrastructure.storage.interfaces import VectorStoreInterface
+from ...infrastructure.storage.hybrid_ai import HybridEmbeddingService
+from ...application.llm.client import LLMClient
 
 
 class RAGService:
@@ -60,8 +60,10 @@ class RAGService:
         source: str,
         domain: str,
         topic: str,
-        progress_callback=None,
-    ):
+        progress_callback: ProgressCallback | None = None,
+        display_name: str | None = None,
+        replaces_source: str | None = None,
+    ) -> dict:
         """Synchronous PDF ingestion."""
         return await self.ingestion.ingest_pdf_file(
             file=file,
@@ -69,10 +71,18 @@ class RAGService:
             domain=domain,
             topic=topic,
             progress_callback=progress_callback,
+            display_name=display_name,
+            replaces_source=replaces_source,
         )
 
     async def ingest_pdf_file_stream(
-        self, file: UploadFile, source: str, domain: str, topic: str
+        self,
+        file: UploadFile,
+        source: str,
+        domain: str,
+        topic: str,
+        display_name: str | None = None,
+        replaces_source: str | None = None,
     ) -> AsyncIterator[dict]:
         """Streaming PDF ingestion."""
         async for progress in self.ingestion.ingest_pdf_file_stream(
@@ -80,6 +90,8 @@ class RAGService:
             source=source,
             domain=domain,
             topic=topic,
+            display_name=display_name,
+            replaces_source=replaces_source,
         ):
             yield progress
 
@@ -89,8 +101,9 @@ class RAGService:
         source: str,
         domain: str,
         topic: str,
-        progress_callback=None,
-    ):
+        progress_callback: ProgressCallback | None = None,
+        replaces_source: str | None = None,
+    ) -> dict:
         """Synchronous URL ingestion."""
         return await self.ingestion.ingest_document(
             url=url,
@@ -98,10 +111,16 @@ class RAGService:
             domain=domain,
             topic=topic,
             progress_callback=progress_callback,
+            replaces_source=replaces_source,
         )
 
     async def ingest_document_stream(
-        self, url: str, source: str, domain: str, topic: str
+        self,
+        url: str,
+        source: str,
+        domain: str,
+        topic: str,
+        replaces_source: str | None = None,
     ) -> AsyncIterator[dict]:
         """Streaming URL ingestion."""
         async for progress in self.ingestion.ingest_document_stream(
@@ -109,6 +128,7 @@ class RAGService:
             source=source,
             domain=domain,
             topic=topic,
+            replaces_source=replaces_source,
         ):
             yield progress
 

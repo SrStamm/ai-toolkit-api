@@ -169,13 +169,19 @@ class HybridEmbeddingService(HybridEmbeddingInterface):
             raise EmbeddingError(str(e)) from e
 
 
-embedding = HybridEmbeddingService(
-    dense_model=SentenceTransformer(
-        "sentence-transformers/all-MiniLM-L6-v2", device="cpu"
-    ),
-    sparse_model=SparseEncoder("prithivida/Splade_PP_en_v2"),
-)
+_embedding: HybridEmbeddingService | None = None
 
 
 def get_hybrid_embeddign_service() -> HybridEmbeddingService:
-    return embedding
+    """Return the shared embedding service, creating it on first use."""
+    global _embedding
+
+    if _embedding is None:
+        _embedding = HybridEmbeddingService(
+            dense_model=SentenceTransformer(
+                "sentence-transformers/all-MiniLM-L6-v2", device="cpu"
+            ),
+            sparse_model=SparseEncoder("prithivida/Splade_PP_en_v2"),
+        )
+
+    return _embedding

@@ -9,7 +9,7 @@ from .ingestion import LlamaIngester
 from .indexing import LlamaIndexer
 from .config import setup_llamaindex
 from ..retrieval_engine.prompt import PROMPT_TEMPLATE_CHAT
-from ..retrieval_engine.schemas import Citation, Metadata, QueryResponse
+from ..retrieval_engine.schemas.query import Citation, Metadata, QueryResponse
 from ...infrastructure.embedding import get_rerank_model
 from ...application.llm.client import LLMClient, get_llm_client
 

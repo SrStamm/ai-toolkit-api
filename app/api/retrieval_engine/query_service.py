@@ -11,7 +11,12 @@ from uuid import UUID
 import structlog
 from pydantic import ValidationError
 
-from app.api.retrieval_engine.schemas import Citation, LLMAnswer, Metadata, QueryResponse
+from app.api.retrieval_engine.schemas.query import (
+    Citation,
+    LLMAnswer,
+    Metadata,
+    QueryResponse,
+)
 from app.api.retrieval_engine.prompt import PROMPT_TEMPLATE, PROMPT_TEMPLATE_CHAT
 from app.api.retrieval_engine.reranker import Reranker
 from app.api.retrieval_engine.metrics_collector import MetricsCollector
@@ -68,24 +73,29 @@ class QueryService:
 
         return result
 
-    def _build_citations(self, query_result: list) -> list[Citation]:
-        """Build citations from query results."""
-        seen = set()
-        citations: list[Citation] = []
+    def _build_source_names(self, query_result: list) -> list[str]:
+        """Build deduplicated source names in first-seen order."""
+        seen: set[str] = set()
+        source_names: list[str] = []
 
         for hit in query_result:
-            src = hit.payload["source"]
-            if src not in seen:
-                seen.add(src)
-                citations.append(
-                    Citation(
-                        source=src,
-                        chunk_index=hit.payload["chunk_index"],
-                        text=hit.payload["text"],
-                    )
-                )
+            source = hit.payload["source"]
+            if source not in seen:
+                seen.add(source)
+                source_names.append(source)
 
-        return citations
+        return source_names
+
+    def _build_citation_objects(self, query_result: list) -> list[Citation]:
+        """Build one citation object per reranked chunk."""
+        return [
+            Citation(
+                source=hit.payload["source"],
+                chunk_index=hit.payload.get("chunk_index", 0),
+                text=hit.payload["text"],
+            )
+            for hit in query_result
+        ]
 
     def _build_context(self, chunks: list) -> str:
         """Format chunks into numbered context blocks."""
@@ -100,7 +110,7 @@ class QueryService:
         top_k: int = 5,
         domain: str | None = None,
         topic: str | None = None,
-    ) -> tuple[str, list[Citation]]:
+    ) -> tuple[str, list[str]]:
         """
         Retrieve reranked context + citations without generating an answer.
 
@@ -121,7 +131,7 @@ class QueryService:
             return "", []
 
         rerank_result = self.reranker.rerank(query, query_result)[:top_k]
-        return self._build_context(rerank_result), self._build_citations(
+        return self._build_context(rerank_result), self._build_source_names(
             rerank_result
         )
 
@@ -184,7 +194,7 @@ class QueryService:
         answer = self._parse_answer(response.content)
 
         # Build citations
-        citations = self._build_citations(rerank_result)
+        citations = self._build_citation_objects(rerank_result)
 
         # Track costs
         self.metrics.log_cost_tracking(
@@ -259,7 +269,7 @@ class QueryService:
         )
 
         # Send citations
-        citations = self._build_citations(rerank_result)
+        citations = self._build_citation_objects(rerank_result)
         yield f"data: {json.dumps({'type': 'citations', 'citations': [c.model_dump() for c in citations]})}\n\n"
 
         # Send metadata

@@ -15,5 +15,9 @@ class VectorStoreError(Exception):
     pass
 
 
+class InvalidFilterError(Exception):
+    """Raised when a filter has no usable conditions."""
+
+
 def error_event(message: str, recoverable: bool):
     return f"data: {json.dumps({'type': 'error', 'message': message, 'recoverable': recoverable})}\n\n"

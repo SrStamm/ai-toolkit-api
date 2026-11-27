@@ -4,10 +4,15 @@ from qdrant_client import models
 import torch
 import structlog
 
+from app.domain.source_identity import (
+    canonicalize_source_for_lookup,
+    source_lookup_keys,
+)
+
 from .interfaces import HybridVector, VectorStoreInterface
 from ...infrastructure.embedding import get_rerank_model
 from ...infrastructure.logging import time_response
-from ...api.retrieval_engine.exceptions import VectorStoreError
+from ...api.retrieval_engine.exceptions import InvalidFilterError, VectorStoreError
 from ...core.settings import get_settings
 
 
@@ -222,6 +227,11 @@ class QdrantStore(VectorStoreInterface):
                             Use "field_lt", "field_gt" for range queries.
                             Example: {"source": "url", "domain": "python"}
         """
+        if not filter_conditions:
+            raise InvalidFilterError(
+                "delete_by_filter requires at least one condition"
+            )
+
         must_conditions = []
         
         for key, value in filter_conditions.items():
@@ -241,29 +251,26 @@ class QdrantStore(VectorStoreInterface):
                 )
         
         if not must_conditions:
-            log.warning("delete_by_filter called with empty conditions, skipping")
-            return
+            raise InvalidFilterError(
+                "delete_by_filter requires at least one condition"
+            )
             
-        self.client.delete(
-            collection_name=COLLECTION_NAME,
-            points_selector=models.FilterSelector(
-                filter=models.Filter(must=must_conditions)
-            ),
-        )
+        try:
+            self.client.delete(
+                collection_name=COLLECTION_NAME,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(must=must_conditions)
+                ),
+            )
+        except Exception as exc:
+            raise VectorStoreError("Failed to delete points by filter") from exc
         log.info("Deleted points by filter", conditions=filter_conditions)
 
     @time_response
     def list_sources(self, domain: str | None = None) -> list[dict]:
-        """
-        List unique sources with chunk counts.
-        Uses scroll API to iterate through points (since Qdrant doesn't have DISTINCT).
-        
-        Returns:
-            [{"source": "...", "domain": "...", "topic": "...", "chunk_count": N}, ...]
-        """
-        sources_map = {}  # source -> {domain, topic, count}
-        
-        # Build filter for domain if provided
+        """List canonical sources with merged chunk counts and display names."""
+        sources_map: dict[str, dict] = {}
+
         scroll_filter = None
         if domain:
             scroll_filter = models.Filter(
@@ -273,8 +280,7 @@ class QdrantStore(VectorStoreInterface):
                     )
                 ]
             )
-        
-        # Scroll through all points
+
         offset = None
         while True:
             points, offset = self.client.scroll(
@@ -285,70 +291,86 @@ class QdrantStore(VectorStoreInterface):
                 with_vectors=False,
                 offset=offset,
             )
-            
+
             for point in points:
                 payload = point.payload
-                source = payload.get("source")
-                if not source:
+                raw_source = payload.get("source")
+                if not raw_source:
                     continue
-                    
+
+                source = canonicalize_source_for_lookup(raw_source)
                 if source not in sources_map:
                     sources_map[source] = {
                         "source": source,
+                        "display_name": payload.get("display_name") or source,
                         "domain": payload.get("domain", "unknown"),
                         "topic": payload.get("topic", "unknown"),
                         "chunk_count": 0,
+                        "last_ingested": 0,
                     }
-                sources_map[source]["chunk_count"] += 1
-            
+
+                row = sources_map[source]
+                if payload.get("display_name"):
+                    row["display_name"] = payload["display_name"]
+                row["chunk_count"] += 1
+                row["last_ingested"] = max(
+                    row["last_ingested"], payload.get("ingested_at", 0)
+                )
+
             if offset is None:
                 break
-                
+
         return list(sources_map.values())
 
     @time_response
     def get_source_metadata(self, source: str) -> dict | None:
-        """
-        Get aggregated metadata for a specific source.
-        
-        Returns:
-            {"source": "...", "domain": "...", "topic": "...", 
-             "chunk_count": N, "last_ingested": timestamp} or None
-        """
-        # Query points with this source
-        points, _ = self.client.scroll(
-            collection_name=COLLECTION_NAME,
-            scroll_filter=models.Filter(
+        """Aggregate metadata across every alias of a source."""
+        canonical_source = canonicalize_source_for_lookup(source)
+        points: list = []
+        domains: set[str] = set()
+        topics: set[str] = set()
+
+        for key in source_lookup_keys(source):
+            scroll_filter = models.Filter(
                 must=[
                     models.FieldCondition(
-                        key="source", match=models.MatchValue(value=source)
+                        key="source", match=models.MatchValue(value=key)
                     )
                 ]
-            ),
-            limit=1000,  # Assuming a source won't have more than 1000 chunks
-            with_payload=True,
-            with_vectors=False,
-        )
-        
+            )
+            offset = None
+            while True:
+                page, offset = self.client.scroll(
+                    collection_name=COLLECTION_NAME,
+                    scroll_filter=scroll_filter,
+                    limit=256,
+                    with_payload=True,
+                    with_vectors=False,
+                    offset=offset,
+                )
+                points.extend(page)
+                if offset is None or not page:
+                    break
+
         if not points:
             return None
-            
-        # Aggregate metadata
-        domains = set()
-        topics = set()
+
+        display_name: str | None = None
         max_timestamp = 0
-        
         for point in points:
             payload = point.payload
-            if "domain" in payload:
+            if payload.get("domain"):
                 domains.add(payload["domain"])
-            if "topic" in payload:
+            if payload.get("topic"):
                 topics.add(payload["topic"])
-            if "ingested_at" in payload:
+            if payload.get("ingested_at"):
                 max_timestamp = max(max_timestamp, payload["ingested_at"])
-        
+            if display_name is None and payload.get("display_name"):
+                display_name = payload["display_name"]
+
         return {
-            "source": source,
+            "source": canonical_source,
+            "display_name": display_name or canonical_source,
             "domain": next(iter(domains), "unknown"),
             "topic": next(iter(topics), "unknown"),
             "chunk_count": len(points),

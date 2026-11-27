@@ -25,12 +25,3 @@ def get_rag_service() -> RAGService:
         vector_store=get_qdrant_store(),
         embed_service=get_hybrid_embeddign_service(),
     )
-
-
-# Re-export schemas for convenience
-from app.api.retrieval_engine.schemas import (
-    Citation,
-    LLMAnswer,
-    Metadata,
-    QueryResponse,
-)
