@@ -8,7 +8,16 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from .jobs.celery_tasks import ingest_file_job, ingest_html_job
 from .jobs.job_service import JobService
-from .schemas import IngestRequest, SearchRequest
+from .schemas.request import IngestRequest, SearchRequest
+from .schemas.response import (
+    DeleteDocumentResponse,
+    DocumentMetadataResponse,
+    ErrorResponse,
+    IngestJobResponse,
+    JobStatusResponse,
+    ListDocumentsResponse,
+    SearchResponse,
+)
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 

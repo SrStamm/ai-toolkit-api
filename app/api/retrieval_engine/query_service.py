@@ -11,7 +11,12 @@ from uuid import UUID
 import structlog
 from pydantic import ValidationError
 
-from app.api.retrieval_engine.schemas import Citation, LLMAnswer, Metadata, QueryResponse
+from app.api.retrieval_engine.schemas.query import (
+    Citation,
+    LLMAnswer,
+    Metadata,
+    QueryResponse,
+)
 from app.api.retrieval_engine.prompt import PROMPT_TEMPLATE, PROMPT_TEMPLATE_CHAT
 from app.api.retrieval_engine.reranker import Reranker
 from app.api.retrieval_engine.metrics_collector import MetricsCollector

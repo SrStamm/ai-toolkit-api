@@ -5,7 +5,8 @@ import shutil
 import uuid
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
-from ..retrieval_engine.schemas import IngestRequest, QueryRequest, QueryResponse
+from ..retrieval_engine.schemas.request import IngestRequest
+from ..retrieval_engine.schemas.query import QueryRequest, QueryResponse
 from ..llamaindex_adapter.orchestrator import LlamaIndexOrchestrator, get_orchestrator
 
 router = APIRouter(prefix="/llama", tags=["Llama"])
