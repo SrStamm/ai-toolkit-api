@@ -156,3 +156,5 @@ scripts/
 
 docker-compose*.yml
 .git/
+
+**/node_modules
