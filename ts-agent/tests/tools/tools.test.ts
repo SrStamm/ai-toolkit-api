@@ -21,7 +21,9 @@ describe("tools registry and tools", () => {
     // Import tools (side-effect) and registry
     await import("../../src/tools/index.js");
     const { getTool, listTools } = await import("../../src/tools/registry.js");
-    const names = listTools().map((t) => t.name).sort();
+    const names = listTools()
+      .map((t) => t.name)
+      .sort();
     expect(names).toEqual([
       "delete_document",
       "get_document_metadata",
@@ -64,7 +66,10 @@ describe("tools registry and tools", () => {
       await import("../../src/tools/index.js");
       const { getTool } = await import("../../src/tools/registry.js");
       const { httpClient } = await import("../../src/lib/rag-client.js");
-      (httpClient.search as any).mockResolvedValue({ context: "", citations: [] });
+      (httpClient.search as any).mockResolvedValue({
+        context: "",
+        citations: [],
+      });
       const tool = getTool("retrieve_context");
       const res = await tool!.execute(
         { query: "q", domain: "", top_k: undefined, topic: undefined } as any,
@@ -80,14 +85,22 @@ describe("tools registry and tools", () => {
   });
 
   describe("list_documents", () => {
-    it("returns ok:false retryable:false when status failed", async () => {
+    it("returns ok:false retryable:false when no documents are found", async () => {
       await import("../../src/tools/index.js");
       const { getTool } = await import("../../src/tools/registry.js");
       const { httpClient } = await import("../../src/lib/rag-client.js");
-      (httpClient.listSources as any).mockResolvedValue({ status: "failed" });
+      (httpClient.listSources as any).mockResolvedValue({
+        status: "success",
+        metadata: { documents: [], count: 0 },
+        output: "Found 0 document(s):",
+      });
       const tool = getTool("list_documents");
       const res = await tool!.execute({ domain: "d" } as any, {} as any);
-      expect(res).toEqual({ ok: false, retryable: false, error: "No hay documentos en la base de conocimiento" });
+      expect(res).toEqual({
+        ok: false,
+        retryable: false,
+        error: "No hay documentos en la base de conocimiento",
+      });
     });
 
     it("returns ok:true with metadata on success", async () => {
@@ -110,14 +123,17 @@ describe("tools registry and tools", () => {
   });
 
   describe("get_document_metadata", () => {
-    it("returns ok:false retryable:false when status failed", async () => {
+    it("propagates getSourceMetadata HTTP errors", async () => {
       await import("../../src/tools/index.js");
       const { getTool } = await import("../../src/tools/registry.js");
       const { httpClient } = await import("../../src/lib/rag-client.js");
-      (httpClient.getSourceMetadata as any).mockResolvedValue({ status: "failed" });
+      (httpClient.getSourceMetadata as any).mockRejectedValue(
+        new Error("Get Document Metadata failed: 404"),
+      );
       const tool = getTool("get_document_metadata");
-      const res = await tool!.execute({ source: "src" } as any, {} as any);
-      expect(res).toEqual({ ok: false, retryable: false, error: 'No existe metadata para "src"' });
+      await expect(
+        tool!.execute({ source: "src" } as any, {} as any),
+      ).rejects.toThrow(/Get Document Metadata failed: 404/);
     });
 
     it("returns ok:true with metadata on success", async () => {
@@ -131,7 +147,11 @@ describe("tools registry and tools", () => {
       });
       const tool = getTool("get_document_metadata");
       const res = await tool!.execute({ source: "src" } as any, {} as any);
-      expect(res).toEqual({ ok: true, output: "OUT", metadata: { source: "s" } });
+      expect(res).toEqual({
+        ok: true,
+        output: "OUT",
+        metadata: { source: "s" },
+      });
     });
   });
 
@@ -140,7 +160,10 @@ describe("tools registry and tools", () => {
       await import("../../src/tools/index.js");
       const { getTool } = await import("../../src/tools/registry.js");
       const { httpClient } = await import("../../src/lib/rag-client.js");
-      (httpClient.deleteDocument as any).mockResolvedValue({ status: "deleted", source: "src-1" });
+      (httpClient.deleteDocument as any).mockResolvedValue({
+        status: "deleted",
+        source: "src-1",
+      });
       const tool = getTool("delete_document");
       const res = await tool!.execute({ source: "src-1" } as any, {} as any);
       expect(res.ok).toBe(true);
@@ -154,7 +177,10 @@ describe("tools registry and tools", () => {
       await import("../../src/tools/index.js");
       const { getTool } = await import("../../src/tools/registry.js");
       const { httpClient } = await import("../../src/lib/rag-client.js");
-      (httpClient.ingest as any).mockResolvedValue({ job_id: "JOB-1", status: "queued" } as any);
+      (httpClient.ingest as any).mockResolvedValue({
+        job_id: "JOB-1",
+        status: "queued",
+      } as any);
       const tool = getTool("ingest_document");
       const res = await tool!.execute(
         { url: "https://example.com", domain: "d", topic: "t" } as any,

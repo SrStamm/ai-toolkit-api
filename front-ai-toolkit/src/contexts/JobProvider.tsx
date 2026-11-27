@@ -7,7 +7,11 @@ import {
 } from "react";
 import { getJobStatus } from "@/services/ragServices";
 import { showToastError, showToastSuccess } from "@/components/toast";
-import { JobContext, type Job, type JobContextType } from "@/contexts/JobContext";
+import {
+  JobContext,
+  type Job,
+  type JobContextType,
+} from "@/contexts/JobContext";
 
 // Auto-cleanup time for completed jobs (5 seconds)
 const AUTO_CLEAN_UP_DELAY = 5000;
@@ -33,10 +37,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
           ? {
               ...job,
               ...updates,
-              ...(updates.status === "completed" ||
-              updates.status === "SUCCESS" ||
-              updates.status === "failed" ||
-              updates.status === "FAILURE"
+              ...(updates.status === "completed" || updates.status === "failed"
                 ? { completedAt: Date.now() }
                 : {}),
             }
@@ -91,7 +92,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
 
           updateJob(job.id, {
             status: data.status,
-            progress: data.progress || 0,
+            progress: data.progress,
             message: nextMessage,
             ...(data.status === "failed" ? { error: data.error } : {}),
           });
@@ -144,8 +145,6 @@ export function JobProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <JobContext.Provider value={contextValue}>
-      {children}
-    </JobContext.Provider>
+    <JobContext.Provider value={contextValue}>{children}</JobContext.Provider>
   );
 }

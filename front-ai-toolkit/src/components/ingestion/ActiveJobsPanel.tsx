@@ -11,14 +11,14 @@ export function ActiveJobsPanel() {
   return (
     <div className="px-4 pb-4 space-y-3 animate-in slide-in-from-bottom-4 fade-in duration-300">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground font-medium">Tareas activas</p>
+        <p className="text-xs text-muted-foreground font-medium">
+          Tareas activas
+        </p>
         <button
           onClick={() =>
             activeJobs.forEach((j) => {
               if (
                 j.completedAt ||
-                j.status === "SUCCESS" ||
-                j.status === "FAILURE" ||
                 j.status === "completed" ||
                 j.status === "failed"
               ) {
@@ -36,9 +36,9 @@ export function ActiveJobsPanel() {
         <div key={job.id} className="rounded-lg bg-muted/30 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {job.status === "completed" || job.status === "SUCCESS" ? (
+              {job.status === "completed" ? (
                 <CheckCircle2 className="size-4 text-green-500" />
-              ) : job.status === "failed" || job.status === "FAILURE" ? (
+              ) : job.status === "failed" ? (
                 <XCircle className="size-4 text-destructive" />
               ) : (
                 <Loader2 className="size-4 animate-spin text-primary" />
@@ -52,13 +52,15 @@ export function ActiveJobsPanel() {
                 )}
               </span>
             </div>
-            <span className="text-sm text-muted-foreground">{job.progress}%</span>
+            <span className="text-sm text-muted-foreground">
+              {job.progress}%
+            </span>
           </div>
           <Progress
             value={job.progress}
             className={cn("h-2", {
               "[&_[data-slot=progress-indicator]]:bg-destructive]":
-                job.status === "failed" || job.status === "FAILURE",
+                job.status === "failed",
             })}
           />
           {job.error && <p className="text-xs text-destructive">{job.error}</p>}

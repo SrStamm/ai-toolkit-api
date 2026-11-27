@@ -1,3 +1,4 @@
+import type { FrontendJobStatus } from "@/adapters/rag-contracts";
 import { createContext, useContext } from "react";
 
 export type JobSource = "ingestion-ui" | "agent-chat";
@@ -7,8 +8,8 @@ export interface Job {
   id: string;
   type: JobType;
   source: JobSource;
-  status: string;
-  progress: number;
+  status: FrontendJobStatus;
+  progress: number | null;
   message?: string;
   error?: string;
   createdAt: number;

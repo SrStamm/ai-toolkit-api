@@ -6,12 +6,6 @@ import { useJobContext } from "@/contexts/JobContext";
 
 // Remove unused fields from Message interface - task status now lives in JobContext
 
-export interface Citation {
-  source: string;
-  chunk_index: number;
-  text: string;
-}
-
 export interface ToolStep {
   tool: string;
   status: "running" | "completed";
@@ -23,7 +17,7 @@ export interface Message {
   content: string;
   isStreaming?: boolean;
   isStream?: boolean;
-  citations?: Citation[];
+  citations?: string[];
   steps?: ToolStep[];
   agentStatus?:
     | "thinking"
@@ -163,7 +157,10 @@ export function useChatStream({
         (event, data) => {
           if (event === "state_changed") {
             if (data.state === "executing_tool" && data.tool) {
-              accumulatedSteps.push({ tool: data.tool as string, status: "running" });
+              accumulatedSteps.push({
+                tool: data.tool as string,
+                status: "running",
+              });
               setMessages((prev) =>
                 prev.map((msg) =>
                   msg.id === aiMessage.id
@@ -237,7 +234,8 @@ export function useChatStream({
               setIsLoading(false);
             }
           } else if (event === "tool_done") {
-            const toolName: string = (data.tool as string) || (data.tool_name as string) || "unknown";
+            const toolName: string =
+              (data.tool as string) || (data.tool_name as string) || "unknown";
             const idx = accumulatedSteps.findLastIndex(
               (s: ToolStep) => s.tool === toolName && s.status === "running",
             );
@@ -283,7 +281,7 @@ export function useChatStream({
                       ...msg,
                       content: parseAnswer(finalContent),
                       isStreaming: false,
-                      citations: (data.citations as Citation[]) || [],
+                      citations: (data.citations as string[]) || [],
                     }
                   : msg,
               ),
@@ -368,7 +366,9 @@ export function useChatStream({
 
     // Remove the last user message AND the streaming assistant placeholder
     setMessages((prev) => {
-      const lastUserIdx = prev.findLastIndex((msg: Message) => msg.role === "user");
+      const lastUserIdx = prev.findLastIndex(
+        (msg: Message) => msg.role === "user",
+      );
       if (lastUserIdx === -1)
         return prev.filter((msg) => msg.isStreaming !== true);
       // Remove user message at lastUserIdx and everything after (the AI placeholder)

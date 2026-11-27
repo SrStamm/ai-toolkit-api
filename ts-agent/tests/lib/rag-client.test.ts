@@ -71,7 +71,7 @@ describe("rag-client", () => {
 
   it("ingest posts to /ingest/job with correct body", async () => {
     const { httpClient } = await import("../../src/lib/rag-client.js");
-    const jobPayload = { status: "queued", url: "http://x", job_id: "123" };
+    const jobPayload = { status: "queued", job_id: "123" };
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -85,8 +85,13 @@ describe("rag-client", () => {
     const opts = call[1] as any;
     expect(opts.method).toBe("POST");
     expect(opts.headers).toEqual({ "Content-Type": "application/json" });
-    expect(JSON.parse(opts.body)).toEqual({ url: data.url, domain: data.domain, topic: data.topic });
-    expect(res).toEqual(jobPayload);
+    expect(JSON.parse(opts.body)).toEqual({
+      url: data.url,
+      domain: data.domain,
+      topic: data.topic,
+      replaces_source: data.source,
+    });
+    expect(res).toEqual({ status: "queued", job_id: "123" });
   });
 
   it("ingest non-ok rejects with /Ingest File Job failed/", async () => {
@@ -146,5 +151,95 @@ describe("rag-client", () => {
     expect(call[0]).toBe(`${base}/documents/metadata?source=a%2Fb`);
     const opts = call[1] as any;
     expect(opts.method).toBe("GET");
+  });
+});
+
+describe("rag-client response and error handling", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as any;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("deleteDocument rejects on HTTP 500", async () => {
+    const { httpClient } = await import("../../src/lib/rag-client.js");
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+
+    await expect(httpClient.deleteDocument("src")).rejects.toThrow(
+      /Delete Document failed: 500/,
+    );
+  });
+
+  it("listSources rejects on HTTP 500", async () => {
+    const { httpClient } = await import("../../src/lib/rag-client.js");
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+
+    await expect(httpClient.listSources("dom")).rejects.toThrow(
+      /Get List Sources failed: 500/,
+    );
+  });
+
+  it("getSourceMetadata rejects on HTTP 500", async () => {
+    const { httpClient } = await import("../../src/lib/rag-client.js");
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+
+    await expect(httpClient.getSourceMetadata("src")).rejects.toThrow(
+      /Get Document Metadata failed: 500/,
+    );
+  });
+
+  it("listSources returns the adapted success payload", async () => {
+    const { httpClient } = await import("../../src/lib/rag-client.js");
+    const metadata = {
+      source: "src-a",
+      display_name: null,
+      domain: "dom",
+      topic: "topic",
+      chunk_count: 4,
+      last_ingested: 123,
+    };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: "success",
+        metadata: { documents: [metadata], count: 1 },
+        output: "Found 1 document(s):",
+      }),
+    });
+
+    await expect(httpClient.listSources("dom")).resolves.toEqual({
+      status: "success",
+      metadata: { documents: [metadata], count: 1 },
+      output: "Found 1 document(s):",
+    });
+  });
+
+  it("getSourceMetadata returns the adapted metadata payload", async () => {
+    const { httpClient } = await import("../../src/lib/rag-client.js");
+    const metadata = {
+      source: "src-a",
+      display_name: "Friendly name",
+      domain: "dom",
+      topic: "topic",
+      chunk_count: 2,
+      last_ingested: 456,
+    };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "success", metadata, output: "OK" }),
+    });
+
+    await expect(httpClient.getSourceMetadata("src-a")).resolves.toEqual({
+      status: "success",
+      metadata,
+      output: "OK",
+    });
   });
 });

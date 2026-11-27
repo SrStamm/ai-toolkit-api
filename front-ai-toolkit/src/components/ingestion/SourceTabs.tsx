@@ -47,9 +47,9 @@ export function SourceTabs({
 
     try {
       const response = await ingestURLJob({ url, domain, topic });
-      if (response.job_id) {
+      if (response.jobId) {
         addJob({
-          id: response.job_id,
+          id: response.jobId,
           type: "job",
           source: "ingestion-ui",
           status: "pending",
@@ -74,19 +74,16 @@ export function SourceTabs({
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("source", file.name);
+    formData.append("replaces_source", file.name);
     formData.append("domain", domain || "general");
     formData.append("topic", topic || "pdf-upload");
 
     try {
       const response = await ingestFileJob(formData);
 
-      if (!response.ok) throw new Error("Error en la subida");
-
-      const json = (await response.json()) as { job_id: string };
-      if (json.job_id) {
+      if (response.jobId) {
         addJob({
-          id: json.job_id,
+          id: response.jobId,
           type: "job",
           source: "ingestion-ui",
           status: "pending",

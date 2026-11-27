@@ -17,7 +17,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   // Get unique sources from citations
   const uniqueSources = useMemo(() => {
     if (!message.citations || message.citations.length === 0) return [];
-    return [...new Set(message.citations.map((c) => c.source))];
+    return [...new Set(message.citations)];
   }, [message.citations]);
 
   return (
@@ -47,22 +47,24 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             <ToolSteps steps={message.steps} />
           )}
 
-          {!isUser && message.agentStatus && message.agentStatus !== "completed" && (
-            <div className="flex items-center gap-1.5 mb-2 text-xs text-muted-foreground">
-              {message.agentStatus === "thinking" && (
-                <>
-                  <Loader2 className="size-3 animate-spin" />
-                  <span>Analizando...</span>
-                </>
-              )}
-              {message.agentStatus === "generating" && (
-                <>
-                  <span className="inline-block size-1.5 rounded-full bg-primary animate-pulse" />
-                  <span>Generando respuesta...</span>
-                </>
-              )}
-            </div>
-          )}
+          {!isUser &&
+            message.agentStatus &&
+            message.agentStatus !== "completed" && (
+              <div className="flex items-center gap-1.5 mb-2 text-xs text-muted-foreground">
+                {message.agentStatus === "thinking" && (
+                  <>
+                    <Loader2 className="size-3 animate-spin" />
+                    <span>Analizando...</span>
+                  </>
+                )}
+                {message.agentStatus === "generating" && (
+                  <>
+                    <span className="inline-block size-1.5 rounded-full bg-primary animate-pulse" />
+                    <span>Generando respuesta...</span>
+                  </>
+                )}
+              </div>
+            )}
 
           <MessageContent
             content={message.content}
