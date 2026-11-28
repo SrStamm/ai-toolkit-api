@@ -15,7 +15,7 @@ registerTool({
     topic: z.string().optional(),
   }),
   dependencies: [],
-  execute: async (input, deps) => {
+  execute: async (input, deps, signal) => {
     log.debug("execute_start", {
       query_preview: input.query.slice(0, 80),
       top_k: input.top_k,
@@ -25,11 +25,15 @@ registerTool({
     const startTime = Date.now();
 
     try {
-      const results = await httpClient.search(input.query, {
-        topK: input.top_k,
-        domain: input.domain ?? "",
-        topic: input.topic,
-      });
+      const results = await httpClient.search(
+        input.query,
+        {
+          topK: input.top_k,
+          domain: input.domain ?? "",
+          topic: input.topic,
+        },
+        signal,
+      );
 
       if (!results || !results.context || !results.citations?.length) {
         log.info("execute_no_results", {

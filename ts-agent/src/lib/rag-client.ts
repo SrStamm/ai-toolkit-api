@@ -19,21 +19,39 @@ import {
   toWireSearch,
 } from "../adapters/rag-contracts";
 import { logger } from "./logger";
+import { HttpToolError, toCodeError } from "../types/tool-error";
 
 const log = logger.child("rag-client");
 
 export interface RagClient {
-  search(query: string, opts: SearchOptions): Promise<SearchResult>;
-  ingest(data: IngestData): Promise<IngestJobResponse>;
-  deleteDocument(source: string): Promise<DeleteDocumentResponse>;
-  getSourceMetadata(source: string): Promise<DocumentMetadataResponse>;
-  listSources(domain?: string): Promise<ListDocumentsResponse>;
+  search(
+    query: string,
+    opts: SearchOptions,
+    signal?: AbortSignal,
+  ): Promise<SearchResult>;
+  ingest(data: IngestData, signal?: AbortSignal): Promise<IngestJobResponse>;
+  deleteDocument(
+    source: string,
+    signal?: AbortSignal,
+  ): Promise<DeleteDocumentResponse>;
+  getSourceMetadata(
+    source: string,
+    signal?: AbortSignal,
+  ): Promise<DocumentMetadataResponse>;
+  listSources(
+    domain?: string,
+    signal?: AbortSignal,
+  ): Promise<ListDocumentsResponse>;
 }
 
 class HTTPRagClient implements RagClient {
   constructor(private baseUrl: string) {}
 
-  async search(query: string, opts: SearchOptions): Promise<SearchResult> {
+  async search(
+    query: string,
+    opts: SearchOptions,
+    signal?: AbortSignal,
+  ): Promise<SearchResult> {
     log.debug("search_start", {
       query_preview: query.slice(0, 80),
       top_k: opts.topK,
@@ -46,14 +64,20 @@ class HTTPRagClient implements RagClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(toWireSearch(query, opts)),
+      signal,
     });
 
     if (!response.ok) {
+      const code = toCodeError(response);
       log.error("search_failed", {
         status: response.status,
         duration_ms: Date.now() - startTime,
       });
-      throw new Error(`RAG search failed: ${response.status}`);
+      throw new HttpToolError(
+        response.status,
+        code,
+        `RAG request failed (${response.status})`,
+      );
     }
 
     const result = fromSearchResponse(await response.json());
@@ -67,7 +91,10 @@ class HTTPRagClient implements RagClient {
     return result;
   }
 
-  async ingest(data: IngestData): Promise<IngestJobResponse> {
+  async ingest(
+    data: IngestData,
+    signal?: AbortSignal,
+  ): Promise<IngestJobResponse> {
     log.debug("ingest_start", {
       url: data.url,
       domain: data.domain,
@@ -79,14 +106,20 @@ class HTTPRagClient implements RagClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(toWireIngest(data)),
+      signal,
     });
 
     if (!response.ok) {
+      const code = toCodeError(response);
       log.error("ingest_failed", {
         status: response.status,
         duration_ms: Date.now() - startTime,
       });
-      throw new Error(`Ingest File Job failed: ${response.status}`);
+      throw new HttpToolError(
+        response.status,
+        code,
+        `RAG request failed (${response.status})`,
+      );
     }
 
     const result = fromIngestJobResponse(await response.json());
@@ -99,7 +132,10 @@ class HTTPRagClient implements RagClient {
     return result;
   }
 
-  async deleteDocument(source: string): Promise<DeleteDocumentResponse> {
+  async deleteDocument(
+    source: string,
+    signal?: AbortSignal,
+  ): Promise<DeleteDocumentResponse> {
     log.debug("delete_start", { source });
 
     const startTime = Date.now();
@@ -110,15 +146,21 @@ class HTTPRagClient implements RagClient {
     );
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: "DELETE",
+      signal,
     });
 
     if (!response.ok) {
+      const code = toCodeError(response);
       log.error("delete_failed", {
         source,
         status: response.status,
         duration_ms: Date.now() - startTime,
       });
-      throw new Error(`Delete Document failed: ${response.status}`);
+      throw new HttpToolError(
+        response.status,
+        code,
+        `RAG request failed (${response.status})`,
+      );
     }
 
     const result = fromDeleteDocumentResponse(await response.json());
@@ -131,7 +173,10 @@ class HTTPRagClient implements RagClient {
     return result;
   }
 
-  async listSources(domain?: string): Promise<ListDocumentsResponse> {
+  async listSources(
+    domain?: string,
+    signal?: AbortSignal,
+  ): Promise<ListDocumentsResponse> {
     log.debug("list_sources_start", { domain });
 
     const startTime = Date.now();
@@ -140,14 +185,20 @@ class HTTPRagClient implements RagClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ domain }),
+      signal,
     });
 
     if (!response.ok) {
+      const code = toCodeError(response);
       log.error("list_sources_failed", {
         status: response.status,
         duration_ms: Date.now() - startTime,
       });
-      throw new Error(`Get List Sources failed: ${response.status}`);
+      throw new HttpToolError(
+        response.status,
+        code,
+        `RAG request failed (${response.status})`,
+      );
     }
 
     const result = fromListDocumentsResponse(await response.json());
@@ -161,7 +212,10 @@ class HTTPRagClient implements RagClient {
     return result;
   }
 
-  async getSourceMetadata(source: string): Promise<DocumentMetadataResponse> {
+  async getSourceMetadata(
+    source: string,
+    signal?: AbortSignal,
+  ): Promise<DocumentMetadataResponse> {
     log.debug("get_metadata_start", { source });
 
     const startTime = Date.now();
@@ -170,16 +224,24 @@ class HTTPRagClient implements RagClient {
       `${this.baseUrl}${RAG_PATHS.metadata}?source=${encodeURIComponent(source)}`,
       {
         method: "GET",
+        signal,
       },
     );
 
     if (!response.ok) {
+      const code = toCodeError(response);
+
       log.error("get_metadata_failed", {
         source,
         status: response.status,
         duration_ms: Date.now() - startTime,
       });
-      throw new Error(`Get Document Metadata failed: ${response.status}`);
+
+      throw new HttpToolError(
+        response.status,
+        code,
+        `RAG request failed (${response.status})`,
+      );
     }
 
     const result = fromDocumentMetadataResponse(await response.json());

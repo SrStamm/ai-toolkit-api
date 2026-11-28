@@ -1,6 +1,6 @@
 import type { Citation } from "./rag-api";
 import type { CostBreakdown, Message } from "./llm";
-import { ToolMetadata } from "./tools";
+import { ToolError, ToolMetadata } from "./tools";
 
 export enum ActionType {
   CALL_TOOL = "call_tool",
@@ -34,6 +34,9 @@ export interface ToolContext {
   lastToolMetadata?: Record<string, unknown>;
   toolExecutionCount: number;
   citations: Citation[];
+  lastToolError?: ToolError;
+  failedToolAttempts?: Record<string, number>;
+  maxToolRetries?: number;
 }
 
 export interface AgentState {
@@ -63,7 +66,8 @@ export type AgentEvent =
   | { type: "agent_decision"; decision: Decision }
   | { type: "state_changed"; state: RuntimeState; tool?: string }
   | { type: "done"; content: string; metadata: ToolMetadata }
-  | { type: "error"; error: string };
+  | { type: "error"; error: string }
+  | { type: "tool_error"; tool: string; error: ToolError; step?: number };
 
 export interface StepTrace {
   step: number;
@@ -99,5 +103,11 @@ export type StreamEvent =
   | { type: "tool_done"; tool: string; status: "success" | "error" }
   | { type: "agent_decision"; decision: Decision }
   | { type: "state_changed"; state: RuntimeState; tool?: string }
-  | { type: "done"; content: string; metadata: ToolMetadata; sessionId?: string }
-  | { type: "error"; error: string };
+  | {
+      type: "done";
+      content: string;
+      metadata: ToolMetadata;
+      sessionId?: string;
+    }
+  | { type: "error"; error: string }
+  | { type: "tool_error"; tool: string; error: ToolError; step?: number };

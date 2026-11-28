@@ -12,13 +12,13 @@ registerTool({
     source: z.string(),
   }),
   dependencies: [],
-  execute: async (input, deps) => {
+  execute: async (input, deps, signal) => {
     log.debug("execute_start", { source: input.source });
 
     const startTime = Date.now();
 
     try {
-      const result = await httpClient.deleteDocument(input.source);
+      const result = await httpClient.deleteDocument(input.source, signal);
 
       log.info("execute_completed", {
         source: result.source,
