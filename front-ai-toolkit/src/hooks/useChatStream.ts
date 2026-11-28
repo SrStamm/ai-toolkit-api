@@ -8,7 +8,8 @@ import { useJobContext } from "@/contexts/JobContext";
 
 export interface ToolStep {
   tool: string;
-  status: "running" | "completed";
+  status: "running" | "completed" | "failed";
+  error?: string;
 }
 
 export interface Message {
@@ -233,6 +234,26 @@ export function useChatStream({
               );
               setIsLoading(false);
             }
+          } else if (event === "tool_error") {
+            const toolName = (data.tool as string) || "unknown";
+            const err = data.error as { message?: string } | undefined;
+            const idx = accumulatedSteps.findLastIndex(
+              (s) => s.tool === toolName && s.status === "running",
+            );
+            if (idx !== -1) {
+              accumulatedSteps[idx] = {
+                ...accumulatedSteps[idx],
+                status: "failed",
+                error: err?.message,
+              };
+            }
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessage.id
+                  ? { ...msg, steps: [...accumulatedSteps] }
+                  : msg,
+              ),
+            );
           } else if (event === "tool_done") {
             const toolName: string =
               (data.tool as string) || (data.tool_name as string) || "unknown";
