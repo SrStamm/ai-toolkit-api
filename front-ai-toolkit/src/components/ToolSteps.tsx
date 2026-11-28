@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Loader2, Check, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  Loader2,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  AlertCircle,
+} from "lucide-react";
 import type { ToolStep } from "@/hooks/useChatStream";
 
 interface ToolStepsProps {
@@ -55,14 +61,19 @@ export function ToolSteps({ steps }: ToolStepsProps) {
             >
               {step.status === "running" ? (
                 <Loader2 className="size-3.5 animate-spin shrink-0 text-primary" />
+              ) : step.status === "failed" ? (
+                <AlertCircle className="size-3.5 shrink-0 text-destructive" />
               ) : (
                 <Check className="size-3.5 shrink-0 text-green-600 dark:text-green-400" />
               )}
+
               <span
                 className={cn(
                   step.status === "running" && "text-primary",
                   step.status === "completed" && "text-muted-foreground",
+                  step.status === "failed" && "text-destructive",
                 )}
+                title={step.error}
               >
                 {formatToolName(step.tool)}
               </span>

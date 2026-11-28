@@ -1,6 +1,7 @@
 import type { AgentQuestion } from "@/types/agent";
 import {
   fromIngestJobResponse,
+  RAG_PATHS,
   type IngestJobStarted,
 } from "../adapters/rag-contracts";
 
@@ -9,14 +10,13 @@ export const uploadAndIngestFile = async (
   domain: string,
   topic: string,
 ): Promise<IngestJobStarted> => {
-  const baseUrl = import.meta.env.VITE_URL || "";
   const formData = new FormData();
   formData.append("file", file);
   formData.append("replaces_source", file.name);
   formData.append("domain", domain);
   formData.append("topic", topic);
 
-  const response = await fetch(`${baseUrl}/rag/ingest-file/job`, {
+  const response = await fetch(RAG_PATHS.ingestFileJob, {
     method: "POST",
     body: formData,
   });
