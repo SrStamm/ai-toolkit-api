@@ -1,18 +1,31 @@
 import { describe, it, expect } from "vitest";
 import { applyGuardrails } from "../../src/router/guardrails";
 import { ActionType, type Decision, type ToolContext } from "../../src/types/agent";
+import { ToolErrorCodes, type ToolError } from "../../src/types/tools";
 
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   return {
     hasContext: false,
     toolExecutionCount: 0,
     citations: [],
+    failedToolAttempts: {},
+    maxToolRetries: 1,
     ...overrides,
   };
 }
 
 function callTool(toolName: string): Decision {
   return { action: ActionType.CALL_TOOL, tool_name: toolName, args: {} };
+}
+
+function makeToolError(retryable: boolean): ToolError {
+  return {
+    toolName: "search",
+    code: retryable ? ToolErrorCodes.TIMEOUT : ToolErrorCodes.BAD_REQUEST,
+    message: "search failed",
+    retryable,
+    timestamp: 1700000000000,
+  };
 }
 
 describe("applyGuardrails", () => {
@@ -66,5 +79,47 @@ describe("applyGuardrails", () => {
     const result = applyGuardrails(decision, makeCtx());
 
     expect(result).toBe(decision);
+  });
+
+  it("allows retrying the same tool below the retry limit when the error is retryable", () => {
+    const decision = callTool("search");
+    const ctx = makeCtx({
+      lastTool: "search",
+      lastToolError: makeToolError(true),
+      failedToolAttempts: { search: 1 },
+      maxToolRetries: 2,
+    });
+
+    const result = applyGuardrails(decision, ctx);
+
+    expect(result).toBe(decision);
+  });
+
+  it("blocks retrying the same tool once the retry limit is reached", () => {
+    const decision = callTool("search");
+    const ctx = makeCtx({
+      lastTool: "search",
+      lastToolError: makeToolError(true),
+      failedToolAttempts: { search: 2 },
+      maxToolRetries: 2,
+    });
+
+    const result = applyGuardrails(decision, ctx);
+
+    expect(result).toEqual({ action: ActionType.FINAL_ANSWER });
+  });
+
+  it("blocks retrying the same tool when the last error is not retryable", () => {
+    const decision = callTool("search");
+    const ctx = makeCtx({
+      lastTool: "search",
+      lastToolError: makeToolError(false),
+      failedToolAttempts: { search: 0 },
+      maxToolRetries: 2,
+    });
+
+    const result = applyGuardrails(decision, ctx);
+
+    expect(result).toEqual({ action: ActionType.FINAL_ANSWER });
   });
 });

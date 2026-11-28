@@ -10,13 +10,23 @@ import {
   RuntimeState,
   StepTrace,
   StreamEvent,
-  ToolContext,
 } from "../types/agent";
 import { Message } from "../types/llm";
-import { ToolResult } from "../types/tools";
+import {
+  ToolError,
+  ToolErrorCodes,
+  ToolExecutionResult,
+  ToolResult,
+} from "../types/tools";
 import { Router } from "../router/router";
-import { getTool } from "../tools/registry";
+import { getTool, listTools } from "../tools/registry";
 import { buildFinalAnswerPrompt } from "../router/prompts";
+import {
+  isToolResult,
+  MAX_ERROR_MESSAGE_LENGTH,
+  sanitizeMessage,
+  toToolError,
+} from "../types/tool-error";
 
 const log = logger.child("runtime");
 
@@ -27,8 +37,6 @@ const DEFAULT_CONFIG: RuntimeConfig = {
   maxRetries: 2,
   retryBackoffMs: 1_000,
 };
-
-const MAX_ERROR_MESSAGE_LENGTH = 500;
 
 export class Runtime {
   private llm: LLMInterface;
@@ -61,22 +69,6 @@ export class Runtime {
     data: Extract<StreamEvent, { type: T }>,
   ): string {
     return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  }
-
-  /**
-   * Turns an unknown thrown value into a short, human-readable message.
-   * Never leaks a raw stack trace: only `error.message` is used and
-   * whitespace is collapsed so multi-line traces become a single line.
-   */
-  private toSafeErrorMessage(err: unknown): string {
-    const raw = err instanceof Error ? err.message : String(err);
-    const collapsed = raw.replace(/\s+/g, " ").trim();
-
-    if (!collapsed) return "Unknown error";
-
-    return collapsed.length > MAX_ERROR_MESSAGE_LENGTH
-      ? `${collapsed.slice(0, MAX_ERROR_MESSAGE_LENGTH)}...`
-      : collapsed;
   }
 
   extractAnswer(answer: string): string {
@@ -131,7 +123,11 @@ export class Runtime {
     await this.sessionMemory.add(session_id, userMessage);
     this.state?.history?.push(userMessage);
 
-    log.debug("memory_updated", { session_id, role, content_len: query.length });
+    log.debug("memory_updated", {
+      session_id,
+      role,
+      content_len: query.length,
+    });
   }
 
   async *runStream(input: AgentInput) {
@@ -228,17 +224,33 @@ export class Runtime {
               tool: decision.tool_name,
             });
 
-            const result = await this.executeToolWithRetry({
+            const outcome = await this.executeToolWithRetry({
               ...decision,
               args: { ...decision.args, query: this.state.query },
             });
 
-            this.updateContext(decision.tool_name, result);
+            if (!outcome.success) {
+              this.updateContext(decision.tool_name, outcome);
+              yield this.emitEvent("tool_error", {
+                type: "tool_error",
+                tool: decision.tool_name,
+                error: outcome.error,
+                step: this.currentStep,
+              });
+              yield this.emitEvent("tool_done", {
+                type: "tool_done",
+                tool: decision.tool_name,
+                status: "error",
+              });
+              break;
+            }
 
+            const result = outcome.data; // aquí sí es ToolResult
+            this.updateContext(decision.tool_name, outcome);
             yield this.emitEvent("tool_done", {
               type: "tool_done",
               tool: decision.tool_name,
-              status: result.ok ? "success" : "error",
+              status: "success",
             });
 
             if (result.ok && result.complete) {
@@ -329,7 +341,7 @@ export class Runtime {
         error: `Agent run stopped after reaching the maximum number of steps (${this.config.maxSteps})`,
       });
     } catch (err) {
-      const message = this.toSafeErrorMessage(err);
+      const message = sanitizeMessage(err);
 
       log.error("stream_failed", {
         session_id: sessionId,
@@ -365,6 +377,7 @@ export class Runtime {
   }
 
   async execution_loop() {
+    const startTime = Date.now();
     for (
       this.currentStep = 0;
       this.currentStep < this.config.maxSteps;
@@ -400,30 +413,33 @@ export class Runtime {
         }
 
         case ActionType.CALL_TOOL: {
-          const toolArgs = {
-            ...decision.args,
-            query: this.state!.query,
-          };
-
-          const result = await this.executeToolWithRetry({
+          const outcome = await this.executeToolWithRetry({
             ...decision,
-            args: toolArgs,
+            args: { ...decision.args, query: this.state.query },
           });
 
-          // Actualizar state
-          this.updateContext(decision.tool_name, result);
-
-          if (result.ok && result.complete) {
-            this.state!.status = RuntimeState.COMPLETED;
-
-            await this.sessionMemory.add(this.state!.session_id, {
-              role: "assistant",
-              content: result.output,
-            });
-
-            return;
+          if (!outcome.success) {
+            this.updateContext(decision.tool_name, outcome);
+            break;
           }
 
+          const result = outcome.data; // aquí sí es ToolResult
+          this.updateContext(decision.tool_name, outcome);
+
+          if (result.ok && result.complete) {
+            log.info("tool_complete_early_return", {
+              tool_name: decision.tool_name,
+              output_len: result.output.length,
+            });
+
+            log.info("stream_completed", {
+              reason: "tool_complete",
+              tool_name: decision.tool_name,
+              duration_ms: Date.now() - startTime,
+              steps: this.currentStep + 1,
+            });
+            return;
+          }
           break;
         }
       }
@@ -433,101 +449,104 @@ export class Runtime {
   // function to execute a tool
   private async executeToolWithRetry(
     decision: Extract<Decision, { action: ActionType.CALL_TOOL }>,
-  ): Promise<ToolResult> {
+  ): Promise<ToolExecutionResult<ToolResult>> {
     const tool = getTool(decision.tool_name);
 
     if (!tool) {
+      const listToolNames = listTools()
+        .map((t) => `- ${t.name}`)
+        .join("\n");
+
       log.error("tool_not_found", {
         tool_name: decision.tool_name,
-        available_tools: "retrieve_context,list_documents,delete_document,get_document_metadata",
+        available_tools: listToolNames,
       });
+
       return {
-        ok: false,
-        error: `Tool '${decision.tool_name}' not found`,
-        retryable: false,
+        success: false,
+        error: toToolError(
+          decision.tool_name,
+          new Error(`Tool '${decision.tool_name}' not found`),
+          false,
+          { code: ToolErrorCodes.TOOL_NOT_FOUND, retryable: false },
+        ),
       };
     }
 
-    let lastError: ToolResult | null = null;
+    let lastError: ToolError | undefined;
 
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+      const controller = new AbortController();
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, this.config.stepTimeoutMs);
       const startMs = Date.now();
 
       try {
-        log.debug("tool_execution_start", {
-          tool_name: decision.tool_name,
-          attempt,
-          max_retries: this.config.maxRetries,
-          args: decision.args,
-        });
+        const value = await tool.execute(
+          decision.args,
+          null as any,
+          controller.signal,
+        );
 
-        const result = await Promise.race([
-          tool.execute(decision.args, /* deps */ null as any),
-          this.timeout(this.config.stepTimeoutMs),
-        ]);
+        if (!isToolResult(value)) {
+          return {
+            success: false,
+            error: toToolError(
+              decision.tool_name,
+              new Error(
+                `Tool '${decision.tool_name}' returned an invalid result`,
+              ),
+              false,
+              { code: ToolErrorCodes.INVALID_RESPONSE, retryable: false },
+            ),
+          };
+        }
 
-        const durationMs = Date.now() - startMs;
-        const toolResult = result as ToolResult;
-
-        log.info("tool_execution_completed", {
-          tool_name: decision.tool_name,
-          attempt,
-          ok: toolResult.ok,
-          duration_ms: durationMs,
-          output_len: toolResult.ok ? toolResult.output.length : undefined,
-          error: toolResult.ok ? undefined : toolResult.error,
-        });
-
-        // Registrar trace
         this.traces.push({
           step: this.currentStep,
           action: ActionType.CALL_TOOL,
           toolName: decision.tool_name,
           args: decision.args,
-          resultPreview: toolResult.ok ? toolResult.output.slice(0, 200) : toolResult.error,
-          durationMs,
+          resultPreview: value.ok ? value.output.slice(0, 200) : value.error,
+          durationMs: Date.now() - startMs,
           timestamp: Date.now(),
         });
 
-        return toolResult;
-      } catch (err) {
-        const durationMs = Date.now() - startMs;
-        const errorMsg = err instanceof Error ? err.message : String(err);
-
-        log.error("tool_execution_error", {
-          tool_name: decision.tool_name,
-          attempt,
-          duration_ms: durationMs,
-          error: errorMsg,
-          is_timeout: errorMsg === "Step timeout",
-        });
-
-        lastError = {
-          ok: false,
-          error: errorMsg,
-          retryable: true,
-        };
-
-        if (attempt < this.config.maxRetries) {
-          const backoff = this.config.retryBackoffMs * (attempt + 1);
-          log.debug("tool_retry_backoff", {
-            tool_name: decision.tool_name,
-            attempt,
-            next_attempt: attempt + 1,
-            backoff_ms: backoff,
-          });
-          await this.sleep(backoff);
+        if (!value.ok) {
+          lastError = toToolError(
+            decision.tool_name,
+            new Error(value.error),
+            false,
+            { retryable: value.retryable },
+          );
+        } else {
+          return { success: true, data: value };
         }
+      } catch (err) {
+        lastError = toToolError(decision.tool_name, err, timedOut);
+        this.traces.push({
+          step: this.currentStep,
+          action: ActionType.CALL_TOOL,
+          toolName: decision.tool_name,
+          args: decision.args,
+          resultPreview: sanitizeMessage(err),
+          durationMs: Date.now() - startMs,
+          timestamp: Date.now(),
+        });
+      } finally {
+        clearTimeout(timer);
       }
+
+      if (!lastError!.retryable || attempt === this.config.maxRetries) {
+        return { success: false, error: lastError! };
+      }
+      await this.sleep(this.config.retryBackoffMs * (attempt + 1));
     }
 
-    log.error("tool_all_retries_exhausted", {
-      tool_name: decision.tool_name,
-      total_attempts: this.config.maxRetries + 1,
-      last_error: lastError?.error,
-    });
-
-    return lastError!;
+    return { success: false, error: lastError! };
   }
 
   private async initState(input: AgentInput): Promise<AgentState> {
@@ -552,36 +571,35 @@ export class Runtime {
         citations: [],
         hasContext: false,
         toolExecutionCount: 0,
+        failedToolAttempts: {},
+        maxToolRetries: this.config.maxRetries,
       },
     };
   }
 
-  private updateContext(toolName: string, result: ToolResult): void {
+  private updateContext(
+    toolName: string,
+    outcome: ToolExecutionResult<ToolResult>,
+  ): void {
     const ctx = this.state!.toolContext;
     ctx.lastTool = toolName;
     ctx.toolExecutionCount++;
 
-    if (result.ok) {
-      ctx.lastToolResult = result.output;
-      ctx.hasContext = true;
-      if (result.metadata.citations) {
-        ctx.citations.push(...result.metadata.citations);
+    if (outcome.success) {
+      ctx.lastToolResult = outcome.data.ok ? outcome.data.output : undefined;
+      ctx.hasContext = outcome.data.ok;
+      if (outcome.data.ok && outcome.data.metadata.citations) {
+        ctx.citations.push(...outcome.data.metadata.citations);
       }
+      delete ctx.lastToolError;
+      delete ctx.failedToolAttempts[toolName];
+      return;
     }
 
-    log.debug("context_updated", {
-      tool_name: toolName,
-      ok: result.ok,
-      has_context: ctx.hasContext,
-      execution_count: ctx.toolExecutionCount,
-      citation_count: ctx.citations.length,
-    });
-  }
-
-  private timeout(ms: number): Promise<never> {
-    return new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Step timeout")), ms),
-    );
+    ctx.lastToolError = outcome.error;
+    ctx.failedToolAttempts[toolName] =
+      (ctx.failedToolAttempts[toolName] ?? 0) + 1;
+    // hasContext NO se toca: un fallo nunca es contexto válido
   }
 
   private sleep(ms: number): Promise<void> {
@@ -589,6 +607,17 @@ export class Runtime {
   }
 
   private async generateAnswer(): Promise<string> {
+    const ctx = this.state?.toolContext;
+
+    if (ctx?.lastToolError !== undefined && ctx.hasContext === false) {
+      log.info("generate_answer_skipped", {
+        reason: "no_context_after_tool_error",
+        tool: ctx.lastToolError.toolName,
+        code: ctx.lastToolError.code,
+      });
+      return "No pude obtener la información solicitada: la consulta falló y no hay datos disponibles. Intentá de nuevo o reformulá la pregunta.";
+    }
+
     const context = this.state?.toolContext.hasContext
       ? this.state.toolContext.lastToolResult
       : undefined;
@@ -599,7 +628,10 @@ export class Runtime {
       history_size: this.state!.history?.length,
     });
 
-    const systemPrompt = buildFinalAnswerPrompt(context);
+    const systemPrompt = buildFinalAnswerPrompt(
+      context,
+      this.state?.toolContext.lastToolError,
+    );
 
     const messages: Message[] = [
       ...(this.state!.history ?? []),
