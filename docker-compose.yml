@@ -75,6 +75,8 @@ services:
     build:
       context: ./ts-agent
       dockerfile: Dockerfile
+      additional_contexts:
+        rag-contracts: ./packages/rag-contracts
     ports:
       - "3000:3000"
     env_file:
@@ -93,6 +95,8 @@ services:
     build:
       context: front-ai-toolkit
       dockerfile: Dockerfile
+      additional_contexts:
+        rag-contracts: ./packages/rag-contracts
     ports:
       - "8080:80"
     networks:

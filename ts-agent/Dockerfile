@@ -6,7 +6,9 @@ WORKDIR /app
 
 # Install dependencies
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --from=rag-contracts . /packages/rag-contracts
 RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @ai-toolkit/rag-contracts build
 
 # Copy source
 COPY src ./src
@@ -20,7 +22,9 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --from=rag-contracts . /packages/rag-contracts
 RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @ai-toolkit/rag-contracts build
 
 COPY --from=base /app/src ./src
 COPY tsconfig.json ./

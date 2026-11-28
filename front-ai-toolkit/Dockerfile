@@ -4,12 +4,14 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copiar manifiestos usando la ruta relativa al contexto raíz (.)
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --from=rag-contracts . /packages/rag-contracts
 
 # Habilitar pnpm e instalar dependencias
 # RUN corepack enable && pnpm install --frozen-lockfile
 # RUN corepack enable && pnpm config set allow-builds true && pnpm install --frozen-lockfile
-RUN corepack enable && pnpm install --frozen-lockfile --dangerously-allow-all-builds
+RUN corepack enable && pnpm --filter . install --frozen-lockfile --dangerously-allow-all-builds
+RUN pnpm --filter @ai-toolkit/rag-contracts build
 
 # Copiar el resto del código del frontend
 COPY . .
