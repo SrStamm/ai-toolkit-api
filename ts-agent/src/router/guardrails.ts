@@ -17,13 +17,13 @@ export function applyGuardrails(
       return { action: ActionType.FINAL_ANSWER };
     }
 
-    // Evita llamar dos veces a la misma tool
-    if (decision.tool_name == ctx.lastTool) {
-      log.warn("guardrail_block_repeat_tool", {
-        tool_name: decision.tool_name,
-        last_tool: ctx.lastTool,
-      });
-      return { action: ActionType.FINAL_ANSWER };
+    const err = ctx.lastToolError;
+    if (decision.tool_name === ctx.lastTool) {
+      const attempts = ctx.failedToolAttempts?.[decision.tool_name] ?? 0;
+      const max = ctx.maxToolRetries ?? 1;
+      if (!err || !err.retryable || attempts >= max) {
+        return { action: ActionType.FINAL_ANSWER };
+      }
     }
   }
 

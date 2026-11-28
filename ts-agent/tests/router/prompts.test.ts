@@ -1,12 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { buildRoutingPrompt, buildFinalAnswerPrompt } from "../../src/router/prompts";
 import type { ToolContext } from "../../src/types/agent";
+import { ToolErrorCodes, type ToolError } from "../../src/types/tools";
 
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   return {
     hasContext: false,
     toolExecutionCount: 0,
     citations: [],
+    failedToolAttempts: {},
+    maxToolRetries: 1,
     ...overrides,
   };
 }
@@ -60,6 +63,19 @@ describe("buildRoutingPrompt", () => {
     expect(prompt).toContain("URL INGESTION FLOW");
     expect(prompt).toContain("ingest_document");
   });
+
+  it("renders the last tool error code, retryability and message", () => {
+    const lastToolError: ToolError = {
+      toolName: "search",
+      code: ToolErrorCodes.BAD_REQUEST,
+      message: "invalid input",
+      retryable: false,
+      timestamp: 1700000000000,
+    };
+    const prompt = buildRoutingPrompt("tools", makeCtx({ lastToolError }));
+
+    expect(prompt).toContain("Last tool error: bad_request (not retryable): invalid input");
+  });
 });
 
 describe("buildFinalAnswerPrompt", () => {
@@ -74,5 +90,20 @@ describe("buildFinalAnswerPrompt", () => {
 
     expect(prompt).toContain("## Context");
     expect(prompt).toContain("MY_CTX");
+  });
+
+  it("includes the Last tool failure section without a context argument", () => {
+    const error: ToolError = {
+      toolName: "search",
+      code: ToolErrorCodes.INVALID_RESPONSE,
+      message: "unexpected payload",
+      retryable: false,
+      timestamp: 1700000000000,
+    };
+    const prompt = buildFinalAnswerPrompt(undefined, error);
+
+    expect(prompt).toContain("## Last tool failure");
+    expect(prompt).toContain("INVALID_RESPONSE");
+    expect(prompt).toContain("unexpected payload");
   });
 });

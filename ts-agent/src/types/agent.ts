@@ -35,8 +35,8 @@ export interface ToolContext {
   toolExecutionCount: number;
   citations: Citation[];
   lastToolError?: ToolError;
-  failedToolAttempts?: Record<string, number>;
-  maxToolRetries?: number;
+  failedToolAttempts: Record<string, number>;
+  maxToolRetries: number;
 }
 
 export interface AgentState {

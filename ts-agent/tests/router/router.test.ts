@@ -19,6 +19,8 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     hasContext: false,
     toolExecutionCount: 0,
     citations: [],
+    failedToolAttempts: {},
+    maxToolRetries: 1,
     ...overrides,
   };
 }

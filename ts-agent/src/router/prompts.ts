@@ -1,4 +1,5 @@
 import { ToolContext } from "../types/agent";
+import { ToolError } from "../types/tools";
 
 export function buildRoutingPrompt(toolList: string, ctx: ToolContext): string {
   return `You are a routing system that decides what action to take.
@@ -13,6 +14,11 @@ export function buildRoutingPrompt(toolList: string, ctx: ToolContext): string {
     - Tool execution count: ${ctx.toolExecutionCount}
     - Last tool executed: ${ctx.lastTool ?? "None"}
     - Last tool result: ${ctx.lastToolResult ?? "None"}
+    - Last tool error: ${
+      ctx.lastToolError
+        ? `${ctx.lastToolError.code} (${ctx.lastToolError.retryable ? "retryable" : "not retryable"}): ${ctx.lastToolError.message}`
+        : "None"
+    }
 
     CRITICAL INSTRUCTIONS:
     1. URL INGESTION FLOW: If the user provides a URL for ingestion (or mentions ingesting a document):
@@ -29,6 +35,12 @@ export function buildRoutingPrompt(toolList: string, ctx: ToolContext): string {
     2. If user needs knowledge base docs → retrieve_context
     3. If user gives a URL for ingestion → follow URL INGESTION FLOW (instruction 1)
     4. If question needs a specific tool → call_tool with the tool name
+
+    - If the last tool error is retryable, retry the same tool or use an equivalent one.
+    - If the last tool error is not retryable, use a different tool or ask_user; never repeat the same tool.
+    - "No relevant context found" is a valid result (ok: true), not a tool error.
+    - Never invent data that a tool did not return.
+    - If there is no alternative, clearly state that the information could not be retrieved.
 
     Use "ask_user" when you NEED TO ASK the user a question (like missing metadata). The message goes in args.message.
     Use "final_answer" ONLY when you're TRULY DONE — no args needed, no message.
@@ -53,7 +65,10 @@ export function buildRoutingPrompt(toolList: string, ctx: ToolContext): string {
     `;
 }
 
-export function buildFinalAnswerPrompt(context?: string): string {
+export function buildFinalAnswerPrompt(
+  context?: string,
+  error?: ToolError,
+): string {
   return `
     You are an expert assistant that answers questions.
     Instructions:
@@ -64,14 +79,27 @@ export function buildFinalAnswerPrompt(context?: string): string {
       - Use **bold** for emphasis
       - Use lists for steps or multiple points
     - Return ONLY the answer text, NO JSON wrapper needed
+    - If no other data answers the question, state that the information could not be retrieved; never present an invented result
 
     ${
       context
         ? `
     ## Context
     ${context}
+
 `
         : ""
     }
-    `;
+
+    ${
+      error
+        ? `
+    ## Last tool failure
+    - ToolName: ${error.toolName}
+    - code: ${error.code}
+    - retryable: ${error.retryable}
+    - message: ${error.message}`
+        : ""
+    }
+  `;
 }
