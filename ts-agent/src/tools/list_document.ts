@@ -12,22 +12,22 @@ registerTool({
     domain: z.string().optional(),
   }),
   dependencies: [],
-  execute: async (input, deps) => {
+  execute: async (input, deps, signal) => {
     log.debug("execute_start", { domain: input.domain });
 
     const startTime = Date.now();
 
     try {
-      const result = await httpClient.listSources(input.domain);
+      const result = await httpClient.listSources(input.domain, signal);
 
       if (result.metadata.documents.length === 0) {
         log.info("execute_no_documents", {
           duration_ms: Date.now() - startTime,
         });
         return {
-          ok: false,
-          error: "No hay documentos en la base de conocimiento",
-          retryable: false,
+          ok: true,
+          output: "No hay documentos en la base de conocimiento",
+          metadata: { documents: [], count: 0 },
         };
       }
 

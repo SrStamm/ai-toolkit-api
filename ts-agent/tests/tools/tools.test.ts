@@ -49,11 +49,15 @@ describe("tools registry and tools", () => {
         { query: "q", domain: "", top_k: undefined, topic: undefined } as any,
         {} as any,
       );
-      expect(httpClient.search).toHaveBeenCalledWith("q", {
-        topK: undefined,
-        domain: "",
-        topic: undefined,
-      });
+      expect(httpClient.search).toHaveBeenCalledWith(
+        "q",
+        {
+          topK: undefined,
+          domain: "",
+          topic: undefined,
+        },
+        undefined,
+      );
       expect(res).toEqual({
         ok: true,
         output: "CTX",
@@ -85,7 +89,7 @@ describe("tools registry and tools", () => {
   });
 
   describe("list_documents", () => {
-    it("returns ok:false retryable:false when no documents are found", async () => {
+    it("returns ok:true when no documents are found", async () => {
       await import("../../src/tools/index.js");
       const { getTool } = await import("../../src/tools/registry.js");
       const { httpClient } = await import("../../src/lib/rag-client.js");
@@ -97,9 +101,9 @@ describe("tools registry and tools", () => {
       const tool = getTool("list_documents");
       const res = await tool!.execute({ domain: "d" } as any, {} as any);
       expect(res).toEqual({
-        ok: false,
-        retryable: false,
-        error: "No hay documentos en la base de conocimiento",
+        ok: true,
+        output: "No hay documentos en la base de conocimiento",
+        metadata: { documents: [], count: 0 },
       });
     });
 

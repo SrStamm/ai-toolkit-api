@@ -23,7 +23,11 @@ describe("rag-client", () => {
       json: async () => payload,
     });
 
-    const result = await httpClient.search("q", { topK: 7, domain: "d", topic: "t" });
+    const result = await httpClient.search("q", {
+      topK: 7,
+      domain: "d",
+      topic: "t",
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const call = fetchMock.mock.calls[0];
     expect(call[0]).toBe(`${base}/search`);
@@ -66,7 +70,9 @@ describe("rag-client", () => {
       json: async () => ({}),
     });
 
-    await expect(httpClient.search("q", { domain: "d" } as any)).rejects.toThrow(/RAG search failed: 500/);
+    await expect(
+      httpClient.search("q", { domain: "d" } as any),
+    ).rejects.toThrow(/RAG request failed \(500\)/);
   });
 
   it("ingest posts to /ingest/job with correct body", async () => {
@@ -102,7 +108,14 @@ describe("rag-client", () => {
       json: async () => ({}),
     });
 
-    await expect(httpClient.ingest({ url: "u", source: "s", domain: "d", topic: "t" } as any)).rejects.toThrow(/Ingest File Job failed/);
+    await expect(
+      httpClient.ingest({
+        url: "u",
+        source: "s",
+        domain: "d",
+        topic: "t",
+      } as any),
+    ).rejects.toThrow(/RAG request failed \(500\)/);
   });
 
   it("deleteDocument DELETEs encoded path", async () => {
@@ -126,7 +139,11 @@ describe("rag-client", () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ status: "success", metadata: { documents: [], count: 0 }, output: "ok" }),
+      json: async () => ({
+        status: "success",
+        metadata: { documents: [], count: 0 },
+        output: "ok",
+      }),
     });
 
     await httpClient.listSources("dom");
@@ -171,7 +188,7 @@ describe("rag-client response and error handling", () => {
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
 
     await expect(httpClient.deleteDocument("src")).rejects.toThrow(
-      /Delete Document failed: 500/,
+      /RAG request failed \(500\)/,
     );
   });
 
@@ -180,7 +197,7 @@ describe("rag-client response and error handling", () => {
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
 
     await expect(httpClient.listSources("dom")).rejects.toThrow(
-      /Get List Sources failed: 500/,
+      /RAG request failed \(500\)/,
     );
   });
 
@@ -189,7 +206,7 @@ describe("rag-client response and error handling", () => {
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
 
     await expect(httpClient.getSourceMetadata("src")).rejects.toThrow(
-      /Get Document Metadata failed: 500/,
+      /RAG request failed \(500\)/,
     );
   });
 

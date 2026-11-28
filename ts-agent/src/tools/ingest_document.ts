@@ -16,18 +16,21 @@ registerTool({
     topic: z.string(),
   }),
   dependencies: [],
-  execute: async (input) => {
+  execute: async (input, deps, signal) => {
     log.debug("execute_start", { url: input.url, domain: input.domain });
 
     const startTime = Date.now();
 
     try {
-      const result = await httpClient.ingest({
-        url: input.url,
-        source: input.url,
-        domain: input.domain,
-        topic: input.topic,
-      });
+      const result = await httpClient.ingest(
+        {
+          url: input.url,
+          source: input.url,
+          domain: input.domain,
+          topic: input.topic,
+        },
+        signal,
+      );
 
       log.info("execute_completed", {
         job_id: result.job_id,
